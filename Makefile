@@ -9,6 +9,7 @@ all:
 	$(MAKE) -C crates/tanzim-load build
 	$(MAKE) -C crates/tanzim-parse build
 	$(MAKE) -C crates/tanzim-merge build
+	$(MAKE) -C crates/tanzim-validate build
 	$(MAKE) -C crates/tanzim build
 
 test:
@@ -17,6 +18,7 @@ test:
 	$(MAKE) -C crates/tanzim-load test
 	$(MAKE) -C crates/tanzim-parse test
 	$(MAKE) -C crates/tanzim-merge test
+	$(MAKE) -C crates/tanzim-validate test
 	$(MAKE) -C crates/tanzim test
 
 clippy:

@@ -1,6 +1,6 @@
 # tanzim workspace
 
-Configuration pipeline: **load → parse → merge**.
+Configuration pipeline: **load → parse → merge → validate**.
 
 ## Crates
 
@@ -11,6 +11,7 @@ Configuration pipeline: **load → parse → merge**.
 | `tanzim-load` | Loading raw bytes from sources (`Load` trait, `Payload`) |
 | `tanzim-parse` | Deserializing bytes into `LocatedValue` trees (`Deserialize` trait) |
 | `tanzim-merge` | Merging parsed values by entry name (`Merge`, `LastWins`, `DeepMerge`, `Merged`) |
+| `tanzim-validate` | Validating/coercing values (`Validator` trait, concrete validators, `schema` feature for building validators from data) |
 | `tanzim` | Facade: `ConfigBuilder` / `Config` that wires the full pipeline |
 
 ## Pipeline
@@ -29,8 +30,15 @@ Source strings
 - `Payload::name` is `Option<String>`: `None` means unnamed; all unnamed payloads share the `""` key in the merger.
 - `Payload::format` is `Option<String>`: `None` means format is auto-detected by parsers via `is_format_supported`.
 - Sources with `skip_errors = true` swallow load and parse failures silently.
-- No `map_err` in pipeline code — explicit `match` for error conversion.
-- No iterator method chains in pipeline code — plain `for` loops.
+
+## Code style conventions
+
+These apply to all crates, not just the pipeline:
+
+- **Plain `for` loops over iterator method chains.** Prefer a `for` loop to `.map`/`.filter`/`.fold`/`.collect` chains. (When you do index a slice, still use `for x in &xs` / `.iter().enumerate()` to satisfy `needless_range_loop`.)
+- **`match` over combinators for `Result`.** Use an explicit `match` instead of `map_err`, `and_then`, `or_else`, etc.
+- **`if let Some(...)` over combinators for `Option`.** Use `if let` / `match` instead of `map`, `and_then`, `unwrap_or_else`, etc.
+- **Don't extract single-use helpers.** If a function is called from exactly one place, inline it.
 
 ## Lint & style conventions
 

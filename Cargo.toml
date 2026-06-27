@@ -3,6 +3,7 @@ members = [
     "crates/tanzim-value",
     "crates/tanzim-load",
     "crates/tanzim-parse",
+    "crates/tanzim-validate",
     "crates/tanzim-merge",
     "crates/tanzim-source",
     "crates/tanzim",

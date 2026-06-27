@@ -18,6 +18,7 @@ tanzim-parse = { path = "../tanzim-parse", version = "0.5.0" }
 tanzim-merge = { path = "../tanzim-merge", version = "0.5.0" }
 tanzim-source = { path = "../tanzim-source", version = "0.2.0" }
 tanzim-value = { path = "../tanzim-value", version = "0.2.0" }
+tanzim-validate = { path = "../tanzim-validate", version = "0.1.0", features = ["schema"] }
 thiserror = "1.0.56"
 serde = { version = "1.0.195", features = ["derive"] }
 cfg-if = "1.0.0"
@@ -36,10 +37,25 @@ logging = ["tanzim-load/logging", "tanzim-parse/logging", "tanzim-merge/logging"
 tracing = ["tanzim-load/tracing", "tanzim-parse/tracing", "tanzim-merge/tracing", "dep:tracing"]
 full = ["env", "file", "http", "json", "yaml", "toml"]
 
+# Schema-validator dependencies, forwarded so a tanzim user can enable the optional
+# validators (Url, Uuid, …) used inside their validation schemas. The schema machinery
+# itself is always on (tanzim-validate is depended on with `features = ["schema"]`).
+validate-regex = ["tanzim-validate/regex"]
+validate-url = ["tanzim-validate/url"]
+validate-cidr = ["tanzim-validate/cidr"]
+validate-uuid = ["tanzim-validate/uuid"]
+validate-semver = ["tanzim-validate/semver"]
+validate-encoding = ["tanzim-validate/encoding"]
+validate-duration = ["tanzim-validate/duration"]
+validate-bytesize = ["tanzim-validate/bytesize"]
+validate-datetime = ["tanzim-validate/datetime"]
+validate-full = ["tanzim-validate/full"]
+
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.18", features = ["json"] }
 env_logger = "0.10.1"
 dirs = "5.0.1"
+serde_yaml = "0.9"
 
 [[test]]
 name = "smoke"

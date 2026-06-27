@@ -16,6 +16,7 @@ pub use tanzim_load as loader;
 pub use tanzim_merge as merge;
 pub use tanzim_parse as parser;
 pub use tanzim_source as source;
+pub use tanzim_validate as validate;
 
 #[doc(inline)]
 pub use tanzim_source::Source;
@@ -27,11 +28,21 @@ pub mod ext {
     pub extern crate tanzim_merge;
     pub extern crate tanzim_parse;
     pub extern crate tanzim_source;
+    pub extern crate tanzim_validate;
 }
 
 mod logging;
 
 use cfg_if::cfg_if;
+use std::collections::HashMap;
+
+/// A validation schema keyed by merged entry name (the keys of [`Merged`]).
+///
+/// Each value is a schema document — a [`validate::Value`] tree, e.g. one deserialized from
+/// JSON/YAML into a [`validate::SchemaValue`] and unwrapped with
+/// [`validate::SchemaValue::into_value`]. It is turned into a validator and run against the
+/// matching merged entry after the merge stage.
+pub type Schemas = HashMap<String, validate::Value>;
 
 /// A loaded payload paired with the value tree produced by parsing it.
 pub type Parsed = (loader::Payload, parser::LocatedValue);
@@ -68,6 +79,16 @@ pub enum Error {
     NoLoader { at: String },
     #[error("no parser found for format `{format}` in `{at}`")]
     NoParser { format: String, at: String },
+    #[error("schema for `{name}` is invalid: {source}")]
+    Schema {
+        name: String,
+        source: validate::SchemaError,
+    },
+    #[error("configuration `{name}` failed validation: {source}")]
+    Validate {
+        name: String,
+        source: validate::Error,
+    },
 }
 
 /// Builds a [`Config`] with a fluent API.
@@ -78,6 +99,7 @@ pub struct ConfigBuilder {
     loaders: Vec<Box<dyn loader::Load>>,
     parsers: Vec<Box<dyn parser::Deserialize>>,
     merger: Box<dyn merge::Merge>,
+    schemas: Schemas,
 }
 
 impl Default for ConfigBuilder {
@@ -87,6 +109,7 @@ impl Default for ConfigBuilder {
             loaders: Vec::new(),
             parsers: Vec::new(),
             merger: Box::new(merge::LastWins),
+            schemas: Schemas::new(),
         }
     }
 }
@@ -124,12 +147,31 @@ impl ConfigBuilder {
         self
     }
 
+    /// Register a validation schema for one merged entry name.
+    pub fn with_schema(
+        mut self,
+        name: impl Into<String>,
+        schema: impl Into<validate::Value>,
+    ) -> Self {
+        self.schemas.insert(name.into(), schema.into());
+        self
+    }
+
+    /// Register validation schemas for several merged entry names at once.
+    pub fn with_schemas(mut self, schemas: Schemas) -> Self {
+        for (name, schema) in schemas {
+            self.schemas.insert(name, schema);
+        }
+        self
+    }
+
     pub fn build(self) -> Config {
         Config {
             sources: self.sources,
             loaders: self.loaders,
             parsers: self.parsers,
             merger: self.merger,
+            schemas: self.schemas,
         }
     }
 }
@@ -142,6 +184,7 @@ pub struct Config {
     loaders: Vec<Box<dyn loader::Load>>,
     parsers: Vec<Box<dyn parser::Deserialize>>,
     merger: Box<dyn merge::Merge>,
+    schemas: Schemas,
 }
 
 impl Config {
@@ -179,6 +222,14 @@ impl Config {
         &mut self.merger
     }
 
+    pub fn schemas(&self) -> &Schemas {
+        &self.schemas
+    }
+
+    pub fn schemas_mut(&mut self) -> &mut Schemas {
+        &mut self.schemas
+    }
+
     // ── Setters (return Self) ─────────────────────────────────────────────────
 
     pub fn with_source<S>(mut self, source: S) -> Result<Self, Error>
@@ -206,6 +257,24 @@ impl Config {
 
     pub fn with_merger(mut self, merger: impl merge::Merge + 'static) -> Self {
         self.merger = Box::new(merger);
+        self
+    }
+
+    /// Register a validation schema for one merged entry name.
+    pub fn with_schema(
+        mut self,
+        name: impl Into<String>,
+        schema: impl Into<validate::Value>,
+    ) -> Self {
+        self.schemas.insert(name.into(), schema.into());
+        self
+    }
+
+    /// Register validation schemas for several merged entry names at once.
+    pub fn with_schemas(mut self, schemas: Schemas) -> Self {
+        for (name, schema) in schemas {
+            self.schemas.insert(name, schema);
+        }
         self
     }
 
@@ -411,7 +480,60 @@ impl Config {
         }
     }
 
-    /// Run load → parse → merge in sequence.
+    /// Validate (and coerce) the merged configuration against the registered schemas.
+    ///
+    /// Each schema is built into a validator with [`validate::Registry::with_builtins`] and
+    /// run against the merged entry of the same name. Validators may coerce values in place
+    /// (e.g. a numeric string into an integer), so `merged` is taken by `&mut`. A schema with
+    /// no matching merged entry is skipped with a warning. Does nothing when no schemas are
+    /// registered.
+    pub fn validate(&self, merged: &mut Merged) -> Result<(), Error> {
+        if self.schemas.is_empty() {
+            return Ok(());
+        }
+        let registry = validate::Registry::with_builtins();
+        for (name, schema) in &self.schemas {
+            let validator = match registry.build_value(schema) {
+                Ok(validator) => validator,
+                Err(source) => {
+                    return Err(Error::Schema {
+                        name: name.clone(),
+                        source,
+                    });
+                }
+            };
+            match merged.get_mut(name) {
+                Some((_payloads, value)) => match validate::validate(validator.as_ref(), value) {
+                    Ok(()) => {}
+                    Err(source) => {
+                        return Err(Error::Validate {
+                            name: name.clone(),
+                            source,
+                        });
+                    }
+                },
+                None => {
+                    cfg_if! {
+                        if #[cfg(feature = "tracing")] {
+                            tracing::warn!(msg = "Schema has no matching merged entry", name = name);
+                        } else if #[cfg(feature = "logging")] {
+                            log::warn!("msg=\"Schema has no matching merged entry\" name={name}");
+                        }
+                    }
+                }
+            }
+        }
+        cfg_if! {
+            if #[cfg(feature = "tracing")] {
+                tracing::info!(msg = "Configuration validation stage complete", schema_count = self.schemas.len());
+            } else if #[cfg(feature = "logging")] {
+                log::info!("msg=\"Configuration validation stage complete\" schema_count={}", self.schemas.len());
+            }
+        }
+        Ok(())
+    }
+
+    /// Run load → parse → merge → validate in sequence.
     pub fn run(&self) -> Result<Merged, Error> {
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -422,6 +544,8 @@ impl Config {
         }
         let loaded = self.load()?;
         let parsed = self.parse(&loaded)?;
-        self.merge(&parsed)
+        let mut merged = self.merge(&parsed)?;
+        self.validate(&mut merged)?;
+        Ok(merged)
     }
 }

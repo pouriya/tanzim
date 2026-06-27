@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tanzim::{
-    ConfigBuilder,
+    ConfigBuilder, Schemas,
     loader::{env::Env, file::File},
     merge::DeepMerge,
     parser::{Env as EnvParser, Json, Toml, Yaml},
+    validate::SchemaValue,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,11 +40,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_parser(Toml::new())
         .with_merger(DeepMerge);
 
+    let schemas = load_schemas()?;
+    println!(
+        "Loaded {} validation schema(s) from schema.yml",
+        schemas.len()
+    );
+    builder = builder.with_schemas(schemas);
+
     for source_str in &source_args {
         builder = builder.with_source(source_str.as_str())?;
     }
 
-    let merged = builder.build().run()?;
+    // run() now also validates (and coerces) the merged output against the schemas.
+    let merged = match builder.build().run() {
+        Ok(merged) => merged,
+        Err(error) => {
+            eprintln!("Error: {error:#}");
+            std::process::exit(1);
+        }
+    };
 
     println!("Merged configuration ({} entries):", merged.len());
     let mut keys: Vec<&String> = merged.keys().collect();
@@ -71,6 +87,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Load `schema.yml` from this example's directory with `serde_yaml`, convert it into the
+/// facade's [`Schemas`] map, and hand it to the pipeline.
+fn load_schemas() -> Result<Schemas, Box<dyn std::error::Error>> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("examples")
+        .join("basic")
+        .join("schema.yml");
+    let text = std::fs::read_to_string(&path)?;
+    let documents: HashMap<String, SchemaValue> = serde_yaml::from_str(&text)?;
+
+    let mut schemas = Schemas::new();
+    for (name, document) in documents {
+        schemas.insert(name, document.into_value());
+    }
+    Ok(schemas)
 }
 
 fn parse_args() -> Result<(bool, Vec<String>), Box<dyn std::error::Error>> {
