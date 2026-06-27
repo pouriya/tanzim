@@ -1,0 +1,44 @@
+[package]
+name = "tanzim-parse"
+version = "0.5.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parse configuration bytes into tanzim-value trees"
+readme = "README.md"
+homepage = "https://crates.io/crates/tanzim-parse"
+documentation = "https://docs.rs/tanzim-parse"
+categories = ["config", "parser-implementations"]
+keywords = ["config", "parser", "json", "yaml", "toml"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
+
+[dependencies]
+tanzim-value = { path = "../tanzim-value", version = "0.2.0" }
+toml_edit = { version = "0.22", optional = true }
+spanned_json_parser = { version = "0.2", optional = true }
+saphyr = { version = "0.0.6", optional = true }
+cfg-if = "1.0.0"
+log = { version = "0.4.20", optional = true }
+tracing = { version = "0.1.40", optional = true }
+
+[features]
+default = ["logging", "env"]
+env = []
+json = ["dep:spanned_json_parser"]
+yaml = ["dep:saphyr"]
+toml = ["dep:toml_edit"]
+logging = ["dep:log"]
+tracing = ["dep:tracing"]
+full = ["env", "json", "yaml", "toml"]
+
+[[example]]
+name = "parse_config"
+path = "examples/parse_config.rs"
+required-features = ["full"]
+
+[[example]]
+name = "custom_parser"
+path = "examples/custom_parser.rs"
+
+[package.metadata.docs.rs]
+all-features = true

@@ -1,0 +1,31 @@
+[package]
+name = "tanzim-source"
+version = "0.2.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Declarative configuration source (source, options, resource)"
+readme = "README.md"
+homepage = "https://crates.io/crates/tanzim-source"
+documentation = "https://docs.rs/tanzim-source"
+categories = ["config"]
+keywords = ["config", "configuration", "source", "settings", "env"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
+
+[dependencies]
+thiserror = "1.0.56"
+serde = { version = "1.0.195", optional = true, features = ["derive"] }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dev-dependencies]
+serde_json = "1.0.140"
+
+[[example]]
+name = "parse_sources"
+path = "examples/parse_sources.rs"
+
+[package.metadata.docs.rs]
+all-features = true

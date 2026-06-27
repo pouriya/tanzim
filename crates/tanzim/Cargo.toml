@@ -1,0 +1,55 @@
+[package]
+name = "tanzim"
+version = "0.5.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Configuration pipeline facade (load, parse, merge)"
+readme = "README.md"
+homepage = "https://crates.io/crates/tanzim"
+documentation = "https://docs.rs/tanzim"
+categories = ["config"]
+keywords = ["configuration", "config", "cfg", "settings", "env"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
+
+[dependencies]
+tanzim-load = { path = "../tanzim-load", version = "0.5.0" }
+tanzim-parse = { path = "../tanzim-parse", version = "0.5.0" }
+tanzim-merge = { path = "../tanzim-merge", version = "0.5.0" }
+tanzim-source = { path = "../tanzim-source", version = "0.2.0" }
+tanzim-value = { path = "../tanzim-value", version = "0.2.0" }
+thiserror = "1.0.56"
+serde = { version = "1.0.195", features = ["derive"] }
+cfg-if = "1.0.0"
+log = { version = "0.4.20", optional = true }
+tracing = { version = "0.1.40", optional = true }
+
+[features]
+default = ["logging", "env"]
+env = ["tanzim-load/env", "tanzim-parse/env"]
+file = ["tanzim-load/file"]
+http = ["tanzim-load/http"]
+json = ["tanzim-parse/json"]
+yaml = ["tanzim-parse/yaml"]
+toml = ["tanzim-parse/toml"]
+logging = ["tanzim-load/logging", "tanzim-parse/logging", "tanzim-merge/logging", "dep:log"]
+tracing = ["tanzim-load/tracing", "tanzim-parse/tracing", "tanzim-merge/tracing", "dep:tracing"]
+full = ["env", "file", "http", "json", "yaml", "toml"]
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3.18", features = ["json"] }
+env_logger = "0.10.1"
+dirs = "5.0.1"
+
+[[test]]
+name = "smoke"
+path = "tests/smoke.rs"
+required-features = ["full"]
+
+[[example]]
+name = "basic"
+path = "../../examples/basic/main.rs"
+required-features = ["full"]
+
+[package.metadata.docs.rs]
+all-features = true

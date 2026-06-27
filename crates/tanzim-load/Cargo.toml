@@ -1,0 +1,43 @@
+[package]
+name = "tanzim-load"
+version = "0.5.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Load configuration bytes from declarative configuration sources"
+readme = "README.md"
+homepage = "https://crates.io/crates/tanzim-load"
+documentation = "https://docs.rs/tanzim-load"
+categories = ["config", "filesystem"]
+keywords = ["config", "configuration", "loader", "env", "file"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
+
+[dependencies]
+tanzim-source = { path = "../tanzim-source", version = "0.2.0" }
+thiserror = "1.0.56"
+cfg-if = "1.0.0"
+log = { version = "0.4.20", optional = true }
+tracing = { version = "0.1.40", optional = true }
+
+[features]
+default = ["logging", "env"]
+env = []
+file = []
+http = []
+logging = ["dep:log"]
+tracing = ["dep:tracing"]
+full = ["env", "file", "http"]
+
+[dev-dependencies]
+tempdir = "0.3.7"
+
+[[example]]
+name = "custom_loader"
+path = "examples/custom_loader.rs"
+
+[[example]]
+name = "load_config"
+path = "examples/load_config.rs"
+
+[package.metadata.docs.rs]
+all-features = true

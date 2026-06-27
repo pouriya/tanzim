@@ -1,0 +1,77 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify build
+        run: make all
+
+      - name: Verify style
+        run: make check-style
+
+      - name: Verify clippy
+        run: make clippy
+
+      # Requires Rust 1.90+ (workspace publishing). Crates already on crates.io
+      # at their current version are skipped (members version independently
+      # here, so a release usually only bumps a subset). Everything left is
+      # published in ONE invocation, so Cargo resolves the dependency order,
+      # verifies the crates together as if published, and waits for the index
+      # between uploads -- no manual ordering or sleeps.
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_SECRET_TOKEN }}
+        run: |
+          set -euo pipefail
+          metadata="$(cargo metadata --format-version 1 --no-deps)"
+
+          version_of() { jq -r --arg n "$1" '.packages[] | select(.name == $n) | .version' <<<"$metadata"; }
+
+          # True if name@vers already exists on the crates.io sparse index.
+          published() {
+            local name vers path
+            name="$(tr '[:upper:]' '[:lower:]' <<<"$1")"; vers="$2"
+            case ${#name} in
+              1) path="1/$name" ;;
+              2) path="2/$name" ;;
+              3) path="3/${name:0:1}/$name" ;;
+              *) path="${name:0:2}/${name:2:2}/$name" ;;
+            esac
+            curl -sf "https://index.crates.io/$path" \
+              | jq -se --arg v "$vers" 'any(.[]; .vers == $v)' >/dev/null
+          }
+
+          args=(--all-features)
+          publishing=()
+          while read -r name; do
+            vers="$(version_of "$name")"
+            if published "$name" "$vers"; then
+              echo "skip   $name@$vers (already published)"
+            else
+              echo "queue  $name@$vers"
+              publishing+=("$name")
+              args+=(--package "$name")
+            fi
+          done < <(jq -r '.packages[] | select(.publish != []) | .name' <<<"$metadata")
+
+          if [ ${#publishing[@]} -eq 0 ]; then
+            echo "Nothing to publish."
+            exit 0
+          fi
+
+          echo "Publishing: ${publishing[*]}"
+          cargo publish "${args[@]}"

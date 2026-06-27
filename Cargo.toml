@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "crates/tanzim-value",
+    "crates/tanzim-load",
+    "crates/tanzim-parse",
+    "crates/tanzim-merge",
+    "crates/tanzim-source",
+    "crates/tanzim",
+]
+default-members = ["crates/tanzim"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "BSD-3-Clause"
+repository = "https://github.com/tanzim-rs/tanzim"
