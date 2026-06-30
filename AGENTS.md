@@ -29,7 +29,7 @@ Source strings
 
 - `Payload::name` is `Option<String>`: `None` means unnamed; all unnamed payloads share the `""` key in the merger.
 - `Payload::format` is `Option<String>`: `None` means format is auto-detected by parsers via `is_format_supported`.
-- Sources with `skip_errors = true` swallow load and parse failures silently.
+- Sources with `ignore_errors = true` swallow load and parse failures silently.
 
 ## Code style conventions
 
@@ -58,7 +58,7 @@ All logging uses `cfg_if` to select between the `tracing` and `logging` features
 | Level | When to use |
 |-------|-------------|
 | `info` | Important success event (stage complete, network fetch done, source fully loaded) |
-| `warn` | Intentionally ignored error (`skip_errors` path) |
+| `warn` | Intentionally ignored error (`ignore_errors` path) |
 | `debug` | Before attempting something important — include the inputs/params that affect the outcome |
 | `trace` | After completing a low-level operation — include rich detail about what was produced |
 

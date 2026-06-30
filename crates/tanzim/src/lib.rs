@@ -54,7 +54,7 @@ pub type Merged = merge::Merged;
 
 fn source_display(cs: &Source) -> String {
     let mut s = cs.source().to_string();
-    if cs.skip_errors() {
+    if cs.ignore_errors() {
         s.push('?');
     }
     if cs.resource_colon() || !cs.resource().is_empty() {
@@ -282,7 +282,7 @@ impl Config {
 
     /// Load raw bytes from all sources using the registered loaders.
     ///
-    /// Sources with `skip_errors` set swallow load failures silently.
+    /// Sources with `ignore_errors` set swallow load failures silently.
     pub fn load(&self) -> Result<Vec<loader::Payload>, Error> {
         let mut result = Vec::new();
         for config_source in &self.sources {
@@ -327,7 +327,7 @@ impl Config {
             let payloads = match loader.load(config_source.clone()) {
                 Ok(payloads) => payloads,
                 Err(e) => {
-                    if config_source.skip_errors() {
+                    if config_source.ignore_errors() {
                         cfg_if! {
                             if #[cfg(feature = "tracing")] {
                                 tracing::warn!(msg = "Skipped load error for source", source = source_display(config_source), error = ?e);
@@ -359,7 +359,7 @@ impl Config {
     ///
     /// Parser selection: if `payload.format` is set, the first parser that lists that
     /// format wins; otherwise parsers are probed via `is_format_supported`. Sources
-    /// with `skip_errors` skip payloads that fail to parse.
+    /// with `ignore_errors` skip payloads that fail to parse.
     pub fn parse(&self, loaded: &[loader::Payload]) -> Result<Vec<Parsed>, Error> {
         let mut result = Vec::new();
         for payload in loaded {
@@ -428,7 +428,7 @@ impl Config {
             let value = match parser.parse(source_name, &resource, &payload.content) {
                 Ok(v) => v,
                 Err(e) => {
-                    if config_source.skip_errors() {
+                    if config_source.ignore_errors() {
                         cfg_if! {
                             if #[cfg(feature = "tracing")] {
                                 tracing::warn!(msg = "Skipped parse error for payload", source = source_display(config_source), resource = resource, error = ?e);

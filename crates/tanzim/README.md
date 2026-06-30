@@ -47,7 +47,7 @@ are independently usable:
   by name; unnamed payloads (`name == None`) all share the `""` key.
 - **Format auto-detection** — if a payload has no `format`, parsers are probed via
   `is_format_supported`; otherwise the format hint selects the parser.
-- **`skip_errors` (`?`)** — sources marked with `?` swallow load/parse failures
+- **`ignore_errors` (`?`)** — sources marked with `?` swallow load/parse failures
   silently instead of aborting the pipeline.
 - **Located errors** — [`Error`] renders one line by default; use `{error:#}` for a
   source snippet with a caret underline.

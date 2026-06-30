@@ -10,7 +10,7 @@ impl From<Source> for SourceBuilder {
             source: Some(value.source().to_string()),
             options: value.options().clone(),
             resource: value.resource().to_string(),
-            skip_errors: value.skip_errors(),
+            ignore_errors: value.ignore_errors(),
             resource_colon: value.resource_colon(),
         }
     }

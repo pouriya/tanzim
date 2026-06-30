@@ -184,7 +184,7 @@ impl Display for Source {
             }
             write!(f, ")")?;
         }
-        if self.skip_errors() {
+        if self.ignore_errors() {
             write!(f, "?")?;
         }
         if self.resource_colon() || !self.resource().is_empty() {
@@ -282,7 +282,7 @@ impl<'a> Parser<'a> {
         } else {
             Options::default()
         };
-        let skip_errors = if self.peek() == Some('?') {
+        let ignore_errors = if self.peek() == Some('?') {
             self.bump();
             true
         } else {
@@ -307,7 +307,7 @@ impl<'a> Parser<'a> {
             source,
             options,
             resource,
-            skip_errors,
+            ignore_errors,
             resource_colon,
         })
     }
@@ -697,7 +697,7 @@ mod tests {
         assert_eq!(env.source(), "env");
         assert!(env.options().is_empty());
         assert_eq!(env.resource(), "");
-        assert!(!env.skip_errors());
+        assert!(!env.ignore_errors());
         assert!(!env.resource_colon());
 
         let env_opts = parsed("env(prefix=APP_)");
@@ -708,17 +708,17 @@ mod tests {
 
         let file = parsed("file:/x/y/z");
         assert_eq!(file.resource(), "/x/y/z");
-        assert!(!file.skip_errors());
+        assert!(!file.ignore_errors());
 
         let file_skip = parsed("file?:.env");
-        assert!(file_skip.skip_errors());
+        assert!(file_skip.ignore_errors());
         assert_eq!(file_skip.resource(), ".env");
 
         let http = parsed(
             r#"http(headers=(Authorization="TOKEN"),timeout=3s)?:https://domain.tld/my/config.yml"#,
         );
         assert_eq!(http.source(), "http");
-        assert!(http.skip_errors());
+        assert!(http.ignore_errors());
         assert_eq!(http.resource(), "https://domain.tld/my/config.yml");
         assert_eq!(
             http.options().get("timeout"),
@@ -763,7 +763,7 @@ mod tests {
     #[test]
     fn parses_complex_options_before_skip_marker() {
         let source = parsed(r#"env(kv=salam,h=(o=b,z=[1,2,3.14,""]))?:oops"#);
-        assert!(source.skip_errors());
+        assert!(source.ignore_errors());
         assert_eq!(source.resource(), "oops");
         assert_eq!(
             source.options().get("kv"),

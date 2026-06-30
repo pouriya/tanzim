@@ -12,7 +12,7 @@ Examples: `env`, `env(prefix=APP_)`, `file:/etc/app`, `file?:.env`, `http(timeou
 
 ## Key types
 
-- `Source` — parsed, validated source declaration. Has `source()`, `options()`, `resource()`, `skip_errors()`.
+- `Source` — parsed, validated source declaration. Has `source()`, `options()`, `resource()`, `ignore_errors()`.
 - `SourceBuilder` — builder for constructing `Source` programmatically.
 - `Options` / `OptionValue` — ordered map and dynamically typed value used for loader options.
 - `ParseError` — detailed parse error; use `{error:#}` for snippet + caret.

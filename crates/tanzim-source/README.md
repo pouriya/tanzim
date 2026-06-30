@@ -1,7 +1,7 @@
 # tanzim-source
-[**Package**](https://crates.io/crates/tanzim-source)   |   [**Documentation**](https://docs.rs/tanzim-source)   |   [**Repository**](https://github.com/tanzim-rs/tanzim)
+[**Package**](https://crates.io/crates/tanzim-source)   |   [**Documentation**](https://docs.rs/tanzim-source)   |   [**Repository**](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-source)
 
-Declarative configuration source: where to load from, loader options, and address.
+Declarative configuration source: where to load from, loader options, and resource (address).
 
 ## Format
 
@@ -11,25 +11,48 @@ SOURCE [(OPTIONS)] [?] [:RESOURCE]
 
 | Part | Meaning |
 |------|---------|
-| `SOURCE` | Loader kind (opaque string, e.g. `env`, `file`, `http`) |
+| `SOURCE` | Loader kind (opaque string, e.g. `env`, `file`, `http`, `custom`) |
 | `(OPTIONS)` | Optional loader options as `key=value` pairs |
-| `?` | Skip errors when loading this source (non-fatal loader failures) |
+| `?` | Ignore errors when loading this source |
 | `:RESOURCE` | Optional address (path, URL, …); may be empty |
 
-### String examples
+### Source examples
 
 ```text
 env
 env(prefix=APP_)
 file:/etc/app/config.json
 file?:.env
-file?
-env:
 http(headers=(Authorization="TOKEN"),timeout=3s)?:https://example.com/config.yml
-env(kv=salam,h=(o=b,z=[1,2,3.14,""]))?:oops
+custom(k=v,list=[1,2,3.14,""],inner-kv=(foo=bar,baz=qux)):oops
 ```
 
-### Rules
+## Parsing
+
+```rust
+use tanzim_source::Source;
+
+let env = Source::parse("env(prefix=APP_)")?;
+let file: Source = "file:/etc/app/config.json".parse()?;
+let http = Source::try_from("http(headers=(Authorization=TOKEN))?:https://config.tld")?;
+
+assert_eq!(env.source(), "env");
+assert_eq!(env.to_string(), "env(prefix=APP_)");
+assert_eq!(file.resource(), "/etc/app/config.json");
+assert!(http.ignore_errors());
+assert_eq!(
+  http
+    .options().get("headers").unwrap()
+    .as_map().unwrap()
+    .get("Authorization").unwrap()
+    .as_string().unwrap(),
+  "TOKEN"
+);
+
+# Ok::<(), tanzim_source::Error>(())
+```
+
+##### Format Rules
 
 - **`SOURCE` and option keys** — ASCII letters, digits, `-`, `_`, `.` (non-empty).
 - **No whitespace** anywhere except inside `"quoted"` strings.
@@ -44,24 +67,7 @@ env(kv=salam,h=(o=b,z=[1,2,3.14,""]))?:oops
 - **Empty value** — error; use `""`.
 - **Trailing commas** — error (`(a=1,)` / `[1,]`).
 - **Duplicate keys** in `(OPTIONS)` — last wins.
-- **`?` (skip errors)** — must come after `SOURCE` or after the closing `)` of `(OPTIONS)`; never before `(OPTIONS)` (wrong: `env?(prefix=APP)`, right: `env(prefix=APP)?`).
-- **Errors** — [`ParseError`](https://docs.rs/tanzim-source/latest/tanzim_source/enum.ParseError.html) messages refer to *configuration source*. Use `{error:#}` for snippet + caret.
-
-## Parsing
-
-```rust
-use tanzim_source::Source;
-
-let env = Source::parse("env(prefix=APP_)")?;
-let file: Source = "file:/etc/app/config.json".parse()?;
-let dotenv = Source::try_from("file?:.env")?;
-
-assert_eq!(env.source(), "env");
-assert_eq!(env.to_string(), "env(prefix=APP_)");
-assert_eq!(file.resource(), "/etc/app/config.json");
-assert!(dotenv.skip_errors());
-# Ok::<(), tanzim_source::ParseError>(())
-```
+- **`?` (ignore errors)** — must come after `SOURCE` or after the closing `)` of `(OPTIONS)`; never before `(OPTIONS)`.
 
 Build programmatically with [`SourceBuilder`](https://docs.rs/tanzim-source/latest/tanzim_source/struct.SourceBuilder.html):
 
@@ -71,7 +77,7 @@ use tanzim_source::SourceBuilder;
 let source = SourceBuilder::new()
     .with_source("env")
     .with_option("prefix", "APP")
-    .with_skip_errors(false)
+    .with_ignore_errors(false)
     .build()?;
 # Ok::<(), tanzim_source::Error>(())
 ```
@@ -84,52 +90,21 @@ cargo run -p tanzim-source --example parse_sources -- \
   'file:/etc/app/config.json'
 ```
 
-## Serde
-
-Enable the `serde` feature to embed [`Source`](https://docs.rs/tanzim-source/latest/tanzim_source/struct.Source.html) in config files as a **string** (canonical form round-trips):
-
-```toml
-[dependencies]
-tanzim-source = { version = "0.1", features = ["serde"] }
-```
+## Ergonomic Errors
+Use `{error:#}` for multi-line errors with caret:
 
 ```rust
-# #[cfg(feature = "serde")]
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
 use tanzim_source::Source;
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct App {
-    sources: Vec<Source>,
-}
-
-let app: App = serde_json::from_str(r#"{ "sources": ["env(prefix=APP_)", "file:/etc/app/config.json"] }"#)?;
-assert_eq!(app.sources[0].source(), "env");
-# Ok(())
-# }
-# #[cfg(not(feature = "serde"))]
-# fn main() {}
+let error = Source::parse("bad?(k=v)").unwrap_err();
+println!("{error:#}")
 ```
-
-Invalid strings surface parse errors through serde with *configuration source* in the message:
-
-```rust
-# #[cfg(feature = "serde")]
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
-use tanzim_source::Source;
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-struct App { source: Source }
-
-let error = serde_json::from_str::<App>(r#"{ "source": "env(prefix=)" }"#).unwrap_err();
-assert!(error.to_string().contains("configuration source option value"));
-# Ok(())
-# }
-# #[cfg(not(feature = "serde"))]
-# fn main() {}
+```text
+invalid configuration source at column 4: configuration source: skip marker `?` must come after options `(...)`; use `source(...)?` not `source?(...)`
+  bad?(k=v)
+     ^
 ```
+Use `{error}` for one-line errors.
+
 
 ## Cargo features
 
@@ -139,6 +114,6 @@ assert!(error.to_string().contains("configuration source option value"));
 
 ## Relations
 
-- Used by all other tanzim crates to represent where to load from.
+- Used by all other tanzim crates to represent where and how to load from.
 - [`tanzim-load`](../tanzim-load/) consumes `Source` fields (`source`, `options`, `resource`) in its loaders.
 - Full pipeline wired in [`tanzim`](../tanzim/).

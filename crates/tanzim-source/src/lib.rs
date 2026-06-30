@@ -344,12 +344,15 @@ impl Display for Options {
 }
 
 /// One configuration source declaration.
+///
+/// See the [crate-level documentation](crate) for the source string format, parsing rules, and
+/// examples.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Source {
     pub(crate) source: String,
     pub(crate) options: Options,
     pub(crate) resource: String,
-    pub(crate) skip_errors: bool,
+    pub(crate) ignore_errors: bool,
     pub(crate) resource_colon: bool,
 }
 
@@ -401,12 +404,12 @@ impl Source {
         }
     }
 
-    pub fn skip_errors(&self) -> bool {
-        self.skip_errors
+    pub fn ignore_errors(&self) -> bool {
+        self.ignore_errors
     }
 
-    pub fn set_skip_errors(&mut self, skip_errors: bool) {
-        self.skip_errors = skip_errors;
+    pub fn set_ignore_errors(&mut self, ignore_errors: bool) {
+        self.ignore_errors = ignore_errors;
     }
 
     pub fn resource_colon(&self) -> bool {
@@ -424,7 +427,7 @@ pub struct SourceBuilder {
     source: Option<String>,
     options: Options,
     resource: String,
-    skip_errors: bool,
+    ignore_errors: bool,
     resource_colon: bool,
 }
 
@@ -453,8 +456,8 @@ impl SourceBuilder {
         self
     }
 
-    pub fn with_skip_errors(mut self, skip_errors: bool) -> Self {
-        self.skip_errors = skip_errors;
+    pub fn with_ignore_errors(mut self, ignore_errors: bool) -> Self {
+        self.ignore_errors = ignore_errors;
         self
     }
 
@@ -473,7 +476,7 @@ impl SourceBuilder {
             source,
             options: self.options,
             resource: self.resource,
-            skip_errors: self.skip_errors,
+            ignore_errors: self.ignore_errors,
             resource_colon,
         })
     }
