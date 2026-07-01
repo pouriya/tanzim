@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 use std::process;
-use tanzim_parse::{Deserialize, Env, Json, Toml, Yaml};
+use tanzim_parse::{Parse, env::Env, json::Json, toml::Toml, yaml::Yaml};
 use tanzim_value::{LocatedValue, Value};
 
 fn main() {

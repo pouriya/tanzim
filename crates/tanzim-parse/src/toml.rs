@@ -2,10 +2,22 @@
 //!
 //! **Format:** `toml`
 //!
+//! # Behaviour
+//!
+//! - Parses TOML with source spans. Tables and inline tables become maps, arrays become lists, and
+//!   strings/integers/floats/booleans become the matching scalar values.
+//! - Every node carries its span as a [`Location`] (line/column); for single-line input the
+//!   line/column are omitted.
+//! - TOML date-times have no configuration representation and are rejected with
+//!   [`Error::UnsupportedType`]. Non-UTF-8 input fails with [`Error::InvalidUtf8`], and any syntax
+//!   error becomes [`Error::Parse`].
+//! - [`is_format_supported`](crate::Parse::is_format_supported) returns `Some(true)` when
+//!   the bytes parse as TOML, else `Some(false)`.
+//!
 //! # Example
 //!
 //! ```
-//! use tanzim_parse::{Deserialize, Toml};
+//! use tanzim_parse::{Parse, toml::Toml};
 //!
 //! let value = Toml::new().parse("file", "config.toml", b"host = \"127.0.0.1\"\n").unwrap();
 //! assert_eq!(
@@ -14,22 +26,35 @@
 //! );
 //! ```
 
-use crate::Deserialize;
+use crate::Parse;
 use crate::span::{char_count, is_single_line, line_column};
 use cfg_if::cfg_if;
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 use toml_edit::{DocumentMut, Item, Table, Value as TomlValue};
 
+/// Parser for the `toml` format: TOML into a source-located value tree.
+///
+/// Tables, arrays, and scalars map to the value tree with a per-node span [`Location`]; date-times
+/// are rejected with [`Error::UnsupportedType`]. Stateless — construct with [`Toml::new`].
+///
+/// ```
+/// use tanzim_parse::{Parse, toml::Toml};
+///
+/// let value = Toml::new().parse("file", "config.toml", b"port = 8080\n").unwrap();
+/// let port = value.value.as_map().unwrap().get("port").unwrap();
+/// assert_eq!(port.value.as_int().unwrap(), 8080);
+/// ```
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Toml;
 
 impl Toml {
+    /// Create a TOML parser.
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Deserialize for Toml {
+impl Parse for Toml {
     fn name(&self) -> &str {
         "TOML"
     }

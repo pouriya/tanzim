@@ -2,10 +2,22 @@
 //!
 //! **Formats:** `yml`, `yaml`
 //!
+//! # Behaviour
+//!
+//! - Parses YAML with source markers. Mappings become maps, sequences become lists, and
+//!   scalars become strings/integers/floats/booleans. An empty document yields an empty map.
+//! - Every node carries its marker as a [`Location`] (line/column); for single-line input the
+//!   line/column are omitted.
+//! - YAML `null` is rejected with [`Error::UnsupportedNull`]. Non-scalar mapping keys, aliases,
+//!   and malformed nodes become [`Error::Parse`]; non-UTF-8 input fails with
+//!   [`Error::InvalidUtf8`].
+//! - [`is_format_supported`](crate::Parse::is_format_supported) returns `Some(true)` when
+//!   the bytes parse as YAML, else `Some(false)`.
+//!
 //! # Example
 //!
 //! ```
-//! use tanzim_parse::{Deserialize, Yaml};
+//! use tanzim_parse::{Parse, yaml::Yaml};
 //!
 //! let value = Yaml::new().parse("file", "config.yaml", b"host: 127.0.0.1\n").unwrap();
 //! assert_eq!(
@@ -14,22 +26,36 @@
 //! );
 //! ```
 
-use crate::Deserialize;
+use crate::Parse;
 use crate::span::is_single_line;
 use cfg_if::cfg_if;
 use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 
+/// Parser for the `yml`/`yaml` formats: YAML into a source-located value tree.
+///
+/// Mappings, sequences, and scalars map to the value tree with a per-node marker [`Location`];
+/// YAML `null` is rejected with [`Error::UnsupportedNull`]. Stateless — construct with
+/// [`Yaml::new`].
+///
+/// ```
+/// use tanzim_parse::{Parse, yaml::Yaml};
+///
+/// let value = Yaml::new().parse("file", "config.yaml", b"port: 8080\n").unwrap();
+/// let port = value.value.as_map().unwrap().get("port").unwrap();
+/// assert_eq!(port.value.as_int().unwrap(), 8080);
+/// ```
 #[derive(Default, Copy, Clone)]
 pub struct Yaml;
 
 impl Yaml {
+    /// Create a YAML parser.
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Deserialize for Yaml {
+impl Parse for Yaml {
     fn name(&self) -> &str {
         "YAML"
     }

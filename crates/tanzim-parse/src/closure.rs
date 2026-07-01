@@ -1,9 +1,18 @@
 //! Custom parser backed by a closure.
 //!
+//! Use this when a format isn't built-in and you don't want to define a whole type just to
+//! implement [`Parse`]. Wrap a closure of the same shape as
+//! [`Parse::parse`] — see [`BoxedParseFn`] — and the resulting
+//! [`Closure`] *is* a `Parse`, so it plugs straight into the pipeline. Optionally attach a
+//! [`BoxedValidatorFn`] with [`Closure::with_validator`] to take part in format auto-detection.
+//!
+//! For anything with non-trivial state, prefer a real `impl Parse`. Reach for `Closure` for
+//! small, stateless, or one-off parsers.
+//!
 //! # Example
 //!
 //! ```
-//! use tanzim_parse::{closure::Closure, Deserialize};
+//! use tanzim_parse::{closure::Closure, Parse};
 //! use tanzim_value::{LocatedValue, Location, Value};
 //!
 //! let parser = Closure::new(
@@ -20,12 +29,28 @@
 //! assert_eq!(value.value.as_string().unwrap(), "HELLO");
 //! ```
 
-use crate::Deserialize;
+use crate::Parse;
 use tanzim_value::{Error, LocatedValue};
 
+/// The parse closure driving a [`Closure`] parser — same contract as
+/// [`Parse::parse`].
+///
+/// Called with, in order: the source kind (`&str`), the resource identifier (`&str`), and the raw
+/// `&[u8]` bytes. Return a [`LocatedValue`] tree (ideally with a [`Location`](tanzim_value::Location)
+/// on every node), or an [`Error`] on failure.
 pub type BoxedParseFn = Box<dyn Fn(&str, &str, &[u8]) -> Result<LocatedValue, Error>>;
+
+/// The optional auto-detection probe for a [`Closure`] parser — same contract as
+/// [`Parse::is_format_supported`].
+///
+/// Given the raw bytes, return `Some(true)` if confident, `Some(false)` if definitely not this
+/// format, or `None` to abstain. The default (when none is set) abstains with `None`.
 pub type BoxedValidatorFn = Box<dyn Fn(&[u8]) -> Option<bool>>;
 
+/// A [`Parse`] implementation whose behaviour is supplied by closures.
+///
+/// Reach for this instead of a full `impl Parse` when the parser is small, stateless, or a
+/// one-off adapter. See the [module docs](self) for a complete example.
 pub struct Closure {
     name: String,
     parser: BoxedParseFn,
@@ -34,6 +59,15 @@ pub struct Closure {
 }
 
 impl Closure {
+    /// Build a closure-backed parser.
+    ///
+    /// - `name` — the parser [`name`](crate::Parse::name) used in error messages.
+    /// - `supported_format` — the single format extension this parser handles (widen later with
+    ///   [`Closure::with_format_list`]).
+    /// - `parser` — the closure run by [`parse`](crate::Parse::parse).
+    ///
+    /// The auto-detection probe defaults to abstaining (`None`); set one with
+    /// [`Closure::with_validator`].
     pub fn new<N: AsRef<str>, F: AsRef<str>>(
         name: N,
         supported_format: F,
@@ -47,11 +81,14 @@ impl Closure {
         }
     }
 
+    /// Attach an auto-detection probe (see [`BoxedValidatorFn`]) used when a payload has no format
+    /// hint.
     pub fn with_validator(mut self, validator: BoxedValidatorFn) -> Self {
         self.validator = validator;
         self
     }
 
+    /// Replace the list of format extensions this parser handles (e.g. `["yml", "yaml"]`).
     pub fn with_format_list<N: AsRef<str>>(mut self, format_list: &[N]) -> Self {
         let mut formats = Vec::new();
         for format in format_list {
@@ -62,7 +99,7 @@ impl Closure {
     }
 }
 
-impl Deserialize for Closure {
+impl Parse for Closure {
     fn name(&self) -> &str {
         self.name.as_str()
     }

@@ -4,7 +4,7 @@
 Facade crate for a small, composable configuration pipeline: **load → parse → merge**.
 
 `tanzim` lets you describe *where* configuration comes from with short source
-strings (environment variables, files, HTTP, …), deserialize each source into a
+strings (environment variables, files, HTTP, …), parse each source into a
 typed value tree that remembers its origin, and merge everything into one map
 keyed by entry name. Every value keeps its source location, so errors point at
 the exact file, line, and column.
@@ -15,7 +15,7 @@ the exact file, line, and column.
 "env(prefix=APP_)"  "file:/etc/app"          ← source strings
         │
         ▼  load     Load::load(source)            → Vec<Payload>      (raw bytes + maybe name + maybe format)
-        ▼  parse    Deserialize::parse(bytes)      → LocatedValue      (typed tree + Location)
+        ▼  parse    Parse::parse(bytes)      → LocatedValue      (typed tree + Location)
         ▼  merge    Merge::merge(parsed)           → HashMap<name, …>  (grouped + combined)
         │
         ▼
@@ -35,7 +35,7 @@ are independently usable:
 |-----------|-------|----------------|
 | `source` | [`tanzim-source`](crates/tanzim-source/README.md) | Parse the `SOURCE[(OPTIONS)][?][:RESOURCE]` source-string format into a validated [`Source`] |
 | `loader` | [`tanzim-load`](crates/tanzim-load/README.md) | `Load` trait + `env`/`file`/`http`/`closure` loaders → `Payload` |
-| `parser` | [`tanzim-parse`](crates/tanzim-parse/README.md) | `Deserialize` trait + `env`/`json`/`yaml`/`toml` parsers → `LocatedValue` |
+| `parser` | [`tanzim-parse`](crates/tanzim-parse/README.md) | `Parse` trait + `env`/`json`/`yaml`/`toml` parsers → `LocatedValue` |
 | `merge` | [`tanzim-merge`](crates/tanzim-merge/README.md) | `Merge` trait + `LastWins`/`DeepMerge` strategies → grouped map |
 | — | [`tanzim-value`](crates/tanzim-value/README.md) | Core `Value`, `LocatedValue`, `Map`, `Location`, `Error` types shared by every stage |
 
@@ -72,7 +72,7 @@ Use individual workspace crates if you only need one stage — see [tanzim-load/
 ```rust,no_run
 use tanzim::ConfigBuilder;
 use tanzim::loader::{env::Env, file::File};
-use tanzim::parser::{Env as EnvParser, Json, Yaml, Toml};
+use tanzim::parser::{env::Env as EnvParser, json::Json, yaml::Yaml, toml::Toml};
 use tanzim::merge::DeepMerge;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

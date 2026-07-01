@@ -2,10 +2,24 @@
 //!
 //! **Format:** `env`
 //!
+//! # Behaviour
+//!
+//! - Splits the UTF-8 input into lines; blank lines and `#` comments are ignored, and an optional
+//!   leading `export ` is stripped.
+//! - Each remaining `KEY=VALUE` line becomes a string entry. Values may be double-quoted (with
+//!   `\n`, `\r`, `\t`, `\"`, `\\` escapes), single-quoted (taken literally), or unquoted (used
+//!   verbatim). The result is always a flat [`Value::Map`] of
+//!   [`Value::String`]s — env input has no nested or typed values.
+//! - Each key carries its line/column [`Location`]; for single-line input the line/column are
+//!   omitted. The root map has no line.
+//! - Non-UTF-8 input fails with [`Error::InvalidUtf8`]; there are
+//!   no syntax errors otherwise. [`is_format_supported`](crate::Parse::is_format_supported)
+//!   returns `Some(true)` when any non-comment line contains `=`, else `Some(false)`.
+//!
 //! # Example
 //!
 //! ```
-//! use tanzim_parse::{Deserialize, Env};
+//! use tanzim_parse::{Parse, env::Env};
 //!
 //! let value = Env::new().parse("file", ".env", b"SERVER_HOST=\"127.0.0.1\"\n").unwrap();
 //! assert_eq!(
@@ -14,21 +28,35 @@
 //! );
 //! ```
 
-use crate::Deserialize;
+use crate::Parse;
 use crate::span::{is_single_line, line_column_from_line};
 use cfg_if::cfg_if;
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 
+/// Parser for the `env` format: dotenv / env-file `KEY=VALUE` lines into a flat string map.
+///
+/// Skips blank lines and `#` comments, supports quoted values, and records each key's line number
+/// as a [`Location`]. The result is always a map of strings. Stateless — construct with
+/// [`Env::new`].
+///
+/// ```
+/// use tanzim_parse::{Parse, env::Env};
+///
+/// let value = Env::new().parse("file", ".env", b"# comment\nPORT=8080\n").unwrap();
+/// let port = value.value.as_map().unwrap().get("PORT").unwrap();
+/// assert_eq!(port.value.as_string().unwrap(), "8080");
+/// ```
 #[derive(Clone, Copy, Default)]
 pub struct Env;
 
 impl Env {
+    /// Create an env-format parser.
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Deserialize for Env {
+impl Parse for Env {
     fn name(&self) -> &str {
         "Environment-Variables"
     }

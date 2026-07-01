@@ -4,7 +4,7 @@ use tanzim::{
     ConfigBuilder, Schemas,
     loader::{env::Env, file::File},
     merge::DeepMerge,
-    parser::{Env as EnvParser, Json, Toml, Yaml},
+    parser::{env::Env as EnvParser, json::Json, toml::Toml, yaml::Yaml},
     validate::SchemaValue,
 };
 

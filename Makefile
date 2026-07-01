@@ -1,9 +1,11 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all test clippy check-style docs examples example-basic
+.PHONY: all build test clippy check-style docs examples example-basic
 
-all:
+all: build clippy test check-style
+
+build:
 	$(MAKE) -C crates/tanzim-value build
 	$(MAKE) -C crates/tanzim-source build
 	$(MAKE) -C crates/tanzim-load build

@@ -7,46 +7,65 @@ pub use tanzim_value::{Error, LocatedValue, Value};
 pub mod closure;
 
 #[cfg(feature = "env")]
-mod env;
+pub mod env;
 #[cfg(feature = "json")]
-mod json;
+pub mod json;
 #[cfg(feature = "toml")]
-mod toml;
+pub mod toml;
 #[cfg(feature = "yaml")]
-mod yaml;
+pub mod yaml;
 
-#[cfg(feature = "env")]
-pub use env::Env;
-#[cfg(feature = "json")]
-pub use json::Json;
-#[cfg(feature = "toml")]
-pub use toml::Toml;
-#[cfg(feature = "yaml")]
-pub use yaml::Yaml;
-
-/// Deserializes raw bytes into a [`LocatedValue`] tree for one format.
+/// Parses raw bytes into a [`LocatedValue`] tree for one format.
 ///
-/// Implement this to add a new configuration format. Every node in the returned
-/// tree should carry a [`tanzim_value::Location`] that points back to the
-/// source file and line so that downstream error messages can show users exactly
-/// where a bad value came from.
+/// Implement this to add a new configuration format. This is the second pipeline stage: it turns
+/// the raw bytes a loader produced into a typed, source-located value tree for merging.
+///
+/// # Contract
+///
+/// - [`parse`](Parse::parse) returns one [`LocatedValue`] tree per payload. `source` is the
+///   source kind (e.g. `"file"`) and `resource` the path/identifier the bytes came from.
+/// - Every node in the tree — including the root — should carry a [`tanzim_value::Location`] that
+///   points back to the source, resource, and line/column, so downstream error messages can show
+///   users exactly where a bad value came from. Use [`tanzim_value::Location::at`] to build them.
+/// - [`supported_format_list`](Parse::supported_format_list) may return several extensions
+///   for one parser (e.g. `["yml", "yaml"]`). When a payload carries no format hint, selection
+///   instead falls back to probing — see Auto-detection below.
 ///
 /// # Auto-detection
 ///
 /// When a payload's `format` hint is `None`, the parse stage calls
-/// [`is_format_supported`][Deserialize::is_format_supported] on each registered
+/// [`is_format_supported`][Parse::is_format_supported] on each registered
 /// parser in order. Return `Some(true)` if confident, `Some(false)` to skip, or `None`
 /// if unsure (another parser may then claim the bytes).
+///
+/// # Choosing an error
+///
+/// Failures are reported with [`tanzim_value::Error`]; every variant except `Parse` carries a
+/// [`Location`](tanzim_value::Location):
+///
+/// - [`Error::InvalidUtf8`] — the bytes aren't valid UTF-8.
+/// - [`Error::Parse`] — a syntax or structural error; set `location` when you can pinpoint it,
+///   otherwise `None`.
+/// - [`Error::UnsupportedNull`] — the input contained a null the config model doesn't represent.
+/// - [`Error::UnsupportedType`] — a value of a type that has no configuration representation
+///   (e.g. a date-time).
+///
+/// # Registering
+///
+/// Pass an instance to `tanzim::Config::with_parser`. The pipeline picks a parser by the payload's
+/// format hint when present, otherwise it probes each parser with
+/// [`is_format_supported`](Parse::is_format_supported). For a one-off parser you don't want
+/// to define a type for, use [`closure::Closure`] instead of implementing this trait.
 ///
 /// # Example — custom CSV parser
 ///
 /// ```rust
-/// use tanzim_parse::{Deserialize, Error, LocatedValue, Value};
+/// use tanzim_parse::{Parse, Error, LocatedValue, Value};
 /// use tanzim_value::{Location, Map};
 ///
 /// struct CsvParser;
 ///
-/// impl Deserialize for CsvParser {
+/// impl Parse for CsvParser {
 ///     fn name(&self) -> &str { "csv" }
 ///     fn supported_format_list(&self) -> Vec<String> { vec!["csv".into()] }
 ///     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool> {
@@ -72,8 +91,17 @@ pub use yaml::Yaml;
 ///         Ok(LocatedValue { value: Value::Map(map), location: root_loc })
 ///     }
 /// }
+///
+/// let value = CsvParser
+///     .parse("file", "config.csv", b"host,127.0.0.1\nport,8080\n")
+///     .unwrap();
+///
+/// let map = value.value.as_map().unwrap();
+/// assert_eq!(map.get("host").unwrap().value.as_string().unwrap(), "127.0.0.1");
+/// assert_eq!(map.get("port").unwrap().value.as_string().unwrap(), "8080");
+/// // `port` is a string — this parser stores every field verbatim.
 /// ```
-pub trait Deserialize {
+pub trait Parse {
     /// Human-readable name used in error messages.
     fn name(&self) -> &str;
     /// Format extensions this parser handles (e.g. `["json"]`, `["yml", "yaml"]`).
@@ -83,7 +111,7 @@ pub trait Deserialize {
     /// Return `Some(true)` if confident, `Some(false)` if definitely not this format,
     /// or `None` to abstain (another parser will be tried next).
     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool>;
-    /// Deserialize `bytes` into a [`LocatedValue`] tree.
+    /// Parse `bytes` into a [`LocatedValue`] tree.
     ///
     /// `source` is the source kind (e.g. `"file"`) and `resource` is the path or
     /// identifier; both are used to populate [`tanzim_value::Location`] on every

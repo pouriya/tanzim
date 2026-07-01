@@ -1,12 +1,12 @@
 //! Custom parser example.
 //!
-//! Implements [`Deserialize`] for a simple `key=value` format (one entry per line,
+//! Implements [`Parse`] for a simple `key=value` format (one entry per line,
 //! `#` comments) and runs it against inline bytes.
 //!
 //! Run with:
 //!   cargo run -p tanzim-parse --example custom_parser
 
-use tanzim_parse::{Deserialize, Error, LocatedValue, Value};
+use tanzim_parse::{Error, LocatedValue, Parse, Value};
 use tanzim_value::{Location, Map};
 
 // ── Custom parser ─────────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ use tanzim_value::{Location, Map};
 /// Parses `key=value` lines. Lines starting with `#` are comments.
 struct KvParser;
 
-impl Deserialize for KvParser {
+impl Parse for KvParser {
     fn name(&self) -> &str {
         "kv"
     }

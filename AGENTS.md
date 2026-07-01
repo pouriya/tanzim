@@ -9,7 +9,7 @@ Configuration pipeline: **load → parse → merge → validate**.
 | `tanzim-value` | Core value types (`Value`, `LocatedValue`, `Map`, `Location`, `Error`) |
 | `tanzim-source` | Source string parsing (`Source`, `SourceBuilder`, `Options`) |
 | `tanzim-load` | Loading raw bytes from sources (`Load` trait, `Payload`) |
-| `tanzim-parse` | Deserializing bytes into `LocatedValue` trees (`Deserialize` trait) |
+| `tanzim-parse` | Parsing bytes into `LocatedValue` trees (`Parse` trait) |
 | `tanzim-merge` | Merging parsed values by entry name (`Merge`, `LastWins`, `DeepMerge`, `Merged`) |
 | `tanzim-validate` | Validating/coercing values (`Validator` trait, concrete validators, `schema` feature for building validators from data) |
 | `tanzim` | Facade: `ConfigBuilder` / `Config` that wires the full pipeline |
@@ -19,7 +19,7 @@ Configuration pipeline: **load → parse → merge → validate**.
 ```
 Source strings
   → Load::load(source)         → Vec<Payload>
-  → Deserialize::parse(bytes)  → LocatedValue
+  → Parse::parse(bytes)  → LocatedValue
   → Merge::merge(parsed_list)  → HashMap<name, (Vec<Payload>, LocatedValue)>   (the `Merged` alias)
 ```
 

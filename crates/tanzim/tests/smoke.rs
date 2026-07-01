@@ -2,7 +2,7 @@ use tanzim::{
     ConfigBuilder,
     loader::{env::Env as EnvLoader, file::File as FileLoader},
     merge::DeepMerge,
-    parser::{Env as EnvParser, Json, Toml, Yaml},
+    parser::{env::Env as EnvParser, json::Json, toml::Toml, yaml::Yaml},
 };
 
 #[test]

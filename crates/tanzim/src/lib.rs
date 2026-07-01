@@ -9,7 +9,7 @@
 //!
 //! - [`source`] — [`tanzim_source`] ([`tanzim_source::Source`])
 //! - [`loader`] — [`tanzim_load`] ([`tanzim_load::Load`])
-//! - [`parser`] — [`tanzim_parse`] ([`tanzim_parse::Deserialize`])
+//! - [`parser`] — [`tanzim_parse`] ([`tanzim_parse::Parse`])
 //! - [`merge`] — [`tanzim_merge`] ([`tanzim_merge::Merge`])
 
 pub use tanzim_load as loader;
@@ -97,7 +97,7 @@ pub enum Error {
 pub struct ConfigBuilder {
     sources: Vec<Source>,
     loaders: Vec<Box<dyn loader::Load>>,
-    parsers: Vec<Box<dyn parser::Deserialize>>,
+    parsers: Vec<Box<dyn parser::Parse>>,
     merger: Box<dyn merge::Merge>,
     schemas: Schemas,
 }
@@ -137,7 +137,7 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn with_parser(mut self, parser: impl parser::Deserialize + 'static) -> Self {
+    pub fn with_parser(mut self, parser: impl parser::Parse + 'static) -> Self {
         self.parsers.push(Box::new(parser));
         self
     }
@@ -182,7 +182,7 @@ impl ConfigBuilder {
 pub struct Config {
     sources: Vec<Source>,
     loaders: Vec<Box<dyn loader::Load>>,
-    parsers: Vec<Box<dyn parser::Deserialize>>,
+    parsers: Vec<Box<dyn parser::Parse>>,
     merger: Box<dyn merge::Merge>,
     schemas: Schemas,
 }
@@ -206,11 +206,11 @@ impl Config {
         &mut self.loaders
     }
 
-    pub fn parsers(&self) -> &[Box<dyn parser::Deserialize>] {
+    pub fn parsers(&self) -> &[Box<dyn parser::Parse>] {
         &self.parsers
     }
 
-    pub fn parsers_mut(&mut self) -> &mut Vec<Box<dyn parser::Deserialize>> {
+    pub fn parsers_mut(&mut self) -> &mut Vec<Box<dyn parser::Parse>> {
         &mut self.parsers
     }
 
@@ -250,7 +250,7 @@ impl Config {
         self
     }
 
-    pub fn with_parser(mut self, parser: impl parser::Deserialize + 'static) -> Self {
+    pub fn with_parser(mut self, parser: impl parser::Parse + 'static) -> Self {
         self.parsers.push(Box::new(parser));
         self
     }
@@ -355,7 +355,7 @@ impl Config {
         Ok(result)
     }
 
-    /// Deserialize loaded bytes into [`parser::LocatedValue`] trees.
+    /// Parse loaded bytes into [`parser::LocatedValue`] trees.
     ///
     /// Parser selection: if `payload.maybe_format` is set, the first parser that lists that
     /// format wins; otherwise parsers are probed via `is_format_supported`. Sources

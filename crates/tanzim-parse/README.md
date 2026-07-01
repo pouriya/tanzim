@@ -1,12 +1,25 @@
 # tanzim-parse
 
-Second stage of the tanzim pipeline: deserializes raw bytes into typed, source-located value trees.
+Second stage of the tanzim pipeline: parses raw bytes into typed, source-located value trees.
 
-## The `Deserialize` trait
+## The `Parse` trait
 
-Implement [`Deserialize`] to add a new configuration format. Every node in the returned
-[`LocatedValue`] tree should carry a `Location` pointing to the source file and line for
-accurate error messages.
+Implement [`Parse`] to add a new configuration format. It turns the raw bytes a loader
+produced into a typed, source-located value tree. The contract:
+
+- `parse` returns one [`LocatedValue`] tree per payload, given the `source` kind and `resource`
+  identifier the bytes came from.
+- Every node — including the root — should carry a `Location` (source, resource, line/column) so
+  downstream error messages can point at the exact value. Build them with `Location::at`.
+- A parser is selected by the payload's format hint against `supported_format_list` (which may
+  list several extensions, e.g. `yml`/`yaml`); with no hint, the stage probes each parser via
+  `is_format_supported` (`Some(true)`/`Some(false)`/`None` to abstain).
+- Report failures with the matching [`Error`] variant (`InvalidUtf8`, `Parse`, `UnsupportedNull`,
+  `UnsupportedType`).
+
+Register a parser with `tanzim::Config::with_parser`. For a quick, stateless adapter, use
+`closure::Closure` instead of a full `impl Parse`. See the [`Parse`] rustdoc and the
+example below for worked details.
 
 ## Built-in parsers
 
@@ -21,7 +34,7 @@ accurate error messages.
 ## Example
 
 ```rust,no_run
-use tanzim_parse::{Deserialize, Json};
+use tanzim_parse::{Parse, json::Json};
 
 fn main() -> Result<(), tanzim_value::Error> {
     let value = Json::new().parse("file", "config.json", br#"{"port": 8080}"#)?;

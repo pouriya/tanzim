@@ -2,10 +2,23 @@
 //!
 //! **Format:** `json`
 //!
+//! # Behaviour
+//!
+//! - Parses standard JSON with source spans. Objects become maps, arrays become lists, and
+//!   strings/numbers/booleans become the matching scalar values; integers and floats are
+//!   distinguished.
+//! - Every node — root, map values, and list items — carries its span as a [`Location`]
+//!   (line/column); for single-line input the line/column are omitted.
+//! - JSON `null` is rejected with [`Error::UnsupportedNull`], since the config model has no null.
+//!   Non-UTF-8 input fails with [`Error::InvalidUtf8`], and any syntax error becomes
+//!   [`Error::Parse`] with the failing position.
+//! - [`is_format_supported`](crate::Parse::is_format_supported) returns `Some(true)` when
+//!   the bytes parse as JSON, else `Some(false)`.
+//!
 //! # Example
 //!
 //! ```
-//! use tanzim_parse::{Deserialize, Json};
+//! use tanzim_parse::{Parse, json::Json};
 //!
 //! let value = Json::new()
 //!     .parse("file", "config.json", br#"{"host":"127.0.0.1"}"#)
@@ -16,23 +29,36 @@
 //! );
 //! ```
 
-use crate::Deserialize;
+use crate::Parse;
 use crate::span::is_single_line;
 use cfg_if::cfg_if;
 use spanned_json_parser::value::Value as JsonValue;
 use spanned_json_parser::{Position, parse};
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 
+/// Parser for the `json` format: standard JSON into a source-located value tree.
+///
+/// Objects, arrays, and scalars map to the value tree with a per-node span [`Location`]; JSON
+/// `null` is rejected with [`Error::UnsupportedNull`]. Stateless — construct with [`Json::new`].
+///
+/// ```
+/// use tanzim_parse::{Parse, json::Json};
+///
+/// let value = Json::new().parse("file", "config.json", br#"{"port":8080}"#).unwrap();
+/// let port = value.value.as_map().unwrap().get("port").unwrap();
+/// assert_eq!(port.value.as_int().unwrap(), 8080);
+/// ```
 #[derive(Clone, Copy, Default)]
 pub struct Json;
 
 impl Json {
+    /// Create a JSON parser.
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Deserialize for Json {
+impl Parse for Json {
     fn name(&self) -> &str {
         "JSON"
     }
