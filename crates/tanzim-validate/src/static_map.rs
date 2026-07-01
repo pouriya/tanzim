@@ -8,7 +8,7 @@ struct Field {
     validator: Option<Box<dyn Validator>>,
 }
 
-/// Accepts a map with a known set of keys.
+/// (`static_map` feature) Accepts a map with a known set of keys.
 ///
 /// Each declared key is either required or optional, and may carry a validator for its
 /// value. By default keys not declared in the schema are rejected; call

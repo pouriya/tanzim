@@ -59,7 +59,8 @@ assert_eq!(host.value.as_string().unwrap(), "replica");
 
 ## Features
 
-No optional features.
+No default features. Opt-in `logging` / `tracing` emit log messages / trace
+spans via the `log` / `tracing` crates.
 
 ## Relations
 

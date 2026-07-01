@@ -14,7 +14,7 @@ fn as_str(value: &mut Value) -> Result<&str, Error> {
     }
 }
 
-/// Accepts a standard (RFC 4648) base64-encoded string.
+/// (`encoding` feature) Accepts a standard (RFC 4648) base64-encoded string.
 #[derive(Debug, Clone, Default)]
 pub struct Base64;
 
@@ -34,7 +34,7 @@ impl Validator for Base64 {
     }
 }
 
-/// Accepts a hexadecimal string (even number of `0-9a-fA-F` digits).
+/// (`encoding` feature) Accepts a hexadecimal string (even number of `0-9a-fA-F` digits).
 #[derive(Debug, Clone, Default)]
 pub struct Hex;
 

@@ -36,7 +36,7 @@ fn as_string(value: &mut Value) -> Result<&mut String, Error> {
     }
 }
 
-/// Accepts a hostname or an IP address literal.
+/// (`net` feature) Accepts a hostname or an IP address literal.
 #[derive(Debug, Clone, Default)]
 pub struct Host;
 
@@ -57,7 +57,7 @@ impl Validator for Host {
     }
 }
 
-/// Accepts a DNS domain name, normalizing it to lowercase.
+/// (`net` feature) Accepts a DNS domain name, normalizing it to lowercase.
 #[derive(Debug, Clone, Default)]
 pub struct Domain {
     require_dot: bool,
@@ -86,7 +86,7 @@ impl Validator for Domain {
     }
 }
 
-/// Accepts an email address, normalizing the domain part to lowercase.
+/// (`net` feature) Accepts an email address, normalizing the domain part to lowercase.
 #[derive(Debug, Clone, Default)]
 pub struct Email;
 
@@ -111,7 +111,7 @@ impl Validator for Email {
     }
 }
 
-/// Accepts a TCP/UDP port number, coercing numeric strings and floats like [`crate::Integer`].
+/// (`net` feature) Accepts a TCP/UDP port number, coercing numeric strings and floats like [`crate::Integer`].
 #[derive(Debug, Clone)]
 pub struct Port {
     allow_zero: bool,
@@ -162,7 +162,7 @@ impl Validator for Port {
     }
 }
 
-/// Accepts an IP address literal.
+/// (`net` feature) Accepts an IP address literal.
 #[derive(Debug, Clone, Default)]
 pub struct IpAddr {
     v4_only: bool,
@@ -212,7 +212,7 @@ impl Validator for IpAddr {
     }
 }
 
-/// Accepts a `host:port` socket address (IP or hostname host).
+/// (`net` feature) Accepts a `host:port` socket address (IP or hostname host).
 #[derive(Debug, Clone, Default)]
 pub struct SocketAddr;
 

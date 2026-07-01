@@ -39,13 +39,17 @@ assert_eq!(root.value.as_map().unwrap().get("port").unwrap().value.as_int(), Som
 
 ## Validators
 
-Always available (std only, no extra dependencies):
+Std-only validators (no extra dependencies). Each has its own Cargo feature and
+all of them are enabled by `default`; disable default features to trim the set.
 
-- Primitives: `Bool`, `Integer`, `Float`, `Number`, `Str`, `List`, `StaticMap`, `DynamicMap`.
-- Choice & constraints: `Enum` (any value type), `NonEmpty`, `Percentage`.
-- Combinator: `Either` (accepts the value if either of two validators accepts it).
-- Network: `Host`, `Domain`, `Email`, `Port`, `IpAddr`, `SocketAddr`.
-- Filesystem: `Path` (opt-in filesystem checks).
+- Primitives: `Bool`, `Integer`, `Float`, `Number`, `Str`, `List`, `StaticMap`, `DynamicMap`
+  (`boolean`, `integer`, `float`, `number`, `string`, `list`, `static_map`, `dynamic_map`).
+- Choice & constraints: `Enum` (`enumeration`), `NonEmpty` (`non_empty`), `Percentage` (`percentage`).
+- Combinator: `Either` (`either`) — accepts the value if either of two validators accepts it.
+- Network: `Host`, `Domain`, `Email`, `Port`, `IpAddr`, `SocketAddr` (`net`).
+- Filesystem: `Path` (`path`), with opt-in filesystem checks.
+
+`float`/`integer` imply `number`; `net` implies `integer`.
 
 `Number` accepts an integer or a float **without** converting between them. Sign
 constraints live as builder methods on `Integer`, `Float`, and `Number`:
@@ -65,7 +69,8 @@ Behind Cargo features (each pulls one external crate):
 | `bytesize` | `ByteSize` |
 | `datetime` | `DateTime`, `Date` |
 
-`full` enables every feature.
+`default` is the std-only validator set. `full` enables every validator plus
+`schema` (but not `logging`/`tracing`).
 
 ## Building validators from a schema (`schema` feature)
 

@@ -3,7 +3,7 @@ use crate::error::{Error, ErrorKind};
 use crate::number::{Sign, check_sign};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a float, with optional inclusive bounds and lenient coercion.
+/// (`float` feature) Accepts a float, with optional inclusive bounds and lenient coercion.
 ///
 /// Coercion:
 /// - a float stays as-is;

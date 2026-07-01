@@ -27,7 +27,7 @@ pub(crate) fn check_sign(sign: Option<Sign>, value: f64) -> Result<(), Error> {
     }
 }
 
-/// Accepts either an integer or a float, **without converting** between them.
+/// (`number` feature) Accepts either an integer or a float, **without converting** between them.
 ///
 /// Use this when a value may legitimately be whole or fractional and you want to keep its
 /// original type. Optional inclusive bounds and sign constraints compare the value

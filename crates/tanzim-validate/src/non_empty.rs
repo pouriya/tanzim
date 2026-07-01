@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a non-blank string (at least one non-whitespace character).
+/// (`non_empty` feature) Accepts a non-blank string (at least one non-whitespace character).
 #[derive(Debug, Clone, Default)]
 pub struct NonEmpty;
 

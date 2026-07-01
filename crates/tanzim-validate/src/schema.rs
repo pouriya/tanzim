@@ -9,12 +9,36 @@ use std::collections::HashMap;
 
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 
+#[cfg(feature = "boolean")]
+use crate::Bool;
+#[cfg(feature = "dynamic_map")]
+use crate::DynamicMap;
+#[cfg(feature = "either")]
+use crate::Either;
+#[cfg(feature = "enumeration")]
+use crate::Enum;
+#[cfg(feature = "float")]
+use crate::Float;
+#[cfg(feature = "integer")]
+use crate::Integer;
+#[cfg(feature = "list")]
+use crate::List;
+#[cfg(feature = "non_empty")]
+use crate::NonEmpty;
+#[cfg(feature = "number")]
+use crate::Number;
+#[cfg(feature = "percentage")]
+use crate::Percentage;
 use crate::Segment;
+#[cfg(feature = "static_map")]
+use crate::StaticMap;
+#[cfg(feature = "string")]
+use crate::Str;
 use crate::Validator;
-use crate::{
-    Bool, Domain, DynamicMap, Either, Email, Enum, Float, Host, Integer, IpAddr, List, NonEmpty,
-    Number, Path, PathKind, Percentage, Port, SocketAddr, StaticMap, Str,
-};
+#[cfg(feature = "net")]
+use crate::{Domain, Email, Host, IpAddr, Port, SocketAddr};
+#[cfg(feature = "path")]
+use crate::{Path, PathKind};
 use tanzim_value::{LocatedValue, Location, Map, Value};
 
 /// Location used for values produced by the serde deserializer, which carry no source span.
@@ -437,12 +461,18 @@ impl Registry {
 
     /// A registry pre-loaded with every built-in validator type.
     pub fn with_builtins() -> Self {
+        // `mut` is unused when no validator features are enabled (schema-only build).
+        #[allow(unused_mut)]
         let mut registry = Self::empty();
 
+        #[cfg(feature = "boolean")]
         registry.register("bool", |_node| Ok(Box::new(Bool::new())));
+        #[cfg(feature = "non_empty")]
         registry.register("non_empty", |_node| Ok(Box::new(NonEmpty::new())));
+        #[cfg(feature = "percentage")]
         registry.register("percentage", |_node| Ok(Box::new(Percentage::new())));
 
+        #[cfg(feature = "integer")]
         registry.register("integer", |node| {
             let mut validator = Integer::new();
             if let Some(min) = node.opt_int("min")? {
@@ -466,6 +496,7 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "float")]
         registry.register("float", |node| {
             let mut validator = Float::new();
             if let Some(min) = node.opt_f64("min")? {
@@ -489,6 +520,7 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "number")]
         registry.register("number", |node| {
             let mut validator = Number::new();
             if let Some(min) = node.opt_f64("min")? {
@@ -512,6 +544,7 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "string")]
         registry.register("string", |node| {
             let mut validator = Str::new();
             if let Some(min) = node.opt_usize("min_chars")? {
@@ -535,6 +568,7 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "list")]
         registry.register("list", |node| {
             let mut validator = List::new();
             if let Some(min) = node.opt_usize("min_len")? {
@@ -552,6 +586,7 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "dynamic_map")]
         registry.register("dynamic_map", |node| {
             let mut validator = DynamicMap::new();
             if let Some(min) = node.opt_usize("min_len")? {
@@ -566,6 +601,7 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "static_map")]
         registry.register("static_map", |node| {
             let mut validator = StaticMap::new();
             if node.flag("allow_unknown")? {
@@ -594,6 +630,7 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "enumeration")]
         registry.register("enum", |node| {
             let mut validator = Enum::new(node.values("values")?);
             if node.flag("case_insensitive")? {
@@ -602,46 +639,51 @@ impl Registry {
             Ok(Box::new(validator))
         });
 
+        #[cfg(feature = "either")]
         registry.register("either", |node| {
             let first = node.child("first")?;
             let second = node.child("second")?;
             Ok(Box::new(Either::new(first, second)))
         });
 
-        registry.register("host", |_node| Ok(Box::new(Host::new())));
-        registry.register("email", |_node| Ok(Box::new(Email::new())));
-        registry.register("socket_addr", |_node| Ok(Box::new(SocketAddr::new())));
+        #[cfg(feature = "net")]
+        {
+            registry.register("host", |_node| Ok(Box::new(Host::new())));
+            registry.register("email", |_node| Ok(Box::new(Email::new())));
+            registry.register("socket_addr", |_node| Ok(Box::new(SocketAddr::new())));
 
-        registry.register("domain", |node| {
-            let mut validator = Domain::new();
-            if node.flag("require_dot")? {
-                validator = validator.require_dot();
-            }
-            Ok(Box::new(validator))
-        });
+            registry.register("domain", |node| {
+                let mut validator = Domain::new();
+                if node.flag("require_dot")? {
+                    validator = validator.require_dot();
+                }
+                Ok(Box::new(validator))
+            });
 
-        registry.register("port", |node| {
-            let mut validator = Port::new();
-            if node.flag("allow_zero")? {
-                validator = validator.allow_zero();
-            }
-            if let Some(privileged) = node.opt_bool("privileged_ok")? {
-                validator = validator.privileged_ok(privileged);
-            }
-            Ok(Box::new(validator))
-        });
+            registry.register("port", |node| {
+                let mut validator = Port::new();
+                if node.flag("allow_zero")? {
+                    validator = validator.allow_zero();
+                }
+                if let Some(privileged) = node.opt_bool("privileged_ok")? {
+                    validator = validator.privileged_ok(privileged);
+                }
+                Ok(Box::new(validator))
+            });
 
-        registry.register("ip_addr", |node| {
-            let mut validator = IpAddr::new();
-            if node.flag("v4_only")? {
-                validator = validator.v4_only();
-            }
-            if node.flag("v6_only")? {
-                validator = validator.v6_only();
-            }
-            Ok(Box::new(validator))
-        });
+            registry.register("ip_addr", |node| {
+                let mut validator = IpAddr::new();
+                if node.flag("v4_only")? {
+                    validator = validator.v4_only();
+                }
+                if node.flag("v6_only")? {
+                    validator = validator.v6_only();
+                }
+                Ok(Box::new(validator))
+            });
+        }
 
+        #[cfg(feature = "path")]
         registry.register("path", |node| {
             let mut validator = Path::new();
             if node.flag("absolute")? {

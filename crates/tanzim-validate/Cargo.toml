@@ -1,6 +1,6 @@
 [package]
 name = "tanzim-validate"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -32,9 +32,40 @@ serde = { version = "1", optional = true }
 serde_json = "1"
 
 [features]
-default = ["logging"]
-logging = ["dep:log"]
-tracing = ["dep:tracing"]
+default = [
+    "boolean",
+    "either",
+    "enumeration",
+    "float",
+    "integer",
+    "list",
+    "net",
+    "non_empty",
+    "number",
+    "path",
+    "percentage",
+    "static_map",
+    "string",
+    "dynamic_map",
+]
+
+# std-only validators (one per module)
+boolean = []
+either = []
+enumeration = []
+float = ["number"]
+integer = ["number"]
+list = []
+net = ["integer"]
+non_empty = []
+number = []
+path = []
+percentage = []
+static_map = []
+string = []
+dynamic_map = []
+
+# dep-backed validators
 regex = ["dep:regex"]
 url = ["dep:url"]
 cidr = ["dep:ipnet"]
@@ -45,7 +76,26 @@ duration = ["dep:humantime"]
 bytesize = ["dep:bytesize"]
 datetime = ["dep:jiff"]
 schema = ["dep:serde"]
+
+logging = ["dep:log"]
+tracing = ["dep:tracing"]
+
+# defaults + dep-backed validators + schema, without logging/tracing
 full = [
+    "boolean",
+    "either",
+    "enumeration",
+    "float",
+    "integer",
+    "list",
+    "net",
+    "non_empty",
+    "number",
+    "path",
+    "percentage",
+    "static_map",
+    "string",
+    "dynamic_map",
     "regex",
     "url",
     "cidr",

@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// The kind of filesystem entry a [`Path`] must point at.
+/// (`path` feature) The kind of filesystem entry a [`Path`] must point at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathKind {
     Dir,
@@ -10,7 +10,7 @@ pub enum PathKind {
     Symlink,
 }
 
-/// Accepts a filesystem path string.
+/// (`path` feature) Accepts a filesystem path string.
 ///
 /// Format checks (absolute/relative, extension) never touch the filesystem. The
 /// existence, kind, and permission checks do, and only when explicitly requested.

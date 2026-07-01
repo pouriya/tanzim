@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a string that is itself a valid regular expression.
+/// (`regex` feature) Accepts a string that is itself a valid regular expression.
 #[derive(Debug, Clone, Default)]
 pub struct RegexPattern;
 

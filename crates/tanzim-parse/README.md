@@ -57,7 +57,7 @@ fn main() -> Result<(), tanzim_value::Error> {
 | `tracing` | emit trace spans via the `tracing` crate |
 | `full` | `env` + `json` + `yaml` + `toml` |
 
-Default features: `logging`, `env`.
+Default features: `env`. Logging/tracing are opt-in.
 
 ## Relations
 

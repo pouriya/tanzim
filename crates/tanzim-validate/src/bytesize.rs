@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a human byte-size string (e.g. `"10MB"`, `"1GiB"`) and coerces it to an integer
+/// (`bytesize` feature) Accepts a human byte-size string (e.g. `"10MB"`, `"1GiB"`) and coerces it to an integer
 /// number of bytes.
 #[derive(Debug, Clone, Default)]
 pub struct ByteSize;

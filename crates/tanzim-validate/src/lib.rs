@@ -2,18 +2,31 @@
 
 mod error;
 
+#[cfg(feature = "boolean")]
 mod boolean;
+#[cfg(feature = "either")]
 mod either;
+#[cfg(feature = "enumeration")]
 mod enumeration;
+#[cfg(feature = "float")]
 mod float;
+#[cfg(feature = "integer")]
 mod integer;
+#[cfg(feature = "list")]
 mod list;
+#[cfg(feature = "net")]
 mod net;
+#[cfg(feature = "non_empty")]
 mod non_empty;
+#[cfg(feature = "number")]
 mod number;
+#[cfg(feature = "path")]
 mod path;
+#[cfg(feature = "percentage")]
 mod percentage;
+#[cfg(feature = "static_map")]
 mod static_map;
+#[cfg(feature = "string")]
 mod string;
 
 #[cfg(feature = "bytesize")]
@@ -24,6 +37,7 @@ mod cidr;
 mod datetime;
 #[cfg(feature = "duration")]
 mod duration;
+#[cfg(feature = "dynamic_map")]
 mod dynamic_map;
 #[cfg(feature = "encoding")]
 mod encoding;
@@ -41,19 +55,33 @@ mod uuid;
 pub use error::{Error, ErrorKind, Segment};
 pub use tanzim_value::{LocatedValue, Location, Map, Value, ValueType};
 
+#[cfg(feature = "boolean")]
 pub use boolean::Bool;
+#[cfg(feature = "dynamic_map")]
 pub use dynamic_map::DynamicMap;
+#[cfg(feature = "either")]
 pub use either::Either;
+#[cfg(feature = "enumeration")]
 pub use enumeration::Enum;
+#[cfg(feature = "float")]
 pub use float::Float;
+#[cfg(feature = "integer")]
 pub use integer::Integer;
+#[cfg(feature = "list")]
 pub use list::List;
+#[cfg(feature = "net")]
 pub use net::{Domain, Email, Host, IpAddr, Port, SocketAddr};
+#[cfg(feature = "non_empty")]
 pub use non_empty::NonEmpty;
+#[cfg(feature = "number")]
 pub use number::Number;
+#[cfg(feature = "path")]
 pub use path::{Path, PathKind};
+#[cfg(feature = "percentage")]
 pub use percentage::Percentage;
+#[cfg(feature = "static_map")]
 pub use static_map::StaticMap;
+#[cfg(feature = "string")]
 pub use string::Str;
 
 #[cfg(feature = "bytesize")]

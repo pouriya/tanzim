@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a string, with optional length bounds and (with the `regex` feature) a
+/// (`string` feature) Accepts a string, with optional length bounds and (with the `regex` feature) a
 /// pattern. No coercion: non-string values are rejected.
 #[derive(Debug, Clone, Default)]
 pub struct Str {

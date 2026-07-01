@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a UUID string in the canonical hyphenated form.
+/// (`uuid` feature) Accepts a UUID string in the canonical hyphenated form.
 #[derive(Debug, Clone, Default)]
 pub struct Uuid;
 

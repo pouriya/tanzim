@@ -15,6 +15,7 @@ build:
 	cargo build -p tanzim-parse --no-default-features --features env,json,yaml,toml
 	cargo build -p tanzim-parse --no-default-features --features env,json,yaml,toml,logging
 	cargo build -p tanzim-parse --no-default-features --features env,json,yaml,toml,tracing
+	cargo build -p tanzim-parse --no-default-features --features full
 	cargo build -p tanzim-parse --all-features
 
 test:

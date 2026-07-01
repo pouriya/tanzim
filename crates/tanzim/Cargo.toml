@@ -1,6 +1,6 @@
 [package]
 name = "tanzim"
-version = "0.9.0"
+version = "0.10.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -13,12 +13,12 @@ keywords = ["configuration", "config", "cfg", "settings", "env"]
 include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
-tanzim-load = { path = "../tanzim-load", version = "0.6.0" }
-tanzim-parse = { path = "../tanzim-parse", version = "0.6.0" }
-tanzim-merge = { path = "../tanzim-merge", version = "0.5.0" }
+tanzim-load = { path = "../tanzim-load", version = "0.7.0", default-features = false }
+tanzim-parse = { path = "../tanzim-parse", version = "0.7.0", default-features = false }
+tanzim-merge = { path = "../tanzim-merge", version = "0.6.0", default-features = false }
 tanzim-source = { path = "../tanzim-source", version = "0.3.0" }
 tanzim-value = { path = "../tanzim-value", version = "0.2.0" }
-tanzim-validate = { path = "../tanzim-validate", version = "0.1.0", features = ["schema"] }
+tanzim-validate = { path = "../tanzim-validate", version = "0.2.0", default-features = false }
 thiserror = "1.0.56"
 serde = { version = "1.0.195", features = ["derive"] }
 cfg-if = "1.0.0"
@@ -26,30 +26,79 @@ log = { version = "0.4.20", optional = true }
 tracing = { version = "0.1.40", optional = true }
 
 [features]
-default = ["logging", "env"]
-env = ["tanzim-load/env", "tanzim-parse/env"]
-file = ["tanzim-load/file"]
-http = ["tanzim-load/http"]
-json = ["tanzim-parse/json"]
-yaml = ["tanzim-parse/yaml"]
-toml = ["tanzim-parse/toml"]
-logging = ["tanzim-load/logging", "tanzim-parse/logging", "tanzim-merge/logging", "dep:log"]
-tracing = ["tanzim-load/tracing", "tanzim-parse/tracing", "tanzim-merge/tracing", "dep:tracing"]
-full = ["env", "file", "http", "json", "yaml", "toml"]
+default = [
+    "load-env",
+    "load-file",
+    "load-http",
+    "parse-env",
+    "validate-default",
+    "validate-schema",
+]
 
-# Schema-validator dependencies, forwarded so a tanzim user can enable the optional
-# validators (Url, Uuid, …) used inside their validation schemas. The schema machinery
-# itself is always on (tanzim-validate is depended on with `features = ["schema"]`).
-validate-regex = ["tanzim-validate/regex"]
-validate-url = ["tanzim-validate/url"]
-validate-cidr = ["tanzim-validate/cidr"]
-validate-uuid = ["tanzim-validate/uuid"]
-validate-semver = ["tanzim-validate/semver"]
-validate-encoding = ["tanzim-validate/encoding"]
-validate-duration = ["tanzim-validate/duration"]
-validate-bytesize = ["tanzim-validate/bytesize"]
-validate-datetime = ["tanzim-validate/datetime"]
-validate-full = ["tanzim-validate/full"]
+load-env = ["tanzim-load/env"]
+load-file = ["tanzim-load/file"]
+load-http = ["tanzim-load/http"]
+
+parse-env = ["tanzim-parse/env"]
+parse-json = ["tanzim-parse/json"]
+parse-yaml = ["tanzim-parse/yaml"]
+parse-toml = ["tanzim-parse/toml"]
+
+logging = [
+    "tanzim-load/logging",
+    "tanzim-parse/logging",
+    "tanzim-merge/logging",
+    "tanzim-validate/logging",
+    "dep:log",
+]
+tracing = [
+    "tanzim-load/tracing",
+    "tanzim-parse/tracing",
+    "tanzim-merge/tracing",
+    "tanzim-validate/tracing",
+    "dep:tracing",
+]
+
+full = [
+    "load-env",
+    "load-file",
+    "load-http",
+    "parse-env",
+    "parse-json",
+    "parse-yaml",
+    "parse-toml",
+    "validate-full",
+]
+
+# Validators forwarded from tanzim-validate. Each pulls in `schema` too so the
+# validator can be referenced from a validation schema. `validate-default` is the
+# std-only validator set; `validate-schema` enables the schema machinery alone.
+validate-default = ["tanzim-validate/default"]
+validate-schema = ["tanzim-validate/schema"]
+validate-boolean = ["validate-schema", "tanzim-validate/boolean"]
+validate-either = ["validate-schema", "tanzim-validate/either"]
+validate-enumeration = ["validate-schema", "tanzim-validate/enumeration"]
+validate-float = ["validate-schema", "tanzim-validate/float"]
+validate-integer = ["validate-schema", "tanzim-validate/integer"]
+validate-list = ["validate-schema", "tanzim-validate/list"]
+validate-net = ["validate-schema", "tanzim-validate/net"]
+validate-non_empty = ["validate-schema", "tanzim-validate/non_empty"]
+validate-number = ["validate-schema", "tanzim-validate/number"]
+validate-path = ["validate-schema", "tanzim-validate/path"]
+validate-percentage = ["validate-schema", "tanzim-validate/percentage"]
+validate-static_map = ["validate-schema", "tanzim-validate/static_map"]
+validate-string = ["validate-schema", "tanzim-validate/string"]
+validate-dynamic_map = ["validate-schema", "tanzim-validate/dynamic_map"]
+validate-regex = ["validate-schema", "tanzim-validate/regex"]
+validate-url = ["validate-schema", "tanzim-validate/url"]
+validate-cidr = ["validate-schema", "tanzim-validate/cidr"]
+validate-uuid = ["validate-schema", "tanzim-validate/uuid"]
+validate-semver = ["validate-schema", "tanzim-validate/semver"]
+validate-encoding = ["validate-schema", "tanzim-validate/encoding"]
+validate-duration = ["validate-schema", "tanzim-validate/duration"]
+validate-bytesize = ["validate-schema", "tanzim-validate/bytesize"]
+validate-datetime = ["validate-schema", "tanzim-validate/datetime"]
+validate-full = ["validate-schema", "tanzim-validate/full"]
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.18", features = ["json"] }

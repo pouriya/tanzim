@@ -74,7 +74,7 @@ fn main() -> Result<(), Error> {
 | `tracing` | emit trace spans via the `tracing` crate |
 | `full` | `env` + `file` + `http` |
 
-Default features: `logging`, `env`.
+Default features: `env`, `file`, `http`. Logging/tracing are opt-in.
 
 ## Relations
 

@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::Value;
 
-/// Accepts the value if **either** of two validators accepts it.
+/// (`either` feature) Accepts the value if **either** of two validators accepts it.
 ///
 /// The first validator is tried first; if it succeeds (possibly coercing the value), its
 /// result is kept. Otherwise the second validator is tried against the *original* value, so

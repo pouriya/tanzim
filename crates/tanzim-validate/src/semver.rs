@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a semantic version string such as `1.4.2` or `2.0.0-rc.1`.
+/// (`semver` feature) Accepts a semantic version string such as `1.4.2` or `2.0.0-rc.1`.
 #[derive(Debug, Clone, Default)]
 pub struct Semver;
 

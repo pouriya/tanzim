@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a CIDR network such as `10.0.0.0/8` or `2001:db8::/32`.
+/// (`cidr` feature) Accepts a CIDR network such as `10.0.0.0/8` or `2001:db8::/32`.
 #[derive(Debug, Clone, Default)]
 pub struct Cidr;
 

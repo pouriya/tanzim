@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a URL, optionally restricting the scheme and requiring a host.
+/// (`url` feature) Accepts a URL, optionally restricting the scheme and requiring a host.
 #[derive(Debug, Clone, Default)]
 pub struct Url {
     schemes: Vec<String>,

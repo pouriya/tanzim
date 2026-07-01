@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a list, with optional length bounds, a uniqueness check, and an optional
+/// (`list` feature) Accepts a list, with optional length bounds, a uniqueness check, and an optional
 /// per-item validator.
 ///
 /// Coercion: an empty map becomes an empty list (matching formats that render an empty

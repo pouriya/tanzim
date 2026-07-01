@@ -79,11 +79,13 @@ pub enum Error {
     NoLoader { at: String },
     #[error("no parser found for format `{format}` in `{at}`")]
     NoParser { format: String, at: String },
+    #[cfg(feature = "validate-schema")]
     #[error("schema for `{name}` is invalid: {source}")]
     Schema {
         name: String,
         source: validate::SchemaError,
     },
+    #[cfg(feature = "validate-schema")]
     #[error("configuration `{name}` failed validation: {source}")]
     Validate {
         name: String,
@@ -99,6 +101,7 @@ pub struct ConfigBuilder {
     loaders: Vec<Box<dyn loader::Load>>,
     parsers: Vec<Box<dyn parser::Parse>>,
     merger: Box<dyn merge::Merge>,
+    #[cfg(feature = "validate-schema")]
     schemas: Schemas,
 }
 
@@ -109,6 +112,7 @@ impl Default for ConfigBuilder {
             loaders: Vec::new(),
             parsers: Vec::new(),
             merger: Box::new(merge::LastWins),
+            #[cfg(feature = "validate-schema")]
             schemas: Schemas::new(),
         }
     }
@@ -148,6 +152,7 @@ impl ConfigBuilder {
     }
 
     /// Register a validation schema for one merged entry name.
+    #[cfg(feature = "validate-schema")]
     pub fn with_schema(
         mut self,
         name: impl Into<String>,
@@ -158,6 +163,7 @@ impl ConfigBuilder {
     }
 
     /// Register validation schemas for several merged entry names at once.
+    #[cfg(feature = "validate-schema")]
     pub fn with_schemas(mut self, schemas: Schemas) -> Self {
         for (name, schema) in schemas {
             self.schemas.insert(name, schema);
@@ -171,6 +177,7 @@ impl ConfigBuilder {
             loaders: self.loaders,
             parsers: self.parsers,
             merger: self.merger,
+            #[cfg(feature = "validate-schema")]
             schemas: self.schemas,
         }
     }
@@ -184,6 +191,7 @@ pub struct Config {
     loaders: Vec<Box<dyn loader::Load>>,
     parsers: Vec<Box<dyn parser::Parse>>,
     merger: Box<dyn merge::Merge>,
+    #[cfg(feature = "validate-schema")]
     schemas: Schemas,
 }
 
@@ -222,10 +230,12 @@ impl Config {
         &mut self.merger
     }
 
+    #[cfg(feature = "validate-schema")]
     pub fn schemas(&self) -> &Schemas {
         &self.schemas
     }
 
+    #[cfg(feature = "validate-schema")]
     pub fn schemas_mut(&mut self) -> &mut Schemas {
         &mut self.schemas
     }
@@ -261,6 +271,7 @@ impl Config {
     }
 
     /// Register a validation schema for one merged entry name.
+    #[cfg(feature = "validate-schema")]
     pub fn with_schema(
         mut self,
         name: impl Into<String>,
@@ -271,6 +282,7 @@ impl Config {
     }
 
     /// Register validation schemas for several merged entry names at once.
+    #[cfg(feature = "validate-schema")]
     pub fn with_schemas(mut self, schemas: Schemas) -> Self {
         for (name, schema) in schemas {
             self.schemas.insert(name, schema);
@@ -491,6 +503,7 @@ impl Config {
     /// (e.g. a numeric string into an integer), so `merged` is taken by `&mut`. A schema with
     /// no matching merged entry is skipped with a warning. Does nothing when no schemas are
     /// registered.
+    #[cfg(feature = "validate-schema")]
     pub fn validate(&self, merged: &mut Merged) -> Result<(), Error> {
         if self.schemas.is_empty() {
             return Ok(());
@@ -548,7 +561,10 @@ impl Config {
         }
         let loaded = self.load()?;
         let parsed = self.parse(&loaded)?;
+        // `mut` is unused when the validation stage is compiled out (no validate-schema).
+        #[allow(unused_mut)]
         let mut merged = self.merge(&parsed)?;
+        #[cfg(feature = "validate-schema")]
         self.validate(&mut merged)?;
         Ok(merged)
     }

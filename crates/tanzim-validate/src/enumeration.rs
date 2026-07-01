@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::Value;
 
-/// Accepts a value drawn from a fixed allow-list. The allowed values may be of any type,
+/// (`enumeration` feature) Accepts a value drawn from a fixed allow-list. The allowed values may be of any type,
 /// and are compared by equality (no coercion).
 #[derive(Debug, Clone, Default)]
 pub struct Enum {

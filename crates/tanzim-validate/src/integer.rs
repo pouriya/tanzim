@@ -15,7 +15,7 @@ fn f64_to_isize(number: f64) -> Option<isize> {
     Some(number as isize)
 }
 
-/// Accepts an integer, with optional inclusive bounds and lenient coercion.
+/// (`integer` feature) Accepts an integer, with optional inclusive bounds and lenient coercion.
 ///
 /// Coercion:
 /// - an integer stays as-is;

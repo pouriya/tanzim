@@ -1,3 +1,5 @@
+//! Shared span-to-Location conversion helpers used by format modules.
+
 /// Whether `bytes` contain no newline (single-line document).
 pub fn is_single_line(bytes: &[u8]) -> bool {
     for &byte in bytes {

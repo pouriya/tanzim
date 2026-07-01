@@ -13,7 +13,7 @@ fn as_str(value: &mut Value) -> Result<&str, Error> {
     }
 }
 
-/// Accepts an RFC 3339 timestamp such as `2024-01-02T15:04:05Z`.
+/// (`datetime` feature) Accepts an RFC 3339 timestamp such as `2024-01-02T15:04:05Z`.
 #[derive(Debug, Clone, Default)]
 pub struct DateTime;
 
@@ -35,7 +35,7 @@ impl Validator for DateTime {
     }
 }
 
-/// Accepts a calendar date such as `2024-01-02`.
+/// (`datetime` feature) Accepts a calendar date such as `2024-01-02`.
 #[derive(Debug, Clone, Default)]
 pub struct Date;
 

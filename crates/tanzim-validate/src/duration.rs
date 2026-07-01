@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a human duration string (e.g. `"30s"`, `"5m"`, `"1h30m"`) and coerces it to an
+/// (`duration` feature) Accepts a human duration string (e.g. `"30s"`, `"5m"`, `"1h30m"`) and coerces it to an
 /// integer number of seconds (or milliseconds with [`Duration::millis`]).
 #[derive(Debug, Clone, Default)]
 pub struct Duration {

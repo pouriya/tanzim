@@ -58,12 +58,17 @@ are independently usable:
 
 | Feature | Enables |
 |---------|---------|
-| `env` | env loader + env parser |
-| `file` | filesystem loader |
-| `http` | HTTP loader (closure-based, no HTTP client dependency) |
-| `json` / `yaml` / `toml` | format parsers |
-| `full` | all of the above (examples, smoke test) |
-| `logging` / `tracing` | optional log integration |
+| `load-env` / `load-file` / `load-http` | env / filesystem / HTTP (closure-based) loaders |
+| `parse-env` | env parser |
+| `parse-json` / `parse-yaml` / `parse-toml` | format parsers |
+| `validate-default` | the std-only validators (no extra dependencies) |
+| `validate-schema` | schema machinery (`with_schema`, the validation stage) |
+| `validate-<name>` | one validator (e.g. `validate-url`, `validate-regex`), pulling in `validate-schema` |
+| `validate-full` | every validator + schema |
+| `full` | all loaders + all parsers + `validate-full` (examples, smoke test) |
+| `logging` / `tracing` | optional log integration across all crates |
+
+Defaults: `load-env`, `load-file`, `load-http`, `parse-env`, `validate-default`, `validate-schema`.
 
 Use individual workspace crates if you only need one stage — see [tanzim-load/README.md](crates/tanzim-load/README.md), [tanzim-parse/README.md](crates/tanzim-parse/README.md), [tanzim-merge/README.md](crates/tanzim-merge/README.md).
 

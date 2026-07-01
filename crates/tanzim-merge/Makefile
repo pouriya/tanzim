@@ -5,6 +5,9 @@ TARGET_OPTION =
 build:
 	cargo build -p tanzim-merge --no-default-features
 	cargo build -p tanzim-merge
+	cargo build -p tanzim-merge --no-default-features --features logging
+	cargo build -p tanzim-merge --no-default-features --features tracing
+	cargo build -p tanzim-merge --all-features
 
 test:
 	cargo test $(TARGET_OPTION) -p tanzim-merge --all-features

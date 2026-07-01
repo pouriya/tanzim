@@ -5,16 +5,24 @@ TARGET_OPTION =
 build:
 	cargo build -p tanzim --no-default-features
 	cargo build -p tanzim
-	cargo build -p tanzim --no-default-features --features env
-	cargo build -p tanzim --no-default-features --features file
-	cargo build -p tanzim --no-default-features --features json
-	cargo build -p tanzim --no-default-features --features yaml
-	cargo build -p tanzim --no-default-features --features toml
+	cargo build -p tanzim --no-default-features --features load-env
+	cargo build -p tanzim --no-default-features --features load-file
+	cargo build -p tanzim --no-default-features --features load-http
+	cargo build -p tanzim --no-default-features --features parse-env
+	cargo build -p tanzim --no-default-features --features parse-json
+	cargo build -p tanzim --no-default-features --features parse-yaml
+	cargo build -p tanzim --no-default-features --features parse-toml
+	cargo build -p tanzim --no-default-features --features validate-default
+	cargo build -p tanzim --no-default-features --features validate-schema
+	cargo build -p tanzim --no-default-features --features validate-integer
+	cargo build -p tanzim --no-default-features --features validate-url
+	cargo build -p tanzim --no-default-features --features validate-full
 	cargo build -p tanzim --no-default-features --features logging
 	cargo build -p tanzim --no-default-features --features tracing
-	cargo build -p tanzim --no-default-features --features env,file,json,yaml,toml
-	cargo build -p tanzim --no-default-features --features env,file,json,yaml,toml,logging
-	cargo build -p tanzim --no-default-features --features env,file,json,yaml,toml,tracing
+	cargo build -p tanzim --no-default-features --features load-env,load-file,load-http,parse-env,parse-json,parse-yaml,parse-toml
+	cargo build -p tanzim --no-default-features --features full
+	cargo build -p tanzim --no-default-features --features full,logging
+	cargo build -p tanzim --no-default-features --features full,tracing
 	cargo build -p tanzim --all-features
 
 test:

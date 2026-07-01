@@ -1,10 +1,9 @@
 #![doc = include_str!("../README.md")]
 
-mod span;
-
 pub use tanzim_value::{Error, LocatedValue, Value};
 
 pub mod closure;
+pub mod span;
 
 #[cfg(feature = "env")]
 pub mod env;

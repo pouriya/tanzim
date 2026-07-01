@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts only a boolean value. No coercion, no options.
+/// (`boolean` feature) Accepts only a boolean value. No coercion, no options.
 #[derive(Debug, Clone, Default)]
 pub struct Bool;
 

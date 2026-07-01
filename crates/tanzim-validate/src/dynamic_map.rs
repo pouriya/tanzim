@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a map with arbitrary keys and uniform values.
+/// (`dynamic_map` feature) Accepts a map with arbitrary keys and uniform values.
 ///
 /// Optional entry-count bounds and an optional validator applied to every value.
 /// Coercion: an empty list becomes an empty map (the list counterpart of an empty

@@ -2,7 +2,7 @@ use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use tanzim_value::{Value, ValueType};
 
-/// Accepts a percentage: an integer in `0..=100`, or a float ratio in `0.0..=1.0`.
+/// (`percentage` feature) Accepts a percentage: an integer in `0..=100`, or a float ratio in `0.0..=1.0`.
 #[derive(Debug, Clone, Default)]
 pub struct Percentage;
 
