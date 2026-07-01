@@ -5,7 +5,7 @@ First stage of the tanzim pipeline: reads raw configuration bytes from a declare
 ## The `Load` trait
 
 Implement [`Load`] to add a new source kind. Return one [`Payload`] per config entry found.
-Use `Payload::name` for the entry name and `Payload::format` as a hint for the parser stage.
+Use `Payload::maybe_name` for the entry name and `Payload::maybe_format` as a hint for the parser stage.
 
 ## Built-in loaders
 
@@ -18,27 +18,32 @@ Use `Payload::name` for the entry name and `Payload::format` as a hint for the p
 
 ## Example
 
-```rust,no_run
-use tanzim_load::{file::File, Load, Source};
-use tanzim_source::SourceBuilder;
+```rust
+use std::env;
+use tanzim_load::{env::Env, Error, Load, Source};
 
-fn main() -> Result<(), tanzim_load::Error> {
-    let loader = File::new();
-    let source = SourceBuilder::new()
-        .with_source("file")
-        .with_resource("/etc/myapp")
-        .build()
-        .unwrap();
-    for payload in loader.load(source)? {
-        let payload = payload.normalize();
-        println!(
-            "resource={:?} name={:?} format={:?} bytes={}",
-            payload.source.resource(),
-            payload.name,
-            payload.format,
-            payload.content.len()
-        );
+fn main() -> Result<(), Error> {
+    // SAFETY: example-only; single-threaded doctest env vars.
+    unsafe {
+        env::set_var("MY_APP_CFG.DEBUG", "true");
+        env::set_var("MY_APP_CFG.NAME", "hello");
+        env::set_var("MY_APP_CFG.DATABASE.HOST", "localhost");
     }
+
+    let source = Source::parse(r#"env(prefix=MY_APP_,separator=".")"#).unwrap();
+
+    let payloads = Env::new().load(source)?;
+    assert_eq!(payloads.len(), 1);
+
+    let payload = payloads[0].clone();
+    assert_eq!(payload.maybe_name, Some("cfg".into()));
+    assert_eq!(payload.maybe_format, Some("env".into()));
+
+    let content = String::from_utf8_lossy(&payload.content);
+    assert!(content.contains("DEBUG=\"true\""));
+    assert!(content.contains("NAME=\"hello\""));
+    assert!(content.contains("DATABASE.HOST=\"localhost\""));
+
     Ok(())
 }
 ```

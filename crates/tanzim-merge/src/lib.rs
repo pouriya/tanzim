@@ -7,12 +7,12 @@ use tanzim_value::{LocatedValue, Map, Value};
 
 /// Merge result: entry name → (contributing payloads, merged value).
 ///
-/// Keys come from [`Payload::name`]: `Some("foo")` → `"foo"`, `None` → `""`.
+/// Keys come from [`Payload::maybe_name`]: `Some("foo")` → `"foo"`, `None` → `""`.
 pub type Merged = HashMap<String, (Vec<Payload>, LocatedValue)>;
 
 /// Merges parsed payloads grouped by entry name.
 ///
-/// The returned map keys are derived from [`Payload::name`]: `Some("foo")` → `"foo"`,
+/// The returned map keys are derived from [`Payload::maybe_name`]: `Some("foo")` → `"foo"`,
 /// `None` → `""`. The value for each key is `(Vec<payload>, merged_value)`.
 ///
 /// Implement this trait to define a custom merge strategy.
@@ -33,7 +33,7 @@ pub enum Error {
 
 /// Last-write-wins merger: each name keeps only its last-seen value.
 ///
-/// Payloads with `name == None` are grouped under an empty-string key.
+/// Payloads with `maybe_name == None` are grouped under an empty-string key.
 pub struct LastWins;
 
 impl Merge for LastWins {
@@ -47,7 +47,7 @@ impl Merge for LastWins {
         }
         let mut result: Merged = HashMap::new();
         for (payload, value) in parsed_list {
-            let key = match &payload.name {
+            let key = match &payload.maybe_name {
                 Some(name) => name.clone(),
                 None => String::new(),
             };
@@ -75,7 +75,7 @@ impl Merge for LastWins {
 ///
 /// For each key in a map: if both the accumulated and incoming values are maps,
 /// the merge recurses. Otherwise the incoming (overlay) value and its location win.
-/// Payloads with `name == None` are grouped under an empty-string key.
+/// Payloads with `maybe_name == None` are grouped under an empty-string key.
 pub struct DeepMerge;
 
 fn deep_merge_value(base: LocatedValue, overlay: LocatedValue) -> LocatedValue {
@@ -121,7 +121,7 @@ impl Merge for DeepMerge {
         let mut result: Merged = HashMap::new();
 
         for (payload, value) in parsed_list {
-            let key = match &payload.name {
+            let key = match &payload.maybe_name {
                 Some(name) => name.clone(),
                 None => String::new(),
             };

@@ -14,7 +14,7 @@ the exact file, line, and column.
 ```text
 "env(prefix=APP_)"  "file:/etc/app"          ← source strings
         │
-        ▼  load     Load::load(source)            → Vec<Payload>      (raw bytes + name + format)
+        ▼  load     Load::load(source)            → Vec<Payload>      (raw bytes + maybe name + maybe format)
         ▼  parse    Deserialize::parse(bytes)      → LocatedValue      (typed tree + Location)
         ▼  merge    Merge::merge(parsed)           → HashMap<name, …>  (grouped + combined)
         │
@@ -43,9 +43,9 @@ are independently usable:
 
 - **Source strings** use the [`tanzim-source`](crates/tanzim-source/README.md) format
   `SOURCE [(OPTIONS)] [?] [:RESOURCE]`, e.g. `env(prefix=APP_)`, `file?:.env`.
-- **Named entries** — each `Payload` carries an optional `name`. The merger groups
-  by name; unnamed payloads (`name == None`) all share the `""` key.
-- **Format auto-detection** — if a payload has no `format`, parsers are probed via
+- **Named entries** — each `Payload` carries an optional `maybe_name`. The merger groups
+  by name; unnamed payloads (`maybe_name == None`) all share the `""` key.
+- **Format auto-detection** — if a payload has no `maybe_format`, parsers are probed via
   `is_format_supported`; otherwise the format hint selects the parser.
 - **`ignore_errors` (`?`)** — sources marked with `?` swallow load/parse failures
   silently instead of aborting the pipeline.

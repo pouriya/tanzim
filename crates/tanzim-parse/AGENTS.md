@@ -27,4 +27,4 @@ Second stage of the pipeline: deserializes raw bytes into typed, source-located 
 
 ## Adding a parser
 
-Implement `Deserialize`. Return `LocatedValue` with locations attached to every node. Use `is_format_supported` to enable auto-detection when `Payload::format` is `None`.
+Implement `Deserialize`. Return `LocatedValue` with locations attached to every node. Use `is_format_supported` to enable auto-detection when `Payload::maybe_format` is `None`.

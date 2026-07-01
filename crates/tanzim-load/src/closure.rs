@@ -1,6 +1,6 @@
 //! Custom loader backed by a closure.
 //!
-//! Use when configuration comes from a source that is not built in.
+//! Use when configuration comes from a source that is not built-in.
 //!
 //! # Example
 //!
@@ -13,8 +13,8 @@
 //!     |source: Source| {
 //!         Ok(vec![Payload {
 //!             source: source.clone(),
-//!             name: Some("demo".into()),
-//!             format: Some("json".into()),
+//!             maybe_name: Some("demo".into()),
+//!             maybe_format: Some("json".into()),
 //!             content: br#"{"hello":"world"}"#.to_vec(),
 //!         }])
 //!     },
@@ -93,8 +93,8 @@ mod tests {
                 let resource = source.resource().to_string();
                 Ok(vec![Payload {
                     source,
-                    name: Some("demo".into()),
-                    format: Some("txt".into()),
+                    maybe_name: Some("demo".into()),
+                    maybe_format: Some("txt".into()),
                     content: resource.into_bytes(),
                 }])
             },

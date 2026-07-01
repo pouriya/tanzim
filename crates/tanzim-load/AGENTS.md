@@ -5,7 +5,7 @@ First stage of the pipeline: reads raw configuration bytes from a declared sourc
 ## Key types
 
 - `Load` — trait to implement for a new loader. `load()` returns `Vec<Payload>` (one per config entry found).
-- `Payload` — one config entry: `source`, `name`, `format`, `content`. `name: Option<String>` is the entry name (`None` = unnamed); `format: Option<String>` hints the parser which format to use. Call `.normalize()` to lowercase `name` and `format`.
+- `Payload` — one config entry: `source`, `maybe_name`, `maybe_format`, `content`. `maybe_name: Option<String>` is the entry name (`None` = unnamed); `maybe_format: Option<String>` hints the parser which format to use. Built-in loaders resolve `maybe_name` and `maybe_format` during load (`lowercase` option, default `true`).
 - `Error` — structured load error (NotFound, NoAccess, Timeout, InvalidOption, Duplicate, …).
 
 ## Built-in loaders
@@ -27,4 +27,4 @@ First stage of the pipeline: reads raw configuration bytes from a declared sourc
 
 ## Adding a loader
 
-Implement `Load`. Return one `Payload` per config entry. Set `name` to the entry name and `format` to the file extension / format hint so the parser stage can auto-select the right parser.
+Implement `Load`. Return one `Payload` per config entry. Set `maybe_name` to the entry name and `maybe_format` to the file extension / format hint so the parser stage can auto-select the right parser.

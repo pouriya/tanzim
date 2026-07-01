@@ -78,7 +78,7 @@ pub trait Deserialize {
     fn name(&self) -> &str;
     /// Format extensions this parser handles (e.g. `["json"]`, `["yml", "yaml"]`).
     fn supported_format_list(&self) -> Vec<String>;
-    /// Probe `bytes` for auto-detection when `Payload::format` is `None`.
+    /// Probe `bytes` for auto-detection when `Payload::maybe_format` is `None`.
     ///
     /// Return `Some(true)` if confident, `Some(false)` if definitely not this format,
     /// or `None` to abstain (another parser will be tried next).

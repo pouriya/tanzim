@@ -373,6 +373,11 @@ impl Source {
         self.source = source.into();
     }
 
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.source = source.into();
+        self
+    }
+
     pub fn options(&self) -> &Options {
         &self.options
     }
@@ -385,8 +390,18 @@ impl Source {
         self.options = options;
     }
 
+    pub fn with_options(mut self, options: Options) -> Self {
+        self.options = options;
+        self
+    }
+
     pub fn set_option<K: Into<String>, V: Into<OptionValue>>(&mut self, key: K, value: V) {
         self.options.insert(key, value);
+    }
+
+    pub fn with_option<K: Into<String>, V: Into<OptionValue>>(mut self, key: K, value: V) -> Self {
+        self.options.insert(key, value);
+        self
     }
 
     pub fn resource(&self) -> &str {
@@ -404,6 +419,14 @@ impl Source {
         }
     }
 
+    pub fn with_resource(mut self, resource: impl Into<String>) -> Self {
+        self.resource = resource.into();
+        if !self.resource.is_empty() {
+            self.resource_colon = true;
+        }
+        self
+    }
+
     pub fn ignore_errors(&self) -> bool {
         self.ignore_errors
     }
@@ -412,12 +435,22 @@ impl Source {
         self.ignore_errors = ignore_errors;
     }
 
+    pub fn with_ignore_errors(mut self, ignore_errors: bool) -> Self {
+        self.ignore_errors = ignore_errors;
+        self
+    }
+
     pub fn resource_colon(&self) -> bool {
         self.resource_colon
     }
 
     pub fn set_resource_colon(&mut self, resource_colon: bool) {
         self.resource_colon = resource_colon;
+    }
+
+    pub fn with_resource_colon(mut self, resource_colon: bool) -> Self {
+        self.resource_colon = resource_colon;
+        self
     }
 }
 

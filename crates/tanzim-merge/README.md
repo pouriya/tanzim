@@ -11,7 +11,7 @@ value.
 
 ## Grouping key
 
-`Payload::name` determines the map key:
+`Payload::maybe_name` determines the map key:
 - `Some("foo")` → key `"foo"`
 - `None` → key `""` (all unnamed payloads share this bucket)
 
@@ -38,8 +38,8 @@ let make_entry = |name: Option<&str>, key: &str, val: &str| {
     map.insert(key.to_string(), LocatedValue { value: Value::String(val.to_string()), location: loc.clone() });
     let payload = Payload {
         source: source.clone(),
-        name: name.map(str::to_string),
-        format: Some("env".into()),
+        maybe_name: name.map(str::to_string),
+        maybe_format: Some("env".into()),
         content: vec![],
     };
     (payload, LocatedValue { value: Value::Map(map), location: loc })

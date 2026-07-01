@@ -43,15 +43,12 @@ impl Load for MemoryLoader {
         let mut result = Vec::new();
         for index in 0..self.entries.len() {
             let (name, format, bytes) = &self.entries[index];
-            result.push(
-                Payload {
-                    source: source.clone(),
-                    name: Some(name.clone()),
-                    format: Some(format.clone()),
-                    content: bytes.clone(),
-                }
-                .normalize(),
-            );
+            result.push(Payload {
+                source: source.clone(),
+                maybe_name: Some(name.clone()),
+                maybe_format: Some(format.clone()),
+                content: bytes.clone(),
+            });
         }
         Ok(result)
     }
@@ -79,8 +76,8 @@ fn main() {
     for (index, payload) in payloads.iter().enumerate() {
         println!(
             "  [{index}] name={:?} format={:?} bytes={}",
-            payload.name,
-            payload.format,
+            payload.maybe_name,
+            payload.maybe_format,
             payload.content.len()
         );
     }

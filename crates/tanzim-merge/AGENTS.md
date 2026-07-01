@@ -12,7 +12,7 @@ Third stage of the pipeline: groups parsed payloads by entry name and combines t
 
 ## Grouping key
 
-`Payload::name` (`Option<String>`) maps to a `String` key:
+`Payload::maybe_name` (`Option<String>`) maps to a `String` key:
 - `Some("foo")` → key `"foo"`
 - `None` → key `""` (all unnamed payloads share this bucket)
 

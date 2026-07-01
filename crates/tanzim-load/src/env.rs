@@ -11,12 +11,13 @@
 //!   executable name, with `_` suffix)
 //! - `strip_prefix` — boolean (default `true`; only applies when `prefix` is non-empty)
 //! - `separator` — string (no default; when set, splits keys into entry name and content key)
+//! - `lowercase` — boolean (default `true`; whether to lowercase the entry names)
 //!
 //! # Example
 //!
 //! ```text
 //! env
-//! env(prefix=APP_NAME,separator=.)
+//! env(prefix=APP_NAME_,separator=.)
 //! ```
 
 use crate::{Error, Load, Payload, Source};
@@ -26,7 +27,7 @@ use std::{collections::HashMap, env};
 pub const NAME: &str = "Environment-Variables";
 pub const SOURCE: &str = "env";
 
-const ALLOWED_OPTIONS: &[&str] = &["prefix", "strip_prefix", "separator"];
+const ALLOWED_OPTIONS: &[&str] = &["prefix", "strip_prefix", "separator", "lowercase"];
 
 #[derive(Debug, Default, Clone)]
 pub struct Env {
@@ -38,7 +39,10 @@ impl Env {
         Default::default()
     }
 
-    pub fn detect_prefix() -> String {
+    /// Detect the prefix from the environment variables.
+    /// The prefix is the string that is prepended to the environment variable names.
+    /// The default prefix is the name of the cargo bin `CARGO_BIN_NAME`, cargo crate `CARGO_CRATE_NAME`, or the executable name, with `_` suffix.
+    pub fn detect_prefix() -> Option<String> {
         let mut prefix = option_env!("CARGO_BIN_NAME").unwrap_or("").to_string();
         if prefix.is_empty() {
             prefix = option_env!("CARGO_CRATE_NAME").unwrap_or("").to_string();
@@ -58,15 +62,26 @@ impl Env {
         if !prefix.is_empty() {
             prefix.push('_');
         }
-        prefix
+
+        if prefix.is_empty() {
+            None
+        } else {
+            Some(prefix)
+        }
     }
 
-    pub fn set_prefix<P: AsRef<str>>(&mut self, prefix: P) {
-        self.prefix_override = Some(prefix.as_ref().to_string());
+    pub fn set_maybe_prefix<P: Into<String>>(&mut self, maybe_prefix: Option<P>) {
+        if let Some(prefix) = maybe_prefix {
+            self.set_prefix(prefix);
+        }
     }
 
-    pub fn with_prefix<P: AsRef<str>>(mut self, prefix: P) -> Self {
-        self.set_prefix(prefix);
+    pub fn set_prefix<P: Into<String>>(&mut self, prefix: P) {
+        self.prefix_override = Some(prefix.into());
+    }
+
+    pub fn with_prefix<P: Into<String>>(mut self, prefix: P) -> Self {
+        self.set_prefix(prefix.into());
         self
     }
 }
@@ -102,59 +117,78 @@ impl Load for Env {
             }
         }
 
-        let prefix = if let Some(prefix_override) = &self.prefix_override {
-            prefix_override.clone()
+        let maybe_prefix = if let Some(prefix_override) = &self.prefix_override {
+            Some(prefix_override.clone())
         } else {
             match options.get("prefix") {
-                None => Self::detect_prefix(),
-                Some(value) => value
-                    .as_string()
-                    .cloned()
-                    .ok_or_else(|| Error::InvalidOption {
-                        loader: NAME.to_string(),
-                        key: "prefix".to_string(),
-                        reason: format!("expected string, found {}", value.type_name()),
-                    })?,
-            }
-        };
-
-        let strip_prefix = if prefix.is_empty() {
-            false
-        } else {
-            match options.get("strip_prefix") {
-                None => true,
-                Some(value) => value.as_bool().ok_or_else(|| Error::InvalidOption {
-                    loader: NAME.to_string(),
-                    key: "strip_prefix".to_string(),
-                    reason: format!("expected boolean, found {}", value.type_name()),
-                })?,
+                None => None,
+                Some(value) => {
+                    if let Some(prefix) = value.as_string() {
+                        Some(prefix.into())
+                    } else {
+                        return Err(Error::InvalidOption {
+                            loader: NAME.to_string(),
+                            key: "prefix".to_string(),
+                            reason: format!("expected string, found {}", value.type_name()),
+                        });
+                    }
+                }
             }
         };
 
         let separator = match options.get("separator") {
             None => None,
             Some(value) => {
-                let separator = value
-                    .as_string()
-                    .cloned()
-                    .ok_or_else(|| Error::InvalidOption {
+                if let Some(separator) = value.as_string() {
+                    Some(separator.clone())
+                } else {
+                    return Err(Error::InvalidOption {
                         loader: NAME.to_string(),
                         key: "separator".to_string(),
                         reason: format!("expected string, found {}", value.type_name()),
-                    })?;
-                if separator.is_empty() {
-                    None
-                } else {
-                    Some(separator)
+                    });
                 }
             }
         };
 
+        let strip_prefix = if let Some(strip_prefix) = options.get("strip_prefix") {
+            if let Some(strip_prefix) = strip_prefix.as_bool() {
+                strip_prefix
+            } else {
+                if maybe_prefix.is_some() {
+                    return Err(Error::InvalidOption {
+                        loader: NAME.to_string(),
+                        key: "strip_prefix".to_string(),
+                        reason: format!("expected boolean, found {}", strip_prefix.type_name()),
+                    });
+                }
+                false
+            }
+        } else {
+            maybe_prefix.is_some()
+        };
+
+        let lowercase = if let Some(value) = options.get("lowercase") {
+            if let Some(value) = value.as_bool() {
+                value
+            } else {
+                return Err(Error::InvalidOption {
+                    loader: NAME.to_string(),
+                    key: "lowercase".to_string(),
+                    reason: format!("expected boolean, found {}", value.type_name()),
+                });
+            }
+        } else {
+            true
+        };
+
+        let prefix = maybe_prefix.unwrap_or_default();
+
         cfg_if! {
             if #[cfg(feature = "tracing")] {
-                tracing::debug!(msg = "Loading configuration from environment variables", prefix = prefix, strip_prefix = strip_prefix, separator = ?separator);
+                tracing::debug!(msg = "Loading configuration from environment variables", prefix = prefix, strip_prefix = strip_prefix, separator = ?separator, lowercase = lowercase);
             } else if #[cfg(feature = "logging")] {
-                log::debug!("msg=\"Loading configuration from environment variables\" prefix={prefix} strip_prefix={strip_prefix} separator={separator:?}");
+                log::debug!("msg=\"Loading configuration from environment variables\" prefix={prefix} strip_prefix={strip_prefix} separator={separator:?} lowercase={lowercase}");
             }
         }
 
@@ -177,14 +211,30 @@ impl Load for Env {
                 None => (None, env_key),
                 Some(separator) => {
                     let mut parts = env_key.splitn(2, separator.as_str());
-                    let first = parts.next().unwrap_or("");
+                    let first = parts.next().unwrap_or("").trim();
                     let Some(rest) = parts.next() else {
                         continue;
                     };
+                    let rest = rest.trim();
                     if first.is_empty() || rest.is_empty() {
                         continue;
                     }
-                    (Some(first.to_lowercase()), rest.to_string())
+                    let entry_name = if lowercase {
+                        let lower = first.to_lowercase();
+                        if lower != first {
+                            cfg_if! {
+                                if #[cfg(feature = "tracing")] {
+                                    tracing::debug!(msg = "Lowercased environment variable entry name", from = first, to = lower.as_str(), env_key = env_key);
+                                } else if #[cfg(feature = "logging")] {
+                                    log::debug!("msg=\"Lowercased environment variable entry name\" from={first} to={lower} env_key={env_key}");
+                                }
+                            }
+                        }
+                        lower
+                    } else {
+                        first.to_string()
+                    };
+                    (Some(entry_name), rest.to_string())
                 }
             };
 
@@ -197,32 +247,32 @@ impl Load for Env {
             }
         }
 
-        let mut payloads = Vec::with_capacity(grouped.len());
-        for (name, content) in grouped {
+        let mut payload_list = Vec::with_capacity(grouped.len());
+        for (maybe_name, content) in grouped {
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
-                    tracing::trace!(msg = "Detected configuration from environment variables", name = ?name, format = "env");
+                    tracing::trace!(msg = "Detected configuration from environment variables", name = ?maybe_name.as_deref().unwrap_or("<empty>"), format = "env");
                 } else if #[cfg(feature = "logging")] {
-                    log::trace!("msg=\"Detected configuration from environment variables\" name={name:?} format=\"env\"");
+                    log::trace!("msg=\"Detected configuration from environment variables\" name={} format=\"env\"", maybe_name.as_deref().unwrap_or("<empty>"));
                 }
             }
-            payloads.push(Payload {
+            payload_list.push(Payload {
                 source: source.clone(),
-                name,
-                format: Some("env".into()),
+                maybe_name,
+                maybe_format: Some("env".into()),
                 content,
             });
         }
 
         cfg_if! {
             if #[cfg(feature = "tracing")] {
-                tracing::info!(msg = "Loaded configuration from environment variables", group_count = payloads.len());
+                tracing::info!(msg = "Loaded configuration from environment variables", group_count = payload_list.len());
             } else if #[cfg(feature = "logging")] {
-                log::info!("msg=\"Loaded configuration from environment variables\" group_count={}", payloads.len());
+                log::info!("msg=\"Loaded configuration from environment variables\" group_count={}", payload_list.len());
             }
         }
 
-        Ok(payloads)
+        Ok(payload_list)
     }
 }
 
@@ -254,15 +304,15 @@ mod tests {
         let mut foo = None;
         let mut qux = None;
         for payload in &loaded {
-            if payload.name == Some("foo".to_string()) {
+            if payload.maybe_name == Some("foo".to_string()) {
                 foo = Some(payload);
-            } else if payload.name == Some("qux".to_string()) {
+            } else if payload.maybe_name == Some("qux".to_string()) {
                 qux = Some(payload);
             }
         }
 
         let foo = foo.expect("foo payload");
-        assert_eq!(foo.format, Some("env".to_string()));
+        assert_eq!(foo.maybe_format, Some("env".to_string()));
         assert!(String::from_utf8_lossy(&foo.content).contains("BAR=\"baz\""));
 
         let qux = qux.expect("qux payload");
@@ -283,7 +333,7 @@ mod tests {
 
         assert_eq!(loaded.len(), 1);
         let payload = &loaded[0];
-        assert!(payload.name.is_none());
+        assert!(payload.maybe_name.is_none());
         let content = String::from_utf8_lossy(&payload.content);
         assert!(content.contains("FOO=\"1\""));
         assert!(content.contains("BAR=\"2\""));

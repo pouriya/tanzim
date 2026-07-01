@@ -27,8 +27,8 @@ Source strings
 
 ## Key conventions
 
-- `Payload::name` is `Option<String>`: `None` means unnamed; all unnamed payloads share the `""` key in the merger.
-- `Payload::format` is `Option<String>`: `None` means format is auto-detected by parsers via `is_format_supported`.
+- `Payload::maybe_name` is `Option<String>`: `None` means unnamed; all unnamed payloads share the `""` key in the merger.
+- `Payload::maybe_format` is `Option<String>`: `None` means format is auto-detected by parsers via `is_format_supported`.
 - Sources with `ignore_errors = true` swallow load and parse failures silently.
 
 ## Code style conventions

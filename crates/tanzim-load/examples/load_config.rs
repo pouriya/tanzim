@@ -97,12 +97,11 @@ fn main() {
             payloads.len()
         );
         for (i, payload) in payloads.iter().enumerate() {
-            let payload = payload.clone().normalize();
             println!(
                 "  [{i}] source_resource={:?} name={:?} format={:?} bytes={}",
                 payload.source.resource(),
-                payload.name,
-                payload.format,
+                payload.maybe_name,
+                payload.maybe_format,
                 payload.content.len()
             );
         }

@@ -8,6 +8,7 @@
 //! # Options
 //!
 //! - `ignore` — list of `not-found` and/or `no-access` (default `[]`)
+//! - `lowercase` — boolean (default `true`; whether to lowercase entry names and formats)
 //!
 //! # Example
 //!
@@ -19,7 +20,6 @@
 use crate::{Error, Load, Payload, Source};
 use cfg_if::cfg_if;
 use std::{
-    collections::HashMap,
     fs, io,
     path::{Path, PathBuf},
 };
@@ -37,46 +37,82 @@ impl File {
         Default::default()
     }
 
-    pub fn get_name_and_format<P: AsRef<Path>>(path: P) -> (Option<String>, Option<String>) {
-        let path = path.as_ref();
-
-        let name = if let Some(stem) = path.file_stem() {
-            if let Some(name) = stem.to_str() {
-                if name.is_empty() {
-                    None
-                } else {
-                    Some(name.to_lowercase())
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let format = if let Some(extension) = path.extension() {
-            if let Some(format) = extension.to_str() {
-                if format.is_empty() {
-                    None
-                } else {
-                    Some(format.to_lowercase())
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        (name, format)
-    }
-
     fn should_ignore(ignore: &[String], kind: io::ErrorKind) -> bool {
         match kind {
             io::ErrorKind::NotFound => ignore.iter().any(|item| item == IGNORE_NOT_FOUND),
             io::ErrorKind::PermissionDenied => ignore.iter().any(|item| item == IGNORE_NO_ACCESS),
             _ => false,
         }
+    }
+
+    fn info<P: AsRef<Path>>(path: P, lowercase: bool) -> Option<(Option<String>, Option<String>)> {
+        let path = path.as_ref();
+        if !path.is_file() {
+            cfg_if! {
+                if #[cfg(feature = "tracing")] {
+                    tracing::warn!(msg = "Ignored configuration file directory entry", path = ?path, reason = "not a file");
+                } else if #[cfg(feature = "logging")] {
+                    log::warn!("msg=\"Ignored configuration file directory entry\" path={path:?} reason=\"not a file\"");
+                }
+            }
+            return None;
+        }
+
+        let maybe_name = if let Some(stem) = path.file_stem() {
+            let trimmed = stem.to_str().unwrap_or_default().trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                if lowercase {
+                    let lower = trimmed.to_lowercase();
+                    if lower != trimmed {
+                        cfg_if! {
+                            if #[cfg(feature = "tracing")] {
+                                tracing::debug!(msg = "Lowercased configuration file entry name", from = trimmed, to = lower.as_str(), path = ?path);
+                            } else if #[cfg(feature = "logging")] {
+                                log::debug!("msg=\"Lowercased configuration file entry name\" from={trimmed} to={lower} path={path:?}");
+                            }
+                        }
+                    }
+                    Some(lower)
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }
+        } else {
+            None
+        };
+
+        let maybe_format = if let Some(extension) = path.extension() {
+            if let Some(extension_str) = extension.to_str() {
+                let trimmed = extension_str.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    if lowercase {
+                        let lower = trimmed.to_lowercase();
+                        if lower != trimmed {
+                            cfg_if! {
+                                if #[cfg(feature = "tracing")] {
+                                    tracing::debug!(msg = "Lowercased configuration file entry format", from = trimmed, to = lower.as_str(), path = ?path);
+                                } else if #[cfg(feature = "logging")] {
+                                    log::debug!("msg=\"Lowercased configuration file entry format\" from={trimmed} to={lower} path={path:?}");
+                                }
+                            }
+                        }
+                        Some(lower)
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Some((maybe_name, maybe_format))
     }
 }
 
@@ -94,7 +130,7 @@ impl Load for File {
         let resource = source.resource().to_string();
 
         for key in options.keys() {
-            if key != "ignore" {
+            if key != "ignore" && key != "lowercase" {
                 return Err(Error::InvalidOption {
                     loader: NAME.to_string(),
                     key: key.to_string(),
@@ -138,19 +174,28 @@ impl Load for File {
             }
         }
 
+        let lowercase = match options.get("lowercase") {
+            None => true,
+            Some(value) => value.as_bool().ok_or_else(|| Error::InvalidOption {
+                loader: NAME.to_string(),
+                key: "lowercase".to_string(),
+                reason: format!("expected boolean, found {}", value.type_name()),
+            })?,
+        };
+
         if resource.is_empty() {
             return Err(Error::InvalidResource {
                 loader: NAME.to_string(),
                 resource: resource.to_string(),
-                reason: "resource is required".into(),
+                reason: "resource (file or directory path) is required".into(),
             });
         }
 
         cfg_if! {
             if #[cfg(feature = "tracing")] {
-                tracing::debug!(msg = "Loading configuration from filesystem", resource = resource);
+                tracing::debug!(msg = "Loading configuration from filesystem", resource = resource, lowercase = lowercase);
             } else if #[cfg(feature = "logging")] {
-                log::debug!("msg=\"Loading configuration from filesystem\" resource={resource}");
+                log::debug!("msg=\"Loading configuration from filesystem\" resource={resource} lowercase={lowercase}");
             }
         }
 
@@ -158,9 +203,18 @@ impl Load for File {
 
         // Each entry: (name, format, path, source_for_this_entry)
         let list: Vec<(Option<String>, Option<String>, PathBuf, Source)> = if path.is_dir() {
-            let entries = match fs::read_dir(&path) {
-                Ok(entries) => entries,
-                Err(error) if Self::should_ignore(&ignore, error.kind()) => return Ok(Vec::new()),
+            let entry_list = match fs::read_dir(&path) {
+                Ok(entry_list) => entry_list,
+                Err(error) if Self::should_ignore(&ignore, error.kind()) => {
+                    cfg_if! {
+                        if #[cfg(feature = "tracing")] {
+                            tracing::warn!(msg = "Ignored configuration file directory", path = ?path, reason = ?error);
+                        } else if #[cfg(feature = "logging")] {
+                            log::debug!("msg=\"Ignored configuration file directory\" path={path:?} reason={error:?}");
+                        }
+                    }
+                    return Ok(Vec::new());
+                }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
                     return Err(Error::NotFound {
                         loader: NAME.to_string(),
@@ -185,61 +239,78 @@ impl Load for File {
                 }
             };
 
-            let mut raw_list = Vec::new();
-            for maybe_entry in entries {
-                let Ok(entry) = maybe_entry else {
+            let mut filtered_entry_list = Vec::new();
+            for maybe_entry in entry_list {
+                let entry = match maybe_entry {
+                    Ok(entry) => entry,
+                    Err(error) if Self::should_ignore(&ignore, error.kind()) => {
+                        cfg_if! {
+                            if #[cfg(feature = "tracing")] {
+                                tracing::warn!(msg = "Ignored configuration file directory entry", path = ?path, reason = ?error);
+                            } else if #[cfg(feature = "logging")] {
+                                log::warn!("msg=\"Ignored configuration file directory entry\" path={path:?} reason={error:?}");
+                            }
+                        }
+                        continue;
+                    }
+                    Err(error) => {
+                        return Err(Error::Load {
+                            loader: NAME.to_string(),
+                            resource: resource.to_string(),
+                            description: "load directory file list".into(),
+                            source: error.into(),
+                        });
+                    }
+                };
+
+                let entry_path = entry.path();
+                let (maybe_name, maybe_format) = if let Some((maybe_name, maybe_format)) =
+                    Self::info(&entry_path, lowercase)
+                {
+                    (maybe_name, maybe_format)
+                } else {
+                    cfg_if! {
+                        if #[cfg(feature = "tracing")] {
+                            tracing::warn!(msg = "Ignored configuration file directory entry", path = ?entry_path, reason = "not a file");
+                        } else if #[cfg(feature = "logging")] {
+                            log::warn!("msg=\"Ignored configuration file directory entry\" path={entry_path:?} reason=\"not a file\"");
+                        }
+                    }
                     continue;
                 };
-                let entry_path = entry.path();
-                if !entry_path.is_file() {
-                    continue;
-                }
-                let (name, format) = Self::get_name_and_format(&entry_path);
-                cfg_if! {
-                    if #[cfg(feature = "tracing")] {
-                        tracing::trace!(msg="Detected configuration file", name=?name, path=?entry_path);
-                    } else if #[cfg(feature = "logging")] {
-                        log::trace!("msg=\"Detected configuration file\" name={name:?} path={entry_path:?}");
-                    }
-                }
-                raw_list.push((name, format, entry_path));
+                filtered_entry_list.push((
+                    maybe_name,
+                    maybe_format,
+                    entry_path.clone(),
+                    source
+                        .clone()
+                        .with_resource(entry_path.to_string_lossy().to_string()),
+                ));
             }
 
-            // Duplicate-name check
-            let mut names: HashMap<String, String> = HashMap::with_capacity(raw_list.len());
-            for (name_opt, format_opt, _path) in &raw_list {
-                let name = match name_opt {
-                    None => continue,
-                    Some(n) => n.clone(),
-                };
-                let format = match format_opt {
-                    Some(f) => f.clone(),
-                    None => String::new(),
-                };
-                if let Some(other_format) = names.get(&name) {
-                    return Err(Error::Duplicate {
+            filtered_entry_list
+                .sort_by_key(|(_name, _format, entry_path, _source)| entry_path.clone());
+            filtered_entry_list
+        } else if path.is_file() {
+            let (maybe_name, maybe_format) =
+                if let Some((maybe_name, maybe_format)) = Self::info(&path, lowercase) {
+                    (maybe_name, maybe_format)
+                } else {
+                    // unreachable
+                    return Err(Error::InvalidResource {
                         loader: NAME.to_string(),
                         resource: resource.to_string(),
-                        name,
-                        format_1: other_format.clone(),
-                        format_2: format,
+                        reason: "resource is not a regular file".into(),
                     });
-                }
-                names.insert(name, format);
-            }
-
-            // Build final list with per-file sources (resource = full file path)
-            raw_list
-                .into_iter()
-                .map(|(name, format, entry_path)| {
-                    let mut entry_source = source.clone();
-                    entry_source.set_resource(entry_path.to_string_lossy().into_owned());
-                    (name, format, entry_path, entry_source)
-                })
-                .collect()
-        } else if path.is_file() {
-            let (name, format) = Self::get_name_and_format(&path);
-            vec![(name, format, path, source)]
+                };
+            Vec::from([(
+                maybe_name,
+                maybe_format,
+                path.clone(),
+                source
+                    .clone()
+                    .with_resource(path.to_string_lossy().to_string()),
+            )])
         } else if path.exists() {
             return Err(Error::InvalidResource {
                 loader: NAME.to_string(),
@@ -257,10 +328,19 @@ impl Load for File {
         };
 
         let mut payload_list = Vec::with_capacity(list.len());
-        for (name, format, path, entry_source) in list {
+        for (maybe_name, maybe_format, path, source) in list {
             let content = match fs::read(&path) {
                 Ok(content) => Some(content),
-                Err(error) if Self::should_ignore(&ignore, error.kind()) => None,
+                Err(error) if Self::should_ignore(&ignore, error.kind()) => {
+                    cfg_if! {
+                        if #[cfg(feature = "tracing")] {
+                            tracing::warn!(msg = "Ignored configuration file", path = ?path, reason = ?error);
+                        } else if #[cfg(feature = "logging")] {
+                            log::warn!("msg=\"Ignored configuration file\" path={path:?} reason={error:?}");
+                        }
+                    }
+                    None
+                }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
                     return Err(Error::NotFound {
                         loader: NAME.to_string(),
@@ -287,15 +367,27 @@ impl Load for File {
             if let Some(content) = content {
                 cfg_if! {
                     if #[cfg(feature = "tracing")] {
-                        tracing::trace!(msg = "Read configuration file", name = ?name, path = ?path, bytes = content.len());
+                        tracing::trace!(
+                            msg = "Read configuration file",
+                            name = ?maybe_name.as_deref().unwrap_or("<empty>"),
+                            format = ?maybe_format.as_deref().unwrap_or("<empty>"),
+                            path = ?path,
+                            bytes = content.len(),
+                        );
                     } else if #[cfg(feature = "logging")] {
-                        log::trace!("msg=\"Read configuration file\" name={name:?} path={path:?} bytes={}", content.len());
+                        log::trace!(
+                            "msg=\"Read configuration file\" name={} format={} path={} bytes={}",
+                            maybe_name.as_deref().unwrap_or("<empty>"),
+                            maybe_format.as_deref().unwrap_or("<empty>"),
+                            path.to_string_lossy(),
+                            content.len(),
+                        );
                     }
                 }
                 payload_list.push(Payload {
-                    source: entry_source,
-                    name,
-                    format,
+                    source,
+                    maybe_name,
+                    maybe_format,
                     content,
                 });
             }
@@ -327,24 +419,30 @@ mod tests {
     }
 
     #[test]
-    fn get_name_and_format_from_path() {
-        let path = PathBuf::from("/tmp/foo.JSON");
-        assert_eq!(
-            File::get_name_and_format(&path),
-            (Some("foo".into()), Some("json".into()))
-        );
+    fn load_resolves_name_and_format_from_path() {
+        let tmp = TempDir::new("tanzim-file-name-format").unwrap();
+        fs::write(tmp.path().join("foo.JSON"), b"{}").unwrap();
+        fs::write(tmp.path().join("README"), b"x").unwrap();
+        fs::write(tmp.path().join(".env"), b"x").unwrap();
+        let resource = tmp.path().display().to_string();
+        let loaded = File::new().load(make_source(&resource)).unwrap();
 
-        let path = PathBuf::from("/tmp/README");
-        assert_eq!(
-            File::get_name_and_format(&path),
-            (Some("readme".into()), None)
-        );
+        let mut foo = None;
+        let mut readme = None;
+        let mut dotenv = None;
+        for payload in &loaded {
+            if payload.maybe_name == Some("foo".to_string()) {
+                foo = Some(payload);
+            } else if payload.maybe_name == Some("readme".to_string()) {
+                readme = Some(payload);
+            } else if payload.maybe_name == Some(".env".to_string()) {
+                dotenv = Some(payload);
+            }
+        }
 
-        let path = PathBuf::from("/tmp/.env");
-        assert_eq!(
-            File::get_name_and_format(&path),
-            (Some(".env".into()), None)
-        );
+        assert_eq!(foo.expect("foo").maybe_format, Some("json".to_string()));
+        assert!(readme.expect("readme").maybe_format.is_none());
+        assert!(dotenv.expect(".env").maybe_format.is_none());
     }
 
     #[test]
@@ -361,23 +459,23 @@ mod tests {
         let mut readme = None;
         let mut dotenv = None;
         for payload in &loaded {
-            if payload.name == Some("foo".to_string()) {
+            if payload.maybe_name == Some("foo".to_string()) {
                 foo = Some(payload);
-            } else if payload.name == Some("readme".to_string()) {
+            } else if payload.maybe_name == Some("readme".to_string()) {
                 readme = Some(payload);
-            } else if payload.name == Some(".env".to_string()) {
+            } else if payload.maybe_name == Some(".env".to_string()) {
                 dotenv = Some(payload);
             }
         }
 
         let foo = foo.expect("foo payload");
-        assert_eq!(foo.format, Some("json".to_string()));
+        assert_eq!(foo.maybe_format, Some("json".to_string()));
 
         let readme = readme.expect("readme payload");
-        assert!(readme.format.is_none());
+        assert!(readme.maybe_format.is_none());
 
         let dotenv = dotenv.expect(".env payload");
-        assert!(dotenv.format.is_none());
+        assert!(dotenv.maybe_format.is_none());
     }
 
     #[test]
@@ -388,20 +486,10 @@ mod tests {
         let loaded = File::new().load(make_source(&resource)).unwrap();
         assert_eq!(loaded.len(), 1);
         let payload = &loaded[0];
-        assert_eq!(payload.name, Some("foo".to_string()));
-        assert_eq!(payload.format, Some("json".to_string()));
+        assert_eq!(payload.maybe_name, Some("foo".to_string()));
+        assert_eq!(payload.maybe_format, Some("json".to_string()));
         // Source resource updated to full file path
         assert!(payload.source.resource().ends_with("foo.json"));
-    }
-
-    #[test]
-    fn load_errors_on_duplicate_formats() {
-        let tmp = TempDir::new("tanzim-file-dup").unwrap();
-        fs::write(tmp.path().join("foo.json"), b"{}").unwrap();
-        fs::write(tmp.path().join("foo.yaml"), b"hello: world").unwrap();
-        let resource = tmp.path().display().to_string();
-        let error = File::new().load(make_source(&resource)).unwrap_err();
-        assert!(matches!(error, Error::Duplicate { .. }));
     }
 
     #[test]

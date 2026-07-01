@@ -14,35 +14,15 @@ pub mod http;
 
 /// Raw bytes for one configuration entry, with its declaring [`Source`].
 ///
-/// `name` and `format` are lowercased by [Payload::normalize].
-/// `format` selects the parser (`json`, `env`, …). `content` is unparsed bytes.
-/// `name` is `None` for unnamed payloads; all `None`-named payloads merge together.
+/// `maybe_format` selects the parser (`json`, `env`, …). `content` is unparsed bytes.
+/// `maybe_name` is `None` for unnamed payloads; all `None`-named payloads merge together.
+/// Built-in loaders lower-case `maybe_name` and `maybe_format` by default (their Source `lowercase=true` option).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Payload {
     pub source: Source,
-    pub name: Option<String>,
-    pub format: Option<String>,
+    pub maybe_name: Option<String>,
+    pub maybe_format: Option<String>,
     pub content: Vec<u8>,
-}
-
-impl Payload {
-    pub fn normalize(mut self) -> Self {
-        if let Some(name) = self.name {
-            if name.is_empty() {
-                self.name = None;
-            } else {
-                self.name = Some(name.to_lowercase());
-            }
-        }
-        if let Some(format) = self.format {
-            if format.is_empty() {
-                self.format = None;
-            } else {
-                self.format = Some(format.to_lowercase());
-            }
-        }
-        self
-    }
 }
 
 /// Load error type.
@@ -107,8 +87,7 @@ pub enum Error {
 /// Implement this to add a new source kind (protocol, service, database, …).
 /// Each call takes ownership of a [`Source`] and returns one [`Payload`] per
 /// configuration entry found. Set [`Payload::source`] on each entry to reflect the
-/// exact resource that was loaded (e.g. a file path inside a directory). Call
-/// [`Payload::normalize`] on each payload before returning.
+/// exact resource that was loaded (e.g. a file path inside a directory).
 ///
 /// # Example — custom in-memory loader
 ///
@@ -127,10 +106,10 @@ pub enum Error {
 ///         for (name, bytes) in &self.entries {
 ///             result.push(Payload {
 ///                 source: source.clone(),
-///                 name: Some(name.to_string()),
-///                 format: Some("json".into()),
+///                 maybe_name: Some(name.to_string()),
+///                 maybe_format: Some("json".into()),
 ///                 content: bytes.to_vec(),
-///             }.normalize());
+///             });
 ///         }
 ///         Ok(result)
 ///     }
@@ -139,42 +118,8 @@ pub enum Error {
 pub trait Load {
     /// Human-readable name used in error messages.
     fn name(&self) -> &str;
-    /// Source strings this loader handles (e.g. `["file"]`, `["http", "https"]`).
+    /// Source strings this loader handles (e.g. ["env"], `["file"]`, `["http", "https"]`).
     fn supported_source_list(&self) -> Vec<String>;
     /// Load raw bytes from the source. Returns one [`Payload`] per config entry found.
     fn load(&self, source: Source) -> Result<Vec<Payload>, Error>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tanzim_source::SourceBuilder;
-
-    fn test_source() -> Source {
-        SourceBuilder::new().with_source("test").build().unwrap()
-    }
-
-    #[test]
-    fn payload_normalize_clears_empty_name() {
-        let payload = Payload {
-            source: test_source(),
-            name: Some(String::new()),
-            format: Some("json".into()),
-            content: b"{}".to_vec(),
-        }
-        .normalize();
-        assert!(payload.name.is_none());
-    }
-
-    #[test]
-    fn payload_normalize_lowercases_name() {
-        let payload = Payload {
-            source: test_source(),
-            name: Some("FOO".into()),
-            format: None,
-            content: Vec::new(),
-        }
-        .normalize();
-        assert_eq!(payload.name, Some("foo".into()));
-    }
 }

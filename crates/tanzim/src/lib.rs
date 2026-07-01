@@ -342,7 +342,7 @@ impl Config {
                 }
             };
             for payload in payloads {
-                result.push(payload.normalize());
+                result.push(payload);
             }
         }
         cfg_if! {
@@ -357,14 +357,14 @@ impl Config {
 
     /// Deserialize loaded bytes into [`parser::LocatedValue`] trees.
     ///
-    /// Parser selection: if `payload.format` is set, the first parser that lists that
+    /// Parser selection: if `payload.maybe_format` is set, the first parser that lists that
     /// format wins; otherwise parsers are probed via `is_format_supported`. Sources
     /// with `ignore_errors` skip payloads that fail to parse.
     pub fn parse(&self, loaded: &[loader::Payload]) -> Result<Vec<Parsed>, Error> {
         let mut result = Vec::new();
         for payload in loaded {
             let config_source = &payload.source;
-            let resource = match (&payload.name, &payload.format) {
+            let resource = match (&payload.maybe_name, &payload.maybe_format) {
                 (Some(name), Some(format)) => format!("{name}.{format}"),
                 _ => {
                     let r = config_source.resource();
@@ -378,14 +378,14 @@ impl Config {
             let source_name = config_source.source();
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
-                    tracing::debug!(msg = "Parsing configuration payload", source = source_name, resource = resource, format = payload.format.as_deref().unwrap_or("auto"));
+                    tracing::debug!(msg = "Parsing configuration payload", source = source_name, resource = resource, format = payload.maybe_format.as_deref().unwrap_or("auto"));
                 } else if #[cfg(feature = "logging")] {
-                    let fmt = payload.format.as_deref().unwrap_or("auto");
+                    let fmt = payload.maybe_format.as_deref().unwrap_or("auto");
                     log::debug!("msg=\"Parsing configuration payload\" source={source_name} resource={resource} format={fmt}");
                 }
             }
             let mut found_parser = None;
-            if let Some(format) = &payload.format {
+            if let Some(format) = &payload.maybe_format {
                 for parser in &self.parsers {
                     let supported = parser.supported_format_list();
                     let mut matches = false;
@@ -413,7 +413,11 @@ impl Config {
                 Some(p) => p,
                 None => {
                     return Err(Error::NoParser {
-                        format: payload.format.as_deref().unwrap_or("unknown").to_string(),
+                        format: payload
+                            .maybe_format
+                            .as_deref()
+                            .unwrap_or("unknown")
+                            .to_string(),
                         at: source_display(config_source),
                     });
                 }
@@ -456,7 +460,7 @@ impl Config {
 
     /// Merge parsed values using the registered merger.
     ///
-    /// Payloads with the same name are combined; `None`-named payloads share the `""` key.
+    /// Payloads with the same `maybe_name` are combined; `None`-named payloads share the `""` key.
     pub fn merge(&self, parsed: &[Parsed]) -> Result<Merged, Error> {
         cfg_if! {
             if #[cfg(feature = "tracing")] {

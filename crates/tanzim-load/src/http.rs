@@ -10,6 +10,7 @@
 //! - `headers` — map of string headers (default `{}`)
 //! - `timeout` — positive integer seconds (default `15`)
 //! - `insecure` — allow invalid TLS certificates (default `false`)
+//! - `lowercase` — boolean (default `true`; whether to lowercase entry names and formats)
 //!
 //! # Example
 //!
@@ -63,7 +64,7 @@ impl Load for Http {
         }
 
         for key in options.keys() {
-            if !matches!(key, "headers" | "timeout" | "insecure") {
+            if !matches!(key, "headers" | "timeout" | "insecure" | "lowercase") {
                 return Err(Error::InvalidOption {
                     loader: NAME.to_string(),
                     key: key.to_string(),
@@ -125,13 +126,21 @@ impl Load for Http {
                 reason: format!("expected boolean, found {}", value.type_name()),
             })?,
         };
+        let lowercase = match options.get("lowercase") {
+            None => true,
+            Some(value) => value.as_bool().ok_or_else(|| Error::InvalidOption {
+                loader: NAME.to_string(),
+                key: "lowercase".to_string(),
+                reason: format!("expected boolean, found {}", value.type_name()),
+            })?,
+        };
         let timeout = Duration::from_secs(timeout_seconds);
 
         cfg_if! {
             if #[cfg(feature = "tracing")] {
-                tracing::debug!(msg = "Fetching configuration via HTTP", resource = resource, timeout_seconds = timeout_seconds, header_count = headers.len(), insecure = insecure);
+                tracing::debug!(msg = "Fetching configuration via HTTP", resource = resource, timeout_seconds = timeout_seconds, header_count = headers.len(), insecure = insecure, lowercase = lowercase);
             } else if #[cfg(feature = "logging")] {
-                log::debug!("msg=\"Fetching configuration via HTTP\" resource={resource} timeout_seconds={timeout_seconds} header_count={} insecure={insecure}", headers.len());
+                log::debug!("msg=\"Fetching configuration via HTTP\" resource={resource} timeout_seconds={timeout_seconds} header_count={} insecure={insecure} lowercase={lowercase}", headers.len());
             }
         }
 
@@ -145,20 +154,58 @@ impl Load for Http {
 
         let mut payloads = Vec::with_capacity(fetched.len());
         for payload in fetched {
+            let name = match payload.maybe_name {
+                Some(name) => {
+                    let trimmed = name.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else if lowercase {
+                        let lower = trimmed.to_lowercase();
+                        if lower != trimmed {
+                            cfg_if! {
+                                if #[cfg(feature = "tracing")] {
+                                    tracing::debug!(msg = "Lowercased HTTP configuration entry name", from = trimmed, to = lower.as_str(), resource = resource);
+                                } else if #[cfg(feature = "logging")] {
+                                    log::debug!("msg=\"Lowercased HTTP configuration entry name\" from={trimmed} to={lower} resource={resource}");
+                                }
+                            }
+                        }
+                        Some(lower)
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                }
+                None => None,
+            };
+            let format = match payload.maybe_format {
+                Some(format) => {
+                    let trimmed = format.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else if lowercase {
+                        let lower = trimmed.to_lowercase();
+                        if lower != trimmed {
+                            cfg_if! {
+                                if #[cfg(feature = "tracing")] {
+                                    tracing::debug!(msg = "Lowercased HTTP configuration format", from = trimmed, to = lower.as_str(), resource = resource);
+                                } else if #[cfg(feature = "logging")] {
+                                    log::debug!("msg=\"Lowercased HTTP configuration format\" from={trimmed} to={lower} resource={resource}");
+                                }
+                            }
+                        }
+                        Some(lower)
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                }
+                None => None,
+            };
             let payload = Payload {
                 source: source.clone(),
-                name: payload.name,
-                format: payload.format,
+                maybe_name: name,
+                maybe_format: format,
                 content: payload.content,
-            }
-            .normalize();
-            cfg_if! {
-                if #[cfg(feature = "tracing")] {
-                    tracing::info!(msg = "Fetched configuration via HTTP", resource = resource, name = ?payload.name, format = ?payload.format);
-                } else if #[cfg(feature = "logging")] {
-                    log::info!("msg=\"Fetched configuration via HTTP\" resource={resource} name={:?} format={:?}", payload.name, payload.format);
-                }
-            }
+            };
             payloads.push(payload);
         }
 
@@ -187,8 +234,8 @@ mod tests {
             assert!(insecure);
             Ok(vec![Payload {
                 source: placeholder_source(),
-                name: Some("demo".into()),
-                format: Some("json".into()),
+                maybe_name: Some("demo".into()),
+                maybe_format: Some("json".into()),
                 content: br#"{"hello":"world"}"#.to_vec(),
             }])
         }));
@@ -203,7 +250,7 @@ mod tests {
             .unwrap();
         let loaded = loader.load(source).unwrap();
         assert_eq!(loaded.len(), 1);
-        assert_eq!(loaded[0].name, Some("demo".to_string()));
+        assert_eq!(loaded[0].maybe_name, Some("demo".to_string()));
     }
 
     #[test]
@@ -211,8 +258,8 @@ mod tests {
         let loader = Http::new(Box::new(|_, _, _, _| {
             Ok(vec![Payload {
                 source: placeholder_source(),
-                name: None,
-                format: None,
+                maybe_name: None,
+                maybe_format: None,
                 content: Vec::new(),
             }])
         }));

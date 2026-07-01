@@ -1,7 +1,6 @@
 use tanzim_source::Source;
 
 fn main() {
-
     let inputs: Vec<String> = std::env::args().skip(1).collect();
     if inputs.is_empty() {
         eprintln!("Usage: parse_sources <SOURCE> [<SOURCE> ...]");
