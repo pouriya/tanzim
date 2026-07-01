@@ -112,9 +112,9 @@ path = "tests/smoke.rs"
 required-features = ["full"]
 
 [[example]]
-name = "basic"
-path = "../../examples/basic/main.rs"
-required-features = ["full"]
+name = "full"
+path = "../../examples/full/main.rs"
+required-features = ["full", "tracing"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -1,7 +1,7 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all build test clippy check-style docs examples example-basic
+.PHONY: all build test clippy check-style docs examples example-full
 
 all: build clippy test check-style
 
@@ -32,14 +32,14 @@ check-style:
 docs:
 	cargo doc --workspace --all-features
 
-examples: example-basic
+examples: example-full
 
-example-basic:
+example-full:
 	env \
 	'APP_NAME.FOO.SERVER.ADDRESS=127.0.0.1' \
 	'APP_NAME.BAR.SQLITE.FILE=/path/to/app.db' \
 	'APP_NAME.BAZ.LOGGING.LEVEL=debug' \
 	'APP_NAME.QUX.HTTPS.INSECURE=false' \
 	RUST_BACKTRACE=1 cargo run $(TARGET_OPTION) -p tanzim --no-default-features \
-		--features="full$(LOG_FEATURE)" --example basic -- \
-		--trace 'env(prefix=APP_NAME,separator=".")' 'file:examples/basic/etc'
+		--features="full$(LOG_FEATURE)" --example full -- \
+		--trace 'env(prefix=APP_NAME,separator=".")' 'file:examples/full/etc'

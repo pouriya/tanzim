@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_parser(Toml::new())
         .with_merger(DeepMerge)
         .with_source("env(prefix=MY_APP_,separator=.)")?
-        .with_source("file:examples/basic/etc")?
+        .with_source("file:examples/full/etc")?
         .build()
         .run()?;
 
@@ -106,11 +106,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```shell
 make examples        # run every example
-make example-basic   # full pipeline over env + file sources
+make example-full    # full pipeline over env + file sources
 ```
 
-`example-basic` reads the source strings declared in the `Makefile` and the
-sample config under `examples/basic/etc/`. The individual stage crates ship their
+`example-full` reads the source strings declared in the `Makefile` and the
+sample config under `examples/full/etc/`. The individual stage crates ship their
 own examples too (see each crate's `examples/` directory).
 
 ## Development

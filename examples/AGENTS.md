@@ -4,9 +4,9 @@ Runnable examples for the `tanzim` facade crate (declared in `crates/tanzim/Carg
 
 | Directory | Example | Description |
 |-----------|---------|-------------|
-| `basic/` | `basic` | CLI: pass source strings as args, build a `Config` with `ConfigBuilder`, call `run()`, print merged output |
+| `full/` | `full` | CLI: pass source strings as args, build a `Config` with `ConfigBuilder`, call `run()`, print merged output |
 
 Run with:
 ```bash
-cargo run -p tanzim --features full --example basic -- 'env(prefix=APP_NAME,separator=.)' 'file:examples/basic/etc'
+cargo run -p tanzim --features full,tracing --example full -- 'env(prefix=APP_NAME,separator=.)' 'file:examples/full/etc'
 ```

@@ -1,4 +1,4 @@
-# examples/basic
+# examples/full
 
 Full-pipeline CLI example for `tanzim`.
 
@@ -10,6 +10,6 @@ so the merged output is validated (and coerced) after the merge stage.
 Run via:
 ```bash
 env 'APP_NAME.FOO.PORT=8080' \
-cargo run -p tanzim --features full --example basic -- \
-    'env(prefix=APP_NAME,separator=.)' 'file:examples/basic/etc'
+cargo run -p tanzim --features full,tracing --example full -- \
+    'env(prefix=APP_NAME,separator=.)' 'file:examples/full/etc'
 ```

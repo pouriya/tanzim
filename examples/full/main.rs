@@ -95,7 +95,7 @@ fn load_schemas() -> Result<Schemas, Box<dyn std::error::Error>> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join("examples")
-        .join("basic")
+        .join("full")
         .join("schema.yml");
     let text = std::fs::read_to_string(&path)?;
     let documents: HashMap<String, SchemaValue> = serde_yaml::from_str(&text)?;
@@ -124,7 +124,7 @@ fn parse_args() -> Result<(bool, Vec<String>), Box<dyn std::error::Error>> {
         let etc = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .join("examples")
-            .join("basic")
+            .join("full")
             .join("etc");
         sources.push(format!("file:{}", etc.display()));
     }
