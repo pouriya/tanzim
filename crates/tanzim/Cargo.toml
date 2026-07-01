@@ -1,6 +1,6 @@
 [package]
 name = "tanzim"
-version = "0.7.0"
+version = "0.8.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -14,7 +14,7 @@ include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
 tanzim-load = { path = "../tanzim-load", version = "0.6.0" }
-tanzim-parse = { path = "../tanzim-parse", version = "0.5.0" }
+tanzim-parse = { path = "../tanzim-parse", version = "0.6.0" }
 tanzim-merge = { path = "../tanzim-merge", version = "0.5.0" }
 tanzim-source = { path = "../tanzim-source", version = "0.2.0" }
 tanzim-value = { path = "../tanzim-value", version = "0.2.0" }
