@@ -1,9 +1,24 @@
 //! Filesystem loader (`file` feature).
 //!
-//! Reads a directory of configuration files, or a single file.
-//! Name and format come from the filename stem and extension; either may be empty.
+//! Reads a single configuration file, or every file in a directory.
 //!
-//! **Source:** `file`
+//! **Source:** `file` (the resource is the file or directory path and is required; an empty
+//! resource is rejected with [`Error::InvalidResource`])
+//!
+//! # Behaviour
+//!
+//! - If the resource is a **directory**, each regular file in it becomes one entry; sub-entries
+//!   that are not regular files are skipped (with a warning). Entries are returned in a
+//!   deterministic order (sorted by path).
+//! - If the resource is a **single file**, it becomes one entry.
+//! - `maybe_name` comes from the filename stem and `maybe_format` from the extension; either may
+//!   be `None` (e.g. `README` has no format, `.env` has no name). Both are lower-cased when
+//!   `lowercase = true` (the default).
+//! - Each entry's [`Payload::source`] is narrowed to that file's path, so
+//!   diagnostics point at the exact file rather than the directory.
+//! - Missing paths and permission errors normally surface as
+//!   [`Error::NotFound`] / [`Error::NoAccess`];
+//!   the `ignore` option downgrades them to a skipped entry instead.
 //!
 //! # Options
 //!
@@ -29,10 +44,34 @@ pub const SOURCE: &str = "file";
 const IGNORE_NOT_FOUND: &str = "not-found";
 const IGNORE_NO_ACCESS: &str = "no-access";
 
+/// Loader for the `file` source: reads a single file or every file in a directory.
+///
+/// See the [module docs](self) for how names/formats are derived and how the `ignore` and
+/// `lowercase` options behave. Stateless — construct with [`File::new`].
+///
+/// # Example
+///
+/// ```
+/// use tanzim_load::{file::File, Load};
+/// use tanzim_source::SourceBuilder;
+///
+/// // `ignore=[not-found]` turns a missing path into an empty result instead of an error,
+/// // so this example is self-contained.
+/// let source = SourceBuilder::new()
+///     .with_source("file")
+///     .with_resource("/path/to/config") // a file or a directory
+///     .with_option("ignore", vec!["not-found"])
+///     .build()
+///     .unwrap();
+///
+/// let payloads = File::new().load(source).unwrap();
+/// assert!(payloads.is_empty()); // nothing at that path, and not-found is ignored
+/// ```
 #[derive(Default, Clone, Debug)]
 pub struct File;
 
 impl File {
+    /// Create a filesystem loader. Configuration comes from the source's options, not the type.
     pub fn new() -> Self {
         Default::default()
     }

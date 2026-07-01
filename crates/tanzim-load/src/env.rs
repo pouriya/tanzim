@@ -1,9 +1,22 @@
 //! Environment-variable loader (`env` feature).
 //!
-//! Groups process environment variables by name using a configurable prefix
-//! and optional key separator.
+//! Reads process environment variables and groups them into configuration entries using a
+//! configurable `prefix` and an optional key `separator`.
 //!
-//! **Source:** `env`
+//! **Source:** `env` (the source resource must be empty — a non-empty resource is rejected with
+//! [`Error::InvalidResource`])
+//!
+//! # Behaviour
+//!
+//! - Only variables whose name starts with `prefix` are considered. With `strip_prefix = true`
+//!   (the default when a prefix is set) the prefix is removed from each key first.
+//! - Without a `separator`, every matching variable becomes a `KEY="value"` line in a single
+//!   unnamed entry (`maybe_name = None`) that merges into the configuration root.
+//! - With a `separator`, each key is split once on its first occurrence: the left part is the
+//!   entry name and the right part is the key within that entry. Keys that don't contain the
+//!   separator (or whose split yields an empty side) are skipped.
+//! - Every produced entry has `maybe_format = "env"`, so the `KEY="value"` lines are handed to
+//!   the `env` parser. Entry names are lower-cased when `lowercase = true` (the default).
 //!
 //! # Options
 //!
@@ -29,12 +42,39 @@ pub const SOURCE: &str = "env";
 
 const ALLOWED_OPTIONS: &[&str] = &["prefix", "strip_prefix", "separator", "lowercase"];
 
+/// Loader for the `env` source: reads process environment variables into configuration entries.
+///
+/// See the [module docs](self) for the grouping behaviour and options. Construct with
+/// [`Env::new`], or pin a prefix with [`Env::with_prefix`] instead of relying on the
+/// auto-detected default.
+///
+/// # Example
+///
+/// ```
+/// use tanzim_load::{env::Env, Load};
+/// use tanzim_source::SourceBuilder;
+///
+/// // SAFETY: example-only; single-threaded doctest env vars.
+/// unsafe { std::env::set_var("MYAPP_DEBUG", "true"); }
+///
+/// let source = SourceBuilder::new()
+///     .with_source("env")
+///     .with_option("prefix", "MYAPP_")
+///     .build()
+///     .unwrap();
+///
+/// let payloads = Env::new().load(source).unwrap();
+/// let content = String::from_utf8_lossy(&payloads[0].content);
+/// assert!(content.contains(r#"DEBUG="true""#));
+/// ```
 #[derive(Debug, Default, Clone)]
 pub struct Env {
     prefix_override: Option<String>,
 }
 
 impl Env {
+    /// Create a loader whose prefix is taken from the source's `prefix` option, or
+    /// auto-detected (see [`Env::detect_prefix`]) when that option is absent.
     pub fn new() -> Self {
         Default::default()
     }
