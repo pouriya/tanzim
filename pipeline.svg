@@ -30,7 +30,7 @@
 
   <!-- Title -->
   <text x="410" y="44" text-anchor="middle" font-size="27" font-weight="700" fill="#0f172a">Tanzim Configuration Pipeline</text>
-  <text x="410" y="68" text-anchor="middle" font-size="14" fill="#64748b">load anything · parse anything · merge intelligently · validate safely</text>
+  <text x="410" y="68" text-anchor="middle" font-size="14" fill="#64748b">load from anywhere · parse anything · merge safely · validate intelligently</text>
 
   <!-- Sources (plain, centered) -->
   <text x="90" y="98" font-size="12" font-weight="700" letter-spacing="1.5" fill="#94a3b8">SOURCES</text>
@@ -75,7 +75,7 @@
   <!-- Box: Merger -->
   <g filter="url(#shadow)"><rect x="60" y="514" width="700" height="68" rx="13" fill="url(#gMerge)"/></g>
   <text x="90" y="542" font-size="17" font-weight="700" fill="#7c2d12">Merger</text>
-  <text x="410" y="542" text-anchor="middle" font-size="13.5" fill="#9a3412">merge intelligently</text>
+  <text x="410" y="542" text-anchor="middle" font-size="13.5" fill="#9a3412">merge safely</text>
   <text x="410" y="566" text-anchor="middle" font-size="13" fill="#9a3412">last-wins · deep-merge · custom</text>
   <text x="730" y="575" text-anchor="end" font-size="11.5" fill="#9a3412" fill-opacity="0.85">tanzim-merge</text>
 
@@ -85,7 +85,7 @@
   <!-- Box: Validator (lighter navy) — validator showcase -->
   <g filter="url(#shadow)"><rect x="60" y="614" width="700" height="192" rx="13" fill="url(#gValidate)"/></g>
   <text x="90" y="642" font-size="17" font-weight="700" fill="#ffffff">Validator</text>
-  <text x="410" y="642" text-anchor="middle" font-size="13.5" fill="#ffffff" fill-opacity="0.85">validate safely</text>
+  <text x="410" y="642" text-anchor="middle" font-size="13.5" fill="#ffffff" fill-opacity="0.85">validate intelligently</text>
   <line x1="90" y1="655" x2="730" y2="655" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1"/>
   <text x="410" y="680" text-anchor="middle" font-size="13" font-weight="700" fill="#c7d2fe">Schema validation — build validators from your data</text>
   <g text-anchor="middle" font-size="12.5" fill="#ffffff" fill-opacity="0.92">
