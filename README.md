@@ -1,6 +1,6 @@
 # tanzim
 
-![load anything · parse anything · merge intelligently · validate safely](pipeline.svg)
+![load from anywhere · parse anything · merge safely · validate intelligently](pipeline.svg)
 
 ## Why
 Real configuration never lives in one place or in one format. It arrives from environment variables, files, whole directories, and remote endpoints — written in env, YAML, TOML, or JSON — and it has to be combined with clear precedence and checked before anything trusts it. The usual answer is a pile of glue code stitched across several unrelated libraries, and somewhere in that pile a value quietly loses track of *where it came from*.
