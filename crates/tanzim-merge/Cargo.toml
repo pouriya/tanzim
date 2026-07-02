@@ -15,7 +15,7 @@ include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 [dependencies]
 tanzim-load = { path = "../tanzim-load", version = "0.8.0", default-features = false }
 tanzim-source = { path = "../tanzim-source", version = "0.4.0" }
-tanzim-value = { path = "../tanzim-value", version = "0.3.0" }
+tanzim-value = { path = "../tanzim-value", version = "0.4.0" }
 thiserror = "1.0.56"
 cfg-if = "1.0.0"
 log = { version = "0.4.20", optional = true }

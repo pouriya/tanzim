@@ -146,6 +146,183 @@ impl Parse for Yaml {
     }
 }
 
+/// Serialize a [`Value`] tree into block-style YAML.
+///
+/// Accepts a [`Value`], `&Value`, [`LocatedValue`], or `&LocatedValue`. `source` is
+/// accepted for signature symmetry with [`Parse::parse`] but is unused here.
+///
+/// ```
+/// use tanzim_parse::yaml::unparse;
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{Map, LocatedValue, Location, Value};
+///
+/// let source = SourceBuilder::new().with_source("file").build().unwrap();
+/// let mut map = Map::new();
+/// map.insert("port".into(), LocatedValue {
+///     value: Value::Int(8080),
+///     location: Location::at("file", "", None, None, None),
+/// });
+/// assert_eq!(unparse(&source, Value::Map(map)).unwrap(), "port: 8080\n");
+/// ```
+pub fn unparse<V: AsRef<Value>>(
+    _source: &Source,
+    value: V,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    let value = value.as_ref();
+    let mut out = String::new();
+    match value {
+        Value::Map(map) if map.entries().is_empty() => out.push_str("{}\n"),
+        Value::List(items) if items.is_empty() => out.push_str("[]\n"),
+        Value::Map(map) => write_yaml_map(&mut out, map, 0)?,
+        Value::List(items) => write_yaml_list(&mut out, items, 0)?,
+        scalar => {
+            write_yaml_scalar(&mut out, scalar)?;
+            out.push('\n');
+        }
+    }
+    Ok(out)
+}
+
+fn write_yaml_map(
+    out: &mut String,
+    map: &Map,
+    indent: usize,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    for (key, item) in map.entries() {
+        push_yaml_indent(out, indent);
+        write_yaml_string(out, key);
+        out.push(':');
+        match &item.value {
+            Value::Map(inner) if inner.entries().is_empty() => out.push_str(" {}\n"),
+            Value::List(items) if items.is_empty() => out.push_str(" []\n"),
+            Value::Map(inner) => {
+                out.push('\n');
+                write_yaml_map(out, inner, indent + 1)?;
+            }
+            Value::List(items) => {
+                out.push('\n');
+                write_yaml_list(out, items, indent + 1)?;
+            }
+            scalar => {
+                out.push(' ');
+                write_yaml_scalar(out, scalar)?;
+                out.push('\n');
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_yaml_list(
+    out: &mut String,
+    items: &[LocatedValue],
+    indent: usize,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    for item in items {
+        push_yaml_indent(out, indent);
+        match &item.value {
+            Value::Map(inner) if inner.entries().is_empty() => out.push_str("- {}\n"),
+            Value::List(inner) if inner.is_empty() => out.push_str("- []\n"),
+            Value::Map(inner) => {
+                out.push_str("-\n");
+                write_yaml_map(out, inner, indent + 1)?;
+            }
+            Value::List(inner) => {
+                out.push_str("-\n");
+                write_yaml_list(out, inner, indent + 1)?;
+            }
+            scalar => {
+                out.push_str("- ");
+                write_yaml_scalar(out, scalar)?;
+                out.push('\n');
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_yaml_scalar(
+    out: &mut String,
+    value: &Value,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    match value {
+        Value::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+        Value::Int(value) => out.push_str(&value.to_string()),
+        Value::Float(value) => {
+            if !value.is_finite() {
+                return Err(format!("cannot serialize non-finite float {value} as YAML").into());
+            }
+            out.push_str(&format!("{value:?}"));
+        }
+        Value::String(value) => write_yaml_string(out, value),
+        Value::List(_) | Value::Map(_) => {
+            return Err("internal error: write_yaml_scalar called on a collection".into());
+        }
+    }
+    Ok(())
+}
+
+fn push_yaml_indent(out: &mut String, indent: usize) {
+    for _ in 0..indent {
+        out.push_str("  ");
+    }
+}
+
+fn write_yaml_string(out: &mut String, value: &str) {
+    let needs_quote = value.is_empty()
+        || matches!(
+            value.to_ascii_lowercase().as_str(),
+            "true" | "false" | "null" | "yes" | "no" | "on" | "off" | "~"
+        )
+        || value.parse::<i64>().is_ok()
+        || value.parse::<f64>().is_ok()
+        || value.starts_with(char::is_whitespace)
+        || value.ends_with(char::is_whitespace)
+        || value.starts_with(|ch: char| {
+            matches!(
+                ch,
+                '-' | '?'
+                    | ':'
+                    | ','
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '&'
+                    | '*'
+                    | '!'
+                    | '|'
+                    | '>'
+                    | '\''
+                    | '"'
+                    | '%'
+                    | '@'
+                    | '`'
+                    | '#'
+            )
+        })
+        || value.contains(':')
+        || value.contains('#')
+        || value.contains('\n')
+        || value.contains('\t');
+    if !needs_quote {
+        out.push_str(value);
+        return;
+    }
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+}
+
 fn convert_node(
     source: &str,
     resource: &str,
@@ -257,6 +434,38 @@ mod tests {
             .with_resource(resource)
             .build()
             .unwrap()
+    }
+
+    fn loc(value: Value) -> LocatedValue {
+        LocatedValue {
+            value,
+            location: Location::at("file", "test", None, None, None),
+        }
+    }
+
+    #[test]
+    fn unparses_complex_yaml() {
+        let mut nested = Map::new();
+        nested.insert("key".into(), loc(Value::String("value".into())));
+        let mut map = Map::new();
+        map.insert("name".into(), loc(Value::String("tanzim".into())));
+        map.insert("port".into(), loc(Value::Int(8080)));
+        map.insert("ratio".into(), loc(Value::Float(0.5)));
+        map.insert("debug".into(), loc(Value::Bool(true)));
+        map.insert(
+            "tags".into(),
+            loc(Value::List(vec![
+                loc(Value::String("a".into())),
+                loc(Value::String("b".into())),
+            ])),
+        );
+        map.insert("nested".into(), loc(Value::Map(nested)));
+
+        let text = unparse(&file_source("out.yaml"), Value::Map(map)).unwrap();
+        assert_eq!(
+            text,
+            "name: tanzim\nport: 8080\nratio: 0.5\ndebug: true\ntags:\n  - a\n  - b\nnested:\n  key: value\n"
+        );
     }
 
     #[test]

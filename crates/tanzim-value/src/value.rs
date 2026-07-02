@@ -222,6 +222,18 @@ impl Display for LocatedValue {
     }
 }
 
+impl AsRef<Value> for Value {
+    fn as_ref(&self) -> &Value {
+        self
+    }
+}
+
+impl AsRef<Value> for LocatedValue {
+    fn as_ref(&self) -> &Value {
+        &self.value
+    }
+}
+
 impl Value {
     pub fn new_map() -> Self {
         Self::Map(Map::new())
@@ -430,6 +442,22 @@ mod tests {
             value: Value::String(text.to_string()),
             location: Location::at("file", "test", None, None, None),
         }
+    }
+
+    #[test]
+    fn as_ref_value_accepts_all_forms() {
+        fn take<V: AsRef<Value>>(value: V) -> Value {
+            value.as_ref().clone()
+        }
+        let value = Value::Int(7);
+        let located = LocatedValue {
+            value: Value::Int(7),
+            location: Location::at("file", "test", None, None, None),
+        };
+        assert_eq!(take(value.clone()), value); // Value
+        assert_eq!(take(&value), value); // &Value
+        assert_eq!(take(located.clone()), value); // LocatedValue
+        assert_eq!(take(&located), value); // &LocatedValue
     }
 
     #[test]

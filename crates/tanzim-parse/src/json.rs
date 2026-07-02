@@ -150,6 +150,114 @@ impl Parse for Json {
     }
 }
 
+/// Serialize a [`Value`] tree into pretty-printed JSON (2-space indent).
+///
+/// Accepts a [`Value`], `&Value`, [`LocatedValue`], or `&LocatedValue`. `source` is
+/// accepted for signature symmetry with [`Parse::parse`] but is unused here.
+///
+/// ```
+/// use tanzim_parse::json::unparse;
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{Map, LocatedValue, Location, Value};
+///
+/// let source = SourceBuilder::new().with_source("file").build().unwrap();
+/// let mut map = Map::new();
+/// map.insert("port".into(), LocatedValue {
+///     value: Value::Int(8080),
+///     location: Location::at("file", "", None, None, None),
+/// });
+/// let text = unparse(&source, Value::Map(map)).unwrap();
+/// assert_eq!(text, "{\n  \"port\": 8080\n}");
+/// ```
+pub fn unparse<V: AsRef<Value>>(
+    _source: &Source,
+    value: V,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    let mut out = String::new();
+    write_json(&mut out, value.as_ref(), 0)?;
+    Ok(out)
+}
+
+fn write_json(
+    out: &mut String,
+    value: &Value,
+    indent: usize,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    match value {
+        Value::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+        Value::Int(value) => out.push_str(&value.to_string()),
+        Value::Float(value) => {
+            if !value.is_finite() {
+                return Err(format!("cannot serialize non-finite float {value} as JSON").into());
+            }
+            out.push_str(&format!("{value:?}"));
+        }
+        Value::String(value) => write_json_string(out, value),
+        Value::List(values) => {
+            if values.is_empty() {
+                out.push_str("[]");
+                return Ok(());
+            }
+            out.push_str("[\n");
+            for (index, item) in values.iter().enumerate() {
+                push_indent(out, indent + 1);
+                write_json(out, &item.value, indent + 1)?;
+                if index + 1 < values.len() {
+                    out.push(',');
+                }
+                out.push('\n');
+            }
+            push_indent(out, indent);
+            out.push(']');
+        }
+        Value::Map(map) => {
+            let entries = map.entries();
+            if entries.is_empty() {
+                out.push_str("{}");
+                return Ok(());
+            }
+            out.push_str("{\n");
+            for (index, (key, item)) in entries.iter().enumerate() {
+                push_indent(out, indent + 1);
+                write_json_string(out, key);
+                out.push_str(": ");
+                write_json(out, &item.value, indent + 1)?;
+                if index + 1 < entries.len() {
+                    out.push(',');
+                }
+                out.push('\n');
+            }
+            push_indent(out, indent);
+            out.push('}');
+        }
+    }
+    Ok(())
+}
+
+fn push_indent(out: &mut String, indent: usize) {
+    for _ in 0..indent {
+        out.push_str("  ");
+    }
+}
+
+fn write_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            control if (control as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", control as u32));
+            }
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+}
+
 fn convert_value(
     source: &str,
     resource: &str,
@@ -272,6 +380,38 @@ mod tests {
             .with_resource(resource)
             .build()
             .unwrap()
+    }
+
+    fn loc(value: Value) -> LocatedValue {
+        LocatedValue {
+            value,
+            location: Location::at("file", "test", None, None, None),
+        }
+    }
+
+    #[test]
+    fn unparses_complex_json() {
+        let mut nested = Map::new();
+        nested.insert("key".into(), loc(Value::String("va\"lue".into())));
+        let mut map = Map::new();
+        map.insert("name".into(), loc(Value::String("tanzim".into())));
+        map.insert("port".into(), loc(Value::Int(8080)));
+        map.insert("ratio".into(), loc(Value::Float(0.5)));
+        map.insert("debug".into(), loc(Value::Bool(true)));
+        map.insert(
+            "tags".into(),
+            loc(Value::List(vec![
+                loc(Value::String("a".into())),
+                loc(Value::String("b".into())),
+            ])),
+        );
+        map.insert("nested".into(), loc(Value::Map(nested)));
+
+        let text = unparse(&file_source("out.json"), Value::Map(map)).unwrap();
+        assert_eq!(
+            text,
+            "{\n  \"name\": \"tanzim\",\n  \"port\": 8080,\n  \"ratio\": 0.5,\n  \"debug\": true,\n  \"tags\": [\n    \"a\",\n    \"b\"\n  ],\n  \"nested\": {\n    \"key\": \"va\\\"lue\"\n  }\n}"
+        );
     }
 
     #[test]

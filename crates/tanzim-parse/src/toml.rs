@@ -36,7 +36,7 @@ use crate::span::{char_count, is_single_line, line_column};
 use crate::{Parse, Source};
 use cfg_if::cfg_if;
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
-use toml_edit::{ImDocument, Item, Table, Value as TomlValue};
+use toml_edit::{Array, DocumentMut, ImDocument, InlineTable, Item, Table, Value as TomlValue};
 
 /// Parser for the `toml` format: TOML into a source-located value tree.
 ///
@@ -135,6 +135,88 @@ impl Parse for Toml {
         match std::str::from_utf8(bytes) {
             Ok(text) => Some(ImDocument::parse(text.to_string()).is_ok()),
             Err(_) => Some(false),
+        }
+    }
+}
+
+/// Serialize a [`Value`] map into TOML.
+///
+/// Accepts a [`Value`], `&Value`, [`LocatedValue`], or `&LocatedValue`; the root must be a
+/// [`Value::Map`], since a TOML document is a table. Nested maps under a key become
+/// `[table]` sections; maps inside a list become inline tables. `source` is accepted for
+/// signature symmetry with [`Parse::parse`] but is unused here.
+///
+/// ```
+/// use tanzim_parse::toml::unparse;
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{Map, LocatedValue, Location, Value};
+///
+/// let source = SourceBuilder::new().with_source("file").build().unwrap();
+/// let mut map = Map::new();
+/// map.insert("port".into(), LocatedValue {
+///     value: Value::Int(8080),
+///     location: Location::at("file", "", None, None, None),
+/// });
+/// assert_eq!(unparse(&source, Value::Map(map)).unwrap(), "port = 8080\n");
+/// ```
+pub fn unparse<V: AsRef<Value>>(
+    _source: &Source,
+    value: V,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    let value = value.as_ref();
+    let map = match value.as_map() {
+        Some(map) => map,
+        None => {
+            return Err(format!("toml root must be a map, found {}", value.type_name()).into());
+        }
+    };
+    let mut document = DocumentMut::new();
+    for (key, item) in map.entries() {
+        let converted = to_toml_item(&item.value)?;
+        document.as_table_mut().insert(key, converted);
+    }
+    Ok(document.to_string())
+}
+
+fn to_toml_item(value: &Value) -> Result<Item, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    match value {
+        Value::Map(map) => {
+            let mut table = Table::new();
+            for (key, item) in map.entries() {
+                table.insert(key, to_toml_item(&item.value)?);
+            }
+            Ok(Item::Table(table))
+        }
+        other => Ok(Item::Value(to_toml_value(other)?)),
+    }
+}
+
+fn to_toml_value(
+    value: &Value,
+) -> Result<TomlValue, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    match value {
+        Value::Bool(value) => Ok((*value).into()),
+        Value::Int(value) => Ok((*value as i64).into()),
+        Value::Float(value) => {
+            if !value.is_finite() {
+                return Err(format!("cannot serialize non-finite float {value} as TOML").into());
+            }
+            Ok((*value).into())
+        }
+        Value::String(value) => Ok(value.clone().into()),
+        Value::List(items) => {
+            let mut array = Array::new();
+            for item in items {
+                array.push(to_toml_value(&item.value)?);
+            }
+            Ok(TomlValue::Array(array))
+        }
+        Value::Map(map) => {
+            let mut table = InlineTable::new();
+            for (key, item) in map.entries() {
+                table.insert(key, to_toml_value(&item.value)?);
+            }
+            Ok(TomlValue::InlineTable(table))
         }
     }
 }
@@ -351,6 +433,58 @@ mod tests {
             .with_resource(resource)
             .build()
             .unwrap()
+    }
+
+    fn loc(value: Value) -> LocatedValue {
+        LocatedValue {
+            value,
+            location: Location::at("file", "test", None, None, None),
+        }
+    }
+
+    #[test]
+    fn unparses_complex_toml_round_trip() {
+        let mut nested = Map::new();
+        nested.insert("key".into(), loc(Value::String("value".into())));
+        let mut map = Map::new();
+        map.insert("name".into(), loc(Value::String("tanzim".into())));
+        map.insert("port".into(), loc(Value::Int(8080)));
+        map.insert("ratio".into(), loc(Value::Float(0.5)));
+        map.insert("debug".into(), loc(Value::Bool(true)));
+        map.insert(
+            "tags".into(),
+            loc(Value::List(vec![
+                loc(Value::String("a".into())),
+                loc(Value::String("b".into())),
+            ])),
+        );
+        map.insert("nested".into(), loc(Value::Map(nested)));
+
+        let text = unparse(&file_source("out.toml"), Value::Map(map)).unwrap();
+        let reparsed = Toml::new()
+            .parse(&file_source("out.toml"), text.as_bytes())
+            .unwrap();
+        let map = reparsed.value.as_map().unwrap();
+        assert_eq!(
+            map.get("name").unwrap().value.as_string().unwrap(),
+            "tanzim"
+        );
+        assert_eq!(map.get("port").unwrap().value.as_int().unwrap(), 8080);
+        assert_eq!(map.get("ratio").unwrap().value.as_float().unwrap(), 0.5);
+        assert!(map.get("debug").unwrap().value.as_bool().unwrap());
+        let tags = map.get("tags").unwrap().value.as_list().unwrap();
+        assert_eq!(tags[0].value.as_string().unwrap(), "a");
+        assert_eq!(tags[1].value.as_string().unwrap(), "b");
+        let nested = map.get("nested").unwrap().value.as_map().unwrap();
+        assert_eq!(
+            nested.get("key").unwrap().value.as_string().unwrap(),
+            "value"
+        );
+    }
+
+    #[test]
+    fn unparse_non_map_root_is_error() {
+        assert!(unparse(&file_source("out.toml"), Value::Int(1)).is_err());
     }
 
     #[test]
