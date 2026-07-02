@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tanzim::{
-    ConfigBuilder, Schemas,
     loader::{env::Env, file::File},
     merge::DeepMerge,
+    multi::{PipelineMultiBuilder, Schemas},
     parser::{env::Env as EnvParser, json::Json, toml::Toml, yaml::Yaml},
     validate::SchemaValue,
 };
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut builder = ConfigBuilder::new()
+    let mut builder = PipelineMultiBuilder::new()
         .with_loader(Env::new())
         .with_loader(File::new())
         .with_parser(EnvParser::new())
@@ -51,8 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder = builder.with_source(source_str.as_str())?;
     }
 
-    // run() now also validates (and coerces) the merged output against the schemas.
-    let merged = match builder.build().run() {
+    let merged = match builder.build()?.run() {
         Ok(merged) => merged,
         Err(error) => {
             eprintln!("Error: {error:#}");
@@ -61,14 +60,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("Merged configuration ({} entries):", merged.len());
-    let mut keys: Vec<&String> = merged.keys().collect();
-    keys.sort();
+    let mut keys: Vec<&Option<String>> = merged.keys().collect();
+    keys.sort_by(|a, b| match (a, b) {
+        (None, None) => std::cmp::Ordering::Equal,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (Some(a), Some(b)) => a.cmp(b),
+    });
     for key in keys {
         let (sources, value) = &merged[key];
-        let display = if key.is_empty() {
-            "(unnamed)"
-        } else {
-            key.as_str()
+        let display = match key {
+            None => "(unnamed)",
+            Some(name) => name.as_str(),
         };
         let source_list = {
             let mut s = String::new();
@@ -101,7 +104,7 @@ fn load_schemas() -> Result<Schemas, Box<dyn std::error::Error>> {
 
     let mut schemas = Schemas::new();
     for (name, document) in documents {
-        schemas.insert(name, document.into_value());
+        schemas.insert(Some(name), document.into_value());
     }
     Ok(schemas)
 }

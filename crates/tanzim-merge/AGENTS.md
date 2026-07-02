@@ -5,16 +5,16 @@ Third stage of the pipeline: groups parsed payloads by entry name and combines t
 ## Key types
 
 - `Merge` — trait to implement for a custom merge strategy. Takes a flat list of `(Payload, LocatedValue)` and returns `Merged` grouped by entry name.
-- `Merged` — public type alias for `HashMap<String, (Vec<Payload>, LocatedValue)>`. Use it instead of writing the raw type out (keeps signatures clear and avoids `clippy::type_complexity` without `#[allow]`).
+- `Merged` — public type alias for `HashMap<Option<String>, (Vec<Payload>, LocatedValue)>`. Use it instead of writing the raw type out (keeps signatures clear and avoids `clippy::type_complexity` without `#[allow]`).
 - `LastWins` — built-in: for each name, the last-seen value replaces any previous.
 - `DeepMerge` — built-in: maps with the same name are merged recursively; the later value wins at each leaf. Location is preserved from the overlay value.
 - `Error` — merge error, wraps `Box<dyn Error + Send + Sync>`.
 
 ## Grouping key
 
-`Payload::maybe_name` (`Option<String>`) maps to a `String` key:
-- `Some("foo")` → key `"foo"`
-- `None` → key `""` (all unnamed payloads share this bucket)
+`Payload::maybe_name` (`Option<String>`) maps directly to the `Merged` key:
+- `Some("foo")` → key `Some("foo")`
+- `None` → key `None` (all unnamed payloads share this bucket)
 
 ## src/ layout
 

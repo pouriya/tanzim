@@ -1,7 +1,7 @@
 use tanzim::{
-    ConfigBuilder,
     loader::{env::Env as EnvLoader, file::File as FileLoader},
     merge::DeepMerge,
+    multi::PipelineMultiBuilder,
     parser::{env::Env as EnvParser, json::Json, toml::Toml, yaml::Yaml},
 };
 
@@ -37,7 +37,7 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         .join("tests")
         .join("etc");
 
-    let config = ConfigBuilder::new()
+    let config = PipelineMultiBuilder::new()
         .with_source("env(prefix=APP_NAME,separator=__)")?
         .with_source(format!("file:{}", etc.display()))?
         .with_loader(EnvLoader::new())
@@ -47,16 +47,16 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         .with_parser(Yaml::new())
         .with_parser(Toml::new())
         .with_merger(DeepMerge)
-        .build();
+        .build()?;
 
     let merged = config.run()?;
 
     assert!(
-        merged.contains_key("foo"),
+        merged.contains_key(&Some("foo".to_string())),
         "expected 'foo' entry in merged config"
     );
 
-    if let Some((sources, value)) = merged.get("foo") {
+    if let Some((sources, value)) = merged.get(&Some("foo".to_string())) {
         assert!(!sources.is_empty());
         assert!(
             value.value.as_map().is_some(),
@@ -65,7 +65,15 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for (name, (sources, value)) in &merged {
-        println!("{name} (from {} source(s)): {}", sources.len(), value.value);
+        let display = match name {
+            None => "(unnamed)",
+            Some(n) => n.as_str(),
+        };
+        println!(
+            "{display} (from {} source(s)): {}",
+            sources.len(),
+            value.value
+        );
     }
 
     Ok(())

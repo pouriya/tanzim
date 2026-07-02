@@ -4,7 +4,7 @@ Full-pipeline CLI example for `tanzim`.
 
 Reads source strings from command-line arguments, runs load → parse → merge → validate, and
 prints the merged configuration tree. Demonstrates env-var and file sources together, and
-loads `schema.yml` with `serde_yaml` into `Schemas`, handing it to `ConfigBuilder::with_schemas`
+loads `schema.yml` with `serde_yaml` into `Schemas`, handing it to `PipelineMultiBuilder::with_schemas`
 so the merged output is validated (and coerced) after the merge stage.
 
 Run via:

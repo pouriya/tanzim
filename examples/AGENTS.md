@@ -4,7 +4,7 @@ Runnable examples for the `tanzim` facade crate (declared in `crates/tanzim/Carg
 
 | Directory | Example | Description |
 |-----------|---------|-------------|
-| `full/` | `full` | CLI: pass source strings as args, build a `Config` with `ConfigBuilder`, call `run()`, print merged output |
+| `full/` | `full` | CLI: pass source strings as args, build a `PipelineMulti` with `PipelineMultiBuilder`, call `run()`, print merged output |
 
 Run with:
 ```bash

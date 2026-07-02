@@ -12,7 +12,7 @@ Configuration pipeline: **load → parse → merge → validate**.
 | `tanzim-parse` | Parsing bytes into `LocatedValue` trees (`Parse` trait) |
 | `tanzim-merge` | Merging parsed values by entry name (`Merge`, `LastWins`, `DeepMerge`, `Merged`) |
 | `tanzim-validate` | Validating/coercing values (`Validator` trait, concrete validators, `schema` feature for building validators from data) |
-| `tanzim` | Facade: `ConfigBuilder` / `Config` that wires the full pipeline |
+| `tanzim` | Facade: `single::PipelineSingle` / `multi::PipelineMulti` that wire the full pipeline |
 
 ## Pipeline
 
@@ -23,11 +23,11 @@ Source strings
   → Merge::merge(parsed_list)  → HashMap<name, (Vec<Payload>, LocatedValue)>   (the `Merged` alias)
 ```
 
-`Config::run()` executes all three stages. Each stage can also be called individually via `Config::load()`, `Config::parse()`, and `Config::merge()`.
+`PipelineSingle::run()` and `PipelineMulti::run()` execute all stages. Each stage can also be called individually via `load()`, `parse()`, `merge()` (and `unify()` for single).
 
 ## Key conventions
 
-- `Payload::maybe_name` is `Option<String>`: `None` means unnamed; all unnamed payloads share the `""` key in the merger.
+- `Payload::maybe_name` is `Option<String>`: `None` means unnamed; all unnamed payloads share the `None` key in the merger.
 - `Payload::maybe_format` is `Option<String>`: `None` means format is auto-detected by parsers via `is_format_supported`.
 - Sources with `ignore_errors = true` swallow load and parse failures silently.
 
@@ -42,7 +42,7 @@ These apply to all crates, not just the pipeline:
 
 ## Lint & style conventions
 
-- **No `#[allow(...)]` anywhere.** Fix the root cause instead of suppressing a lint.
+- **No `#[allow(...)]` anywhere** — fix the root cause instead of suppressing a lint. **Exception:** `#[allow(unused_mut)]` is permitted on functions whose `mut` binding is needed only when certain cargo features are active (`#[cfg(feature = "...")]`). In that case the mutability is real but conditionally compiled away, so `#[allow(unused_mut)]` is the correct fix. Do not use it for any other lint or any other reason.
 - **`make clippy` is the gate** — it runs `cargo clippy --workspace --all-features --all-targets --no-deps -- -D warnings`, so warnings (including in tests and examples) fail the build.
 - **`clippy::type_complexity`** — extract a named `pub type` alias (e.g. `Merged`, `Parsed`, `LoaderFn`) rather than spelling out nested generic types in signatures.
 - **`clippy::result_large_err`** — keep error enums small enough to return by value without `Box`. Shrink fields (e.g. `Option<NonZeroU32>` instead of `Option<usize>`) instead of boxing the error or allowing the lint.

@@ -5,15 +5,15 @@ Third stage of the tanzim pipeline: groups parsed payloads by entry name and mer
 ## The `Merge` trait
 
 Implement [`Merge`] to define a custom merge strategy. The output is
-[`Merged`] — a `HashMap<String, (Vec<Payload>, LocatedValue)>` keyed by entry
+[`Merged`] — a `HashMap<Option<String>, (Vec<Payload>, LocatedValue)>` keyed by entry
 name, where the `Vec<Payload>` records which payloads contributed to each merged
 value.
 
 ## Grouping key
 
 `Payload::maybe_name` determines the map key:
-- `Some("foo")` → key `"foo"`
-- `None` → key `""` (all unnamed payloads share this bucket)
+- `Some("foo")` → key `Some("foo")`
+- `None` → key `None` (all unnamed payloads share this bucket)
 
 ## Built-in strategies
 
@@ -52,7 +52,7 @@ let list = vec![
 
 // LastWins: second entry fully replaces the first
 let merged = LastWins.merge(&list).unwrap();
-let db = merged.get("db").unwrap();
+let db = merged.get(&Some("db".to_string())).unwrap();
 let host = db.1.value.as_map().unwrap().get("host").unwrap();
 assert_eq!(host.value.as_string().unwrap(), "replica");
 ```
