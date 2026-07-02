@@ -376,14 +376,14 @@ impl Config {
         let mut result = Vec::new();
         for payload in loaded {
             let config_source = &payload.source;
-            let resource = match (&payload.maybe_name, &payload.maybe_format) {
-                (Some(name), Some(format)) => format!("{name}.{format}"),
-                _ => {
-                    let r = config_source.resource();
-                    if r.is_empty() {
-                        config_source.to_string()
-                    } else {
-                        r.to_string()
+            let resource = {
+                let r = config_source.resource();
+                if !r.is_empty() {
+                    r.to_string()
+                } else {
+                    match (&payload.maybe_name, &payload.maybe_format) {
+                        (Some(name), Some(format)) => format!("{name}.{format}"),
+                        _ => config_source.to_string(),
                     }
                 }
             };

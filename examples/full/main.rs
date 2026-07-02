@@ -82,8 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             s
         };
-        println!("  {display}  [{source_list}]");
-        println!("    {:#}", value.value);
+        println!("{display} [{source_list}]:\n{value:#}\n");
     }
 
     Ok(())

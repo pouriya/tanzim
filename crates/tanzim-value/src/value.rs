@@ -172,30 +172,16 @@ impl Map {
 
 impl Display for Map {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if f.alternate() {
-            writeln!(f, "{{")?;
-            for index in 0..self.entries.len() {
-                if index > 0 {
-                    writeln!(f, ",")?;
-                }
-                let (key, value) = &self.entries[index];
-                write!(f, "  {key:?}:")?;
-                writeln!(f)?;
-                write!(f, "  {value:#}")?;
+        let alternate = f.alternate();
+        let mut map = f.debug_map();
+        for (key, value) in &self.entries {
+            if alternate {
+                map.entry(key, &format_args!("{:#}", value));
+            } else {
+                map.entry(key, &format_args!("{}", value));
             }
-            writeln!(f)?;
-            write!(f, "}}")
-        } else {
-            write!(f, "{{")?;
-            for index in 0..self.entries.len() {
-                if index > 0 {
-                    write!(f, ", ")?;
-                }
-                let (key, value) = &self.entries[index];
-                write!(f, "{key:?}: {value}")?;
-            }
-            write!(f, "}}")
         }
+        map.finish()
     }
 }
 
@@ -223,8 +209,13 @@ pub struct LocatedValue {
 impl Display for LocatedValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if f.alternate() {
-            writeln!(f, "@{}", self.location)?;
-            write!(f, "{:#}", self.value)
+            let mut map = f.debug_map();
+            map.entry(&"value", &format_args!("{:#}", self.value));
+            map.entry(
+                &"location",
+                &format_args!("{:?}", self.location.to_string()),
+            );
+            map.finish()
         } else {
             write!(f, "{}", self.value)
         }
@@ -414,36 +405,18 @@ impl Display for Value {
             Self::Float(value) => write!(f, "{value}"),
             Self::String(value) => write!(f, "{value:?}"),
             Self::List(values) => {
-                if f.alternate() {
-                    writeln!(f, "[")?;
-                    for (index, value) in values.iter().enumerate() {
-                        if index > 0 {
-                            writeln!(f, ",")?;
-                        }
-                        write!(f, "  {value:#}")?;
+                let alternate = f.alternate();
+                let mut list = f.debug_list();
+                for value in values {
+                    if alternate {
+                        list.entry(&format_args!("{:#}", value));
+                    } else {
+                        list.entry(&format_args!("{}", value));
                     }
-                    writeln!(f)?;
-                    write!(f, "]")
-                } else {
-                    write!(f, "[")?;
-                    let mut first = true;
-                    for value in values {
-                        if !first {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{value}")?;
-                        first = false;
-                    }
-                    write!(f, "]")
                 }
+                list.finish()
             }
-            Self::Map(value) => {
-                if f.alternate() {
-                    write!(f, "{value:#}")
-                } else {
-                    write!(f, "{value}")
-                }
-            }
+            Self::Map(value) => Display::fmt(value, f),
         }
     }
 }
@@ -486,7 +459,10 @@ mod tests {
             location: Location::at("file", "config.yaml", Some(2), Some(5), None),
         };
         let message = format!("{value:#}");
-        assert!(message.starts_with("@file:config.yaml:2:5\n"));
-        assert!(message.contains("\"hello\""));
+        assert_eq!(
+            message,
+            "{\n    \"value\": \"hello\",\n    \"location\": \"file:config.yaml:2:5\",\n}"
+        );
+        assert!(!message.contains('@'));
     }
 }
