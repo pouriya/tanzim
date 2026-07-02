@@ -17,14 +17,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Verify build
+      - name: Verify
         run: make all
-
-      - name: Verify style
-        run: make check-style
-
-      - name: Verify clippy
-        run: make clippy
 
       # Requires Rust 1.90+ (workspace publishing). Crates already on crates.io
       # at their current version are skipped (members version independently
