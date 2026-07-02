@@ -1,0 +1,110 @@
+<svg width="820" height="956" viewBox="0 0 820 956" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="gSource" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#cbd5e1"/><stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="gLoad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7dd3fc"/><stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="gParse" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c4b5fd"/><stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="gMerge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fdba74"/><stop offset="1" stop-color="#fb923c"/>
+    </linearGradient>
+    <linearGradient id="gValidate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a63e7"/><stop offset="1" stop-color="#2540b8"/>
+    </linearGradient>
+    <linearGradient id="gConfig" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#86efac"/><stop offset="1" stop-color="#4ade80"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L9 5 L0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="820" height="956" fill="#fbfcfe"/>
+
+  <!-- Title -->
+  <text x="410" y="44" text-anchor="middle" font-size="27" font-weight="700" fill="#0f172a">Tanzim Configuration Pipeline</text>
+  <text x="410" y="68" text-anchor="middle" font-size="14" fill="#64748b">load anything · parse anything · merge intelligently · validate safely</text>
+
+  <!-- Sources (plain, centered) -->
+  <text x="90" y="98" font-size="12" font-weight="700" letter-spacing="1.5" fill="#94a3b8">SOURCES</text>
+  <g font-family="'SF Mono','Menlo','Consolas','Liberation Mono',monospace" font-size="14.5" fill="#475569">
+    <text x="90" y="124">env(prefix=APP_)</text>
+    <text x="90" y="148">file:/etc/config.d/</text>
+    <text x="90" y="172">http(timeout=7s):https://cfg.tld/app.yml</text>
+  </g>
+
+  <line x1="410" y1="184" x2="410" y2="212" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="424" y="201" font-size="11.5" font-style="italic" fill="#64748b">read specs</text>
+
+  <!-- Box: Source -->
+  <g filter="url(#shadow)"><rect x="60" y="214" width="700" height="68" rx="13" fill="url(#gSource)"/></g>
+  <text x="90" y="242" font-size="17" font-weight="700" fill="#0f172a">Source</text>
+  <text x="410" y="252" text-anchor="middle" font-size="13.5" fill="#334155">parse source format &amp; create with builder pattern</text>
+  <text x="730" y="275" text-anchor="end" font-size="11.5" fill="#475569" fill-opacity="0.85">tanzim-source</text>
+
+  <line x1="410" y1="286" x2="410" y2="312" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="424" y="302" font-size="11.5" font-style="italic" fill="#64748b">fetch bytes</text>
+
+  <!-- Box: Loader -->
+  <g filter="url(#shadow)"><rect x="60" y="314" width="700" height="68" rx="13" fill="url(#gLoad)"/></g>
+  <text x="90" y="342" font-size="17" font-weight="700" fill="#0c2a3e">Loader</text>
+  <text x="410" y="342" text-anchor="middle" font-size="13.5" fill="#0f3a52">load configurations from anywhere</text>
+  <text x="410" y="366" text-anchor="middle" font-size="13" fill="#0f3a52">env · file · directory · http · custom</text>
+  <text x="730" y="375" text-anchor="end" font-size="11.5" fill="#0f3a52" fill-opacity="0.85">tanzim-load</text>
+
+  <line x1="410" y1="386" x2="410" y2="412" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="424" y="402" font-size="11.5" font-style="italic" fill="#64748b">decode</text>
+
+  <!-- Box: Parser -->
+  <g filter="url(#shadow)"><rect x="60" y="414" width="700" height="68" rx="13" fill="url(#gParse)"/></g>
+  <text x="90" y="442" font-size="17" font-weight="700" fill="#2e1065">Parser</text>
+  <text x="410" y="442" text-anchor="middle" font-size="13.5" fill="#4c1d95">parse anything</text>
+  <text x="410" y="466" text-anchor="middle" font-size="13" fill="#4c1d95">env · yaml · toml · json · custom</text>
+  <text x="730" y="475" text-anchor="end" font-size="11.5" fill="#4c1d95" fill-opacity="0.85">tanzim-parse</text>
+
+  <line x1="410" y1="486" x2="410" y2="512" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="424" y="502" font-size="11.5" font-style="italic" fill="#64748b">combine</text>
+
+  <!-- Box: Merger -->
+  <g filter="url(#shadow)"><rect x="60" y="514" width="700" height="68" rx="13" fill="url(#gMerge)"/></g>
+  <text x="90" y="542" font-size="17" font-weight="700" fill="#7c2d12">Merger</text>
+  <text x="410" y="542" text-anchor="middle" font-size="13.5" fill="#9a3412">merge intelligently</text>
+  <text x="410" y="566" text-anchor="middle" font-size="13" fill="#9a3412">last-wins · deep-merge · custom</text>
+  <text x="730" y="575" text-anchor="end" font-size="11.5" fill="#9a3412" fill-opacity="0.85">tanzim-merge</text>
+
+  <line x1="410" y1="586" x2="410" y2="612" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="424" y="602" font-size="11.5" font-style="italic" fill="#64748b">check &amp; coerce</text>
+
+  <!-- Box: Validator (lighter navy) — validator showcase -->
+  <g filter="url(#shadow)"><rect x="60" y="614" width="700" height="192" rx="13" fill="url(#gValidate)"/></g>
+  <text x="90" y="642" font-size="17" font-weight="700" fill="#ffffff">Validator</text>
+  <text x="410" y="642" text-anchor="middle" font-size="13.5" fill="#ffffff" fill-opacity="0.85">validate safely</text>
+  <line x1="90" y1="655" x2="730" y2="655" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1"/>
+  <text x="410" y="680" text-anchor="middle" font-size="13" font-weight="700" fill="#c7d2fe">Schema validation — build validators from your data</text>
+  <g text-anchor="middle" font-size="12.5" fill="#ffffff" fill-opacity="0.92">
+    <text x="410" y="702">bool · int · float · number · string · non-empty</text>
+    <text x="410" y="722">enum · percentage · regex · uuid · semver</text>
+    <text x="410" y="742">url · email · host · domain · ip · socket · port · cidr</text>
+    <text x="410" y="762">date · datetime · duration · bytesize · base64 · hex · path</text>
+    <text x="410" y="782">list · static-map · dynamic-map · either<tspan fill="#c7d2fe" font-weight="700">   ·   + custom</tspan></text>
+  </g>
+  <text x="730" y="799" text-anchor="end" font-size="11.5" fill="#ffffff" fill-opacity="0.7">tanzim-validate</text>
+
+  <line x1="410" y1="810" x2="410" y2="836" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="424" y="826" font-size="11.5" font-style="italic" fill="#64748b">validated</text>
+
+  <!-- Box: Config output (light green) -->
+  <g filter="url(#shadow)"><rect x="60" y="838" width="700" height="68" rx="13" fill="url(#gConfig)"/></g>
+  <text x="410" y="868" text-anchor="middle" font-size="18" font-weight="700" fill="#064e3b">Config</text>
+  <text x="410" y="890" text-anchor="middle" font-size="13" fill="#065f46">one or more validated configurations — ready to use</text>
+
+  <!-- Hint -->
+  <text x="410" y="934" text-anchor="middle" font-size="12.5" font-style="italic" fill="#64748b">Every stage's errors carry the exact source &amp; location — for ergonomic, traceable errors.</text>
+</svg>
