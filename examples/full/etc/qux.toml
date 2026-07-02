@@ -1,0 +1,4 @@
+[https]
+follow_redirects = false
+insecure = true
+retries = 3

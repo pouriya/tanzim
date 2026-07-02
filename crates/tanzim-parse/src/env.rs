@@ -8,8 +8,9 @@
 //!   leading `export ` is stripped.
 //! - Each remaining `KEY=VALUE` line becomes a string entry. Values may be double-quoted (with
 //!   `\n`, `\r`, `\t`, `\"`, `\\` escapes), single-quoted (taken literally), or unquoted (used
-//!   verbatim). The result is always a flat [`Value::Map`] of
-//!   [`Value::String`]s — env input has no nested or typed values.
+//!   verbatim). The result is always a [`Value::Map`] of [`Value::String`]s.
+//! - When the source carries a `separator` option, keys are split on that separator and nested
+//!   into sub-maps (e.g. `BAR__BAZ=val` with `separator=__` becomes `{bar: {baz: "val"}}`).
 //! - Each key carries its line/column [`Location`]; for single-line input the line/column are
 //!   omitted. The root map has no line.
 //! - Non-UTF-8 input fails with [`Error::InvalidUtf8`]; there are
@@ -20,30 +21,46 @@
 //!
 //! ```
 //! use tanzim_parse::{Parse, env::Env};
+//! use tanzim_source::SourceBuilder;
 //!
-//! let value = Env::new().parse("file", ".env", b"SERVER_HOST=\"127.0.0.1\"\n").unwrap();
+//! let source = SourceBuilder::new()
+//!     .with_source("file")
+//!     .with_resource(".env")
+//!     .build()
+//!     .unwrap();
+//! let value = Env::new()
+//!     .parse(&source, b"SERVER_HOST=\"127.0.0.1\"\n")
+//!     .unwrap();
 //! assert_eq!(
-//!     value.value.as_map().unwrap().get("SERVER_HOST").unwrap().value.as_string().unwrap(),
+//!     value.value.as_map().unwrap().get("server_host").unwrap().value.as_string().unwrap(),
 //!     "127.0.0.1"
 //! );
 //! ```
 
-use crate::Parse;
 use crate::span::{is_single_line, line_column_from_line};
+use crate::{Parse, Source};
 use cfg_if::cfg_if;
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 
-/// Parser for the `env` format: dotenv / env-file `KEY=VALUE` lines into a flat string map.
+/// Parser for the `env` format: dotenv / env-file `KEY=VALUE` lines into a string map.
 ///
 /// Skips blank lines and `#` comments, supports quoted values, and records each key's line number
-/// as a [`Location`]. The result is always a map of strings. Stateless — construct with
-/// [`Env::new`].
+/// as a [`Location`]. When the source carries a `separator` option, keys are nested into
+/// sub-maps. Stateless — construct with [`Env::new`].
 ///
 /// ```
 /// use tanzim_parse::{Parse, env::Env};
+/// use tanzim_source::SourceBuilder;
 ///
-/// let value = Env::new().parse("file", ".env", b"# comment\nPORT=8080\n").unwrap();
-/// let port = value.value.as_map().unwrap().get("PORT").unwrap();
+/// let source = SourceBuilder::new()
+///     .with_source("file")
+///     .with_resource(".env")
+///     .build()
+///     .unwrap();
+/// let value = Env::new()
+///     .parse(&source, b"# comment\nPORT=8080\n")
+///     .unwrap();
+/// let port = value.value.as_map().unwrap().get("port").unwrap();
 /// assert_eq!(port.value.as_string().unwrap(), "8080");
 /// ```
 #[derive(Clone, Copy, Default)]
@@ -65,19 +82,69 @@ impl Parse for Env {
         vec!["env".into()]
     }
 
-    fn parse(&self, source: &str, resource: &str, bytes: &[u8]) -> Result<LocatedValue, Error> {
-        cfg_if! {
-            if #[cfg(feature = "tracing")] {
-                tracing::debug!(msg = "Parsing env-format configuration", source = source, resource = resource, bytes = bytes.len());
-            } else if #[cfg(feature = "logging")] {
-                log::debug!("msg=\"Parsing env-format configuration\" source={source} resource={resource} bytes={}", bytes.len());
+    fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        fn insert_nested(map: &mut Map, parts: &[String], value: LocatedValue) {
+            if parts.is_empty() {
+                return;
+            }
+            if parts.len() == 1 {
+                map.insert(parts[0].clone(), value);
+                return;
+            }
+            let head = parts[0].clone();
+            let rest = &parts[1..];
+            match map.get_mut(&head) {
+                Some(existing) => {
+                    if let Value::Map(ref mut inner) = existing.value {
+                        insert_nested(inner, rest, value);
+                        return;
+                    }
+                    let loc = value.location.clone();
+                    let mut inner = Map::new();
+                    insert_nested(&mut inner, rest, value);
+                    existing.value = Value::Map(inner);
+                    existing.location = loc;
+                }
+                None => {
+                    let loc = value.location.clone();
+                    let mut inner = Map::new();
+                    insert_nested(&mut inner, rest, value);
+                    map.insert(
+                        head,
+                        LocatedValue {
+                            value: Value::Map(inner),
+                            location: loc,
+                        },
+                    );
+                }
             }
         }
+
+        let source_name = source.source();
+        let resource = source.resource();
+        cfg_if! {
+            if #[cfg(feature = "tracing")] {
+                tracing::debug!(msg = "Parsing env-format configuration", source = source_name, resource = resource, bytes = bytes.len());
+            } else if #[cfg(feature = "logging")] {
+                log::debug!("msg=\"Parsing env-format configuration\" source={source_name} resource={resource} bytes={}", bytes.len());
+            }
+        }
+
+        let separator = match source.options().get("separator") {
+            None => None,
+            Some(value) => value.as_string().cloned(),
+        };
+
+        let lowercase = match source.options().get("lowercase") {
+            None => true,
+            Some(value) => value.as_bool().unwrap_or(true),
+        };
+
         let text = match std::str::from_utf8(bytes) {
             Ok(value) => value,
             Err(_) => {
                 return Err(Error::InvalidUtf8 {
-                    location: Location::at(source, resource, None, None, None),
+                    location: Location::at(source_name, resource, None, None, None),
                 });
             }
         };
@@ -151,17 +218,48 @@ impl Parse for Env {
                             value_part.to_string()
                         };
                         let location = if single_line {
-                            Location::at(source, resource, None, None, None)
+                            Location::at(source_name, resource, None, None, None)
                         } else {
-                            Location::at(source, resource, Some(line_number), Some(column), None)
+                            Location::at(
+                                source_name,
+                                resource,
+                                Some(line_number),
+                                Some(column),
+                                None,
+                            )
                         };
-                        map.insert(
-                            key.to_string(),
-                            LocatedValue {
-                                value: Value::String(value),
-                                location,
-                            },
-                        );
+                        let final_key = if lowercase {
+                            key.to_lowercase()
+                        } else {
+                            key.to_string()
+                        };
+                        let located_value = LocatedValue {
+                            value: Value::String(value),
+                            location,
+                        };
+                        match &separator {
+                            None => {
+                                map.insert(final_key, located_value);
+                            }
+                            Some(sep) => {
+                                let mut part_list: Vec<String> = Vec::new();
+                                let mut remaining = final_key.as_str();
+                                loop {
+                                    if let Some(index) = remaining.find(sep.as_str()) {
+                                        part_list.push(remaining[..index].to_string());
+                                        remaining = &remaining[index + sep.len()..];
+                                    } else {
+                                        part_list.push(remaining.to_string());
+                                        break;
+                                    }
+                                }
+                                if part_list.len() == 1 {
+                                    map.insert(part_list[0].clone(), located_value);
+                                } else {
+                                    insert_nested(&mut map, &part_list, located_value);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -172,14 +270,14 @@ impl Parse for Env {
         }
         cfg_if! {
             if #[cfg(feature = "tracing")] {
-                tracing::trace!(msg = "Parsed env-format configuration", source = source, resource = resource, key_count = map.len());
+                tracing::trace!(msg = "Parsed env-format configuration", source = source_name, resource = resource, key_count = map.len());
             } else if #[cfg(feature = "logging")] {
-                log::trace!("msg=\"Parsed env-format configuration\" source={source} resource={resource} key_count={}", map.len());
+                log::trace!("msg=\"Parsed env-format configuration\" source={source_name} resource={resource} key_count={}", map.len());
             }
         }
         Ok(LocatedValue {
             value: Value::Map(map),
-            location: Location::at(source, resource, None, None, None),
+            location: Location::at(source_name, resource, None, None, None),
         })
     }
 
@@ -198,27 +296,48 @@ impl Parse for Env {
 #[cfg(all(test, feature = "env"))]
 mod tests {
     use super::*;
+    use tanzim_source::{OptionValue, SourceBuilder};
+
+    fn file_source(resource: &str) -> Source {
+        SourceBuilder::new()
+            .with_source("file")
+            .with_resource(resource)
+            .build()
+            .unwrap()
+    }
 
     #[test]
     fn parses_dotenv_contents() {
-        let parsed = Env::new()
-            .parse("file", ".env", b"FOO=bar\nBAZ=qux\n")
-            .unwrap();
+        let source = file_source(".env");
+        let parsed = Env::new().parse(&source, b"FOO=bar\nBAZ=qux\n").unwrap();
         let map = parsed.value.as_map().unwrap();
-        assert_eq!(map.get("FOO").unwrap().value.as_string().unwrap(), "bar");
-        assert_eq!(map.get("BAZ").unwrap().value.as_string().unwrap(), "qux");
+        assert_eq!(map.get("foo").unwrap().value.as_string().unwrap(), "bar");
+        assert_eq!(map.get("baz").unwrap().value.as_string().unwrap(), "qux");
     }
 
     #[test]
     fn parses_env_with_line_numbers() {
-        let root = Env::new()
-            .parse("file", ".env", b"FOO=bar\nBAZ=qux\n")
-            .unwrap();
+        let source = file_source(".env");
+        let root = Env::new().parse(&source, b"FOO=bar\nBAZ=qux\n").unwrap();
         let map = root.value.as_map().unwrap();
-        let foo = map.get("FOO").unwrap();
+        let foo = map.get("foo").unwrap();
         assert_eq!(foo.value.as_string().unwrap(), "bar");
         assert_eq!(foo.location.line, std::num::NonZeroU32::new(1));
-        let baz = map.get("BAZ").unwrap();
+        let baz = map.get("baz").unwrap();
         assert_eq!(baz.location.line, std::num::NonZeroU32::new(2));
+    }
+
+    #[test]
+    fn parses_nested_keys_with_separator() {
+        let source = SourceBuilder::new()
+            .with_source("env")
+            .with_option("separator", OptionValue::String("__".into()))
+            .build()
+            .unwrap();
+        let parsed = Env::new().parse(&source, b"BAR__BAZ=val\n").unwrap();
+        let map = parsed.value.as_map().unwrap();
+        let bar = map.get("bar").unwrap();
+        let nested = bar.value.as_map().unwrap();
+        assert_eq!(nested.get("baz").unwrap().value.as_string().unwrap(), "val");
     }
 }

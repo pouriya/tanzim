@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+pub use tanzim_source::Source;
 pub use tanzim_value::{Error, LocatedValue, Value};
 
 pub mod closure;
@@ -21,8 +22,8 @@ pub mod yaml;
 ///
 /// # Contract
 ///
-/// - [`parse`](Parse::parse) returns one [`LocatedValue`] tree per payload. `source` is the
-///   source kind (e.g. `"file"`) and `resource` the path/identifier the bytes came from.
+/// - [`parse`](Parse::parse) returns one [`LocatedValue`] tree per payload. `source` carries the
+///   source kind (e.g. `"file"`), the resource path/identifier, and any loader options.
 /// - Every node in the tree — including the root — should carry a [`tanzim_value::Location`] that
 ///   points back to the source, resource, and line/column, so downstream error messages can show
 ///   users exactly where a bad value came from. Use [`tanzim_value::Location::at`] to build them.
@@ -59,8 +60,9 @@ pub mod yaml;
 /// # Example — custom CSV parser
 ///
 /// ```rust
-/// use tanzim_parse::{Parse, Error, LocatedValue, Value};
-/// use tanzim_value::{Location, Map};
+/// use tanzim_parse::{Parse, Source};
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///
 /// struct CsvParser;
 ///
@@ -70,29 +72,39 @@ pub mod yaml;
 ///     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool> {
 ///         Some(bytes.contains(&b','))
 ///     }
-///     fn parse(&self, source: &str, resource: &str, bytes: &[u8])
-///         -> Result<LocatedValue, Error>
-///     {
-///         let text = std::str::from_utf8(bytes).map_err(|_| Error::InvalidUtf8 {
-///             location: Location::at(source, resource, None, None, None),
-///         })?;
+///     fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+///         let source_name = source.source();
+///         let resource = source.resource();
+///         let text = match std::str::from_utf8(bytes) {
+///             Ok(value) => value,
+///             Err(_) => {
+///                 return Err(Error::InvalidUtf8 {
+///                     location: Location::at(source_name, resource, None, None, None),
+///                 });
+///             }
+///         };
 ///         let mut map = Map::new();
 ///         for (line_idx, line) in text.lines().enumerate() {
 ///             if let Some((key, val)) = line.split_once(',') {
-///                 let loc = Location::at(source, resource, Some(line_idx + 1), None, None);
+///                 let loc = Location::at(source_name, resource, Some(line_idx + 1), None, None);
 ///                 map.insert(key.trim().to_string(), LocatedValue {
 ///                     value: Value::String(val.trim().to_string()),
 ///                     location: loc,
 ///                 });
 ///             }
 ///         }
-///         let root_loc = Location::at(source, resource, None, None, None);
+///         let root_loc = Location::at(source_name, resource, None, None, None);
 ///         Ok(LocatedValue { value: Value::Map(map), location: root_loc })
 ///     }
 /// }
 ///
+/// let source = SourceBuilder::new()
+///     .with_source("file")
+///     .with_resource("config.csv")
+///     .build()
+///     .unwrap();
 /// let value = CsvParser
-///     .parse("file", "config.csv", b"host,127.0.0.1\nport,8080\n")
+///     .parse(&source, b"host,127.0.0.1\nport,8080\n")
 ///     .unwrap();
 ///
 /// let map = value.value.as_map().unwrap();
@@ -112,8 +124,9 @@ pub trait Parse {
     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool>;
     /// Parse `bytes` into a [`LocatedValue`] tree.
     ///
-    /// `source` is the source kind (e.g. `"file"`) and `resource` is the path or
-    /// identifier; both are used to populate [`tanzim_value::Location`] on every
-    /// node in the returned tree.
-    fn parse(&self, source: &str, resource: &str, bytes: &[u8]) -> Result<LocatedValue, Error>;
+    /// `source` carries the source kind (e.g. `"file"`), the resource path or
+    /// identifier, and any loader options. Use [`Source::source`], [`Source::resource`],
+    /// and [`Source::options`] to access them. Every node in the returned tree should
+    /// carry a [`tanzim_value::Location`] built from those values.
+    fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error>;
 }

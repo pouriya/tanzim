@@ -18,16 +18,22 @@
 //!
 //! ```
 //! use tanzim_parse::{Parse, yaml::Yaml};
+//! use tanzim_source::SourceBuilder;
 //!
-//! let value = Yaml::new().parse("file", "config.yaml", b"host: 127.0.0.1\n").unwrap();
+//! let source = SourceBuilder::new()
+//!     .with_source("file")
+//!     .with_resource("config.yaml")
+//!     .build()
+//!     .unwrap();
+//! let value = Yaml::new().parse(&source, b"host: 127.0.0.1\n").unwrap();
 //! assert_eq!(
 //!     value.value.as_map().unwrap().get("host").unwrap().value.as_string().unwrap(),
 //!     "127.0.0.1"
 //! );
 //! ```
 
-use crate::Parse;
 use crate::span::is_single_line;
+use crate::{Parse, Source};
 use cfg_if::cfg_if;
 use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
@@ -40,8 +46,14 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///
 /// ```
 /// use tanzim_parse::{Parse, yaml::Yaml};
+/// use tanzim_source::SourceBuilder;
 ///
-/// let value = Yaml::new().parse("file", "config.yaml", b"port: 8080\n").unwrap();
+/// let source = SourceBuilder::new()
+///     .with_source("file")
+///     .with_resource("config.yaml")
+///     .build()
+///     .unwrap();
+/// let value = Yaml::new().parse(&source, b"port: 8080\n").unwrap();
 /// let port = value.value.as_map().unwrap().get("port").unwrap();
 /// assert_eq!(port.value.as_int().unwrap(), 8080);
 /// ```
@@ -64,7 +76,9 @@ impl Parse for Yaml {
         vec!["yml".into(), "yaml".into()]
     }
 
-    fn parse(&self, source: &str, resource: &str, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        let source = src.source();
+        let resource = src.resource();
         cfg_if! {
             if #[cfg(feature = "tracing")] {
                 tracing::debug!(msg = "Parsing YAML configuration", source = source, resource = resource, bytes = bytes.len());
@@ -235,11 +249,20 @@ fn convert_node(
 #[cfg(all(test, feature = "yaml"))]
 mod tests {
     use super::*;
+    use tanzim_source::SourceBuilder;
+
+    fn file_source(resource: &str) -> Source {
+        SourceBuilder::new()
+            .with_source("file")
+            .with_resource(resource)
+            .build()
+            .unwrap()
+    }
 
     #[test]
     fn parses_yaml_map() {
         let parsed = Yaml::new()
-            .parse("file", "config.yaml", b"hello: world\n")
+            .parse(&file_source("config.yaml"), b"hello: world\n")
             .unwrap();
         assert_eq!(
             parsed
@@ -258,7 +281,7 @@ mod tests {
     #[test]
     fn parses_yaml_map_with_lines() {
         let root = Yaml::new()
-            .parse("file", "config.yaml", b"foo: bar\nbaz: qux\n")
+            .parse(&file_source("config.yaml"), b"foo: bar\nbaz: qux\n")
             .unwrap();
         let map = root.value.as_map().unwrap();
         let foo = map.get("foo").unwrap();
@@ -272,7 +295,7 @@ mod tests {
     fn rejects_yaml_null_at_correct_column() {
         let text = "foo: bar\n\nbaz:\n\n  qux: ~\n";
         let error = Yaml::new()
-            .parse("file", "config.yaml", text.as_bytes())
+            .parse(&file_source("config.yaml"), text.as_bytes())
             .unwrap_err();
         if let Error::UnsupportedNull { location, .. } = &error {
             assert_eq!(location.line, std::num::NonZeroU32::new(5));
@@ -336,7 +359,7 @@ mod tests {
     #[test]
     fn syntax_error_has_location() {
         let error = Yaml::new()
-            .parse("file", "config.yaml", b"foo: [\n")
+            .parse(&file_source("config.yaml"), b"foo: [\n")
             .unwrap_err();
         if let Error::Parse { location, .. } = &error {
             let location = location.as_ref().expect("syntax error location");

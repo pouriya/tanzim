@@ -40,6 +40,6 @@ example-full:
 	'APP_NAME.BAR.SQLITE.FILE=/path/to/app.db' \
 	'APP_NAME.BAZ.LOGGING.LEVEL=debug' \
 	'APP_NAME.QUX.HTTPS.INSECURE=false' \
-	RUST_BACKTRACE=1 cargo run $(TARGET_OPTION) -p tanzim --no-default-features \
+	RUST_BACKTRACE=1 cargo run $(TARGET_OPTION) --release -p tanzim --no-default-features \
 		--features="full$(LOG_FEATURE)" --example full -- \
 		--trace 'env(prefix=APP_NAME,separator=".")' 'file:examples/full/etc'

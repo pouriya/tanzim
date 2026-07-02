@@ -35,9 +35,15 @@ example below for worked details.
 
 ```rust,no_run
 use tanzim_parse::{Parse, json::Json};
+use tanzim_source::SourceBuilder;
 
 fn main() -> Result<(), tanzim_value::Error> {
-    let value = Json::new().parse("file", "config.json", br#"{"port": 8080}"#)?;
+    let source = SourceBuilder::new()
+        .with_source("file")
+        .with_resource("config.json")
+        .build()
+        .unwrap();
+    let value = Json::new().parse(&source, br#"{"port": 8080}"#)?;
     let map = value.value.as_map().unwrap();
     let port = map.get("port").unwrap();
     println!("port={port}  location={}", port.location);

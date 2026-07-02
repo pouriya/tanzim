@@ -6,7 +6,8 @@
 //! Run with:
 //!   cargo run -p tanzim-parse --example custom_parser
 
-use tanzim_parse::{Error, LocatedValue, Parse, Value};
+use tanzim_parse::{Error, LocatedValue, Parse, Source, Value};
+use tanzim_source::SourceBuilder;
 use tanzim_value::{Location, Map};
 
 // ── Custom parser ─────────────────────────────────────────────────────────────
@@ -39,7 +40,9 @@ impl Parse for KvParser {
         None
     }
 
-    fn parse(&self, source: &str, resource: &str, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        let source = src.source();
+        let resource = src.resource();
         let text = match std::str::from_utf8(bytes) {
             Ok(t) => t,
             Err(_) => {
@@ -104,7 +107,12 @@ fn main() {
     println!("auto-detect  : {:?}", parser.is_format_supported(input));
     println!();
 
-    let value = match parser.parse("custom", "db.kv", input) {
+    let src = SourceBuilder::new()
+        .with_source("custom")
+        .with_resource("db.kv")
+        .build()
+        .unwrap();
+    let value = match parser.parse(&src, input) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("parse error: {e:#}");
@@ -122,7 +130,12 @@ fn main() {
 
     // Demonstrate error reporting
     let bad_input = b"host = localhost\nno-equals-here\nport = 5432\n";
-    if let Err(e) = parser.parse("custom", "bad.kv", bad_input) {
+    let bad_src = SourceBuilder::new()
+        .with_source("custom")
+        .with_resource("bad.kv")
+        .build()
+        .unwrap();
+    if let Err(e) = parser.parse(&bad_src, bad_input) {
         println!();
         println!("parse error (single-line) : {e}");
         println!("parse error (with snippet):\n{e:#}");

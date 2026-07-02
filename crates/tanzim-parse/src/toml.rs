@@ -18,19 +18,25 @@
 //!
 //! ```
 //! use tanzim_parse::{Parse, toml::Toml};
+//! use tanzim_source::SourceBuilder;
 //!
-//! let value = Toml::new().parse("file", "config.toml", b"host = \"127.0.0.1\"\n").unwrap();
+//! let source = SourceBuilder::new()
+//!     .with_source("file")
+//!     .with_resource("config.toml")
+//!     .build()
+//!     .unwrap();
+//! let value = Toml::new().parse(&source, b"host = \"127.0.0.1\"\n").unwrap();
 //! assert_eq!(
 //!     value.value.as_map().unwrap().get("host").unwrap().value.as_string().unwrap(),
 //!     "127.0.0.1"
 //! );
 //! ```
 
-use crate::Parse;
 use crate::span::{char_count, is_single_line, line_column};
+use crate::{Parse, Source};
 use cfg_if::cfg_if;
 use tanzim_value::{Error, LocatedValue, Location, Map, Value};
-use toml_edit::{DocumentMut, Item, Table, Value as TomlValue};
+use toml_edit::{ImDocument, Item, Table, Value as TomlValue};
 
 /// Parser for the `toml` format: TOML into a source-located value tree.
 ///
@@ -39,8 +45,14 @@ use toml_edit::{DocumentMut, Item, Table, Value as TomlValue};
 ///
 /// ```
 /// use tanzim_parse::{Parse, toml::Toml};
+/// use tanzim_source::SourceBuilder;
 ///
-/// let value = Toml::new().parse("file", "config.toml", b"port = 8080\n").unwrap();
+/// let source = SourceBuilder::new()
+///     .with_source("file")
+///     .with_resource("config.toml")
+///     .build()
+///     .unwrap();
+/// let value = Toml::new().parse(&source, b"port = 8080\n").unwrap();
 /// let port = value.value.as_map().unwrap().get("port").unwrap();
 /// assert_eq!(port.value.as_int().unwrap(), 8080);
 /// ```
@@ -63,7 +75,9 @@ impl Parse for Toml {
         vec!["toml".into()]
     }
 
-    fn parse(&self, source: &str, resource: &str, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        let source = src.source();
+        let resource = src.resource();
         cfg_if! {
             if #[cfg(feature = "tracing")] {
                 tracing::debug!(msg = "Parsing TOML configuration", source = source, resource = resource, bytes = bytes.len());
@@ -80,7 +94,7 @@ impl Parse for Toml {
             }
         };
         let single_line = is_single_line(bytes);
-        let document = match text.parse::<DocumentMut>() {
+        let document = match ImDocument::parse(text.to_string()) {
             Ok(value) => value,
             Err(error) => {
                 let location = match error.span() {
@@ -119,7 +133,7 @@ impl Parse for Toml {
 
     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool> {
         match std::str::from_utf8(bytes) {
-            Ok(text) => Some(text.parse::<DocumentMut>().is_ok()),
+            Ok(text) => Some(ImDocument::parse(text.to_string()).is_ok()),
             Err(_) => Some(false),
         }
     }
@@ -143,23 +157,35 @@ fn convert_table(
     );
     let mut map = Map::new();
     for (key, item) in table {
-        let fallback_offset = span_start(item.span(), 0);
-        let location = location_from_span(
-            source,
-            resource,
-            text,
-            single_line,
-            item.span(),
-            fallback_offset,
-        );
+        let item_fallback = span_start(item.span(), fallback_offset);
         let value = match item {
-            Item::Value(value) => {
-                convert_toml_value(source, resource, text, single_line, value, location)
-            }
+            Item::Value(value) => convert_toml_value(
+                source,
+                resource,
+                text,
+                single_line,
+                value,
+                location_from_span(
+                    source,
+                    resource,
+                    text,
+                    single_line,
+                    value.span(),
+                    item_fallback,
+                ),
+            ),
             Item::Table(table) => {
-                convert_table(source, resource, text, single_line, table, fallback_offset)
+                convert_table(source, resource, text, single_line, table, item_fallback)
             }
             Item::ArrayOfTables(array) => {
+                let location = location_from_span(
+                    source,
+                    resource,
+                    text,
+                    single_line,
+                    item.span(),
+                    item_fallback,
+                );
                 let mut list = Vec::new();
                 for index in 0..array.len() {
                     if let Some(table) = array.get(index) {
@@ -169,7 +195,7 @@ fn convert_table(
                             text,
                             single_line,
                             table,
-                            span_start(table.span(), fallback_offset),
+                            span_start(table.span(), item_fallback),
                         )?);
                     }
                 }
@@ -180,7 +206,14 @@ fn convert_table(
             }
             Item::None => Err(Error::Parse {
                 text: text.to_string(),
-                location: Some(location),
+                location: Some(location_from_span(
+                    source,
+                    resource,
+                    text,
+                    single_line,
+                    item.span(),
+                    item_fallback,
+                )),
                 message: "unexpected empty toml item".to_string(),
             }),
         }?;
@@ -310,11 +343,20 @@ fn location_from_span(
 #[cfg(all(test, feature = "toml"))]
 mod tests {
     use super::*;
+    use tanzim_source::SourceBuilder;
+
+    fn file_source(resource: &str) -> Source {
+        SourceBuilder::new()
+            .with_source("file")
+            .with_resource(resource)
+            .build()
+            .unwrap()
+    }
 
     #[test]
     fn parses_toml_table() {
         let parsed = Toml::new()
-            .parse("file", "config.toml", b"hello = \"world\"\n")
+            .parse(&file_source("config.toml"), b"hello = \"world\"\n")
             .unwrap();
         assert_eq!(
             parsed
@@ -331,9 +373,24 @@ mod tests {
     }
 
     #[test]
+    fn nested_table_key_has_line_number() {
+        let parsed = Toml::new()
+            .parse(
+                &file_source("config.toml"),
+                b"[https]\nfollow_redirects = false\ninsecure = true\nretries = 3\n",
+            )
+            .unwrap();
+        let https = parsed.value.as_map().unwrap().get("https").unwrap();
+        let nested = https.value.as_map().unwrap();
+        let retries = nested.get("retries").unwrap();
+        assert_eq!(retries.location.line, std::num::NonZeroU32::new(4));
+        assert_eq!(retries.location.column, std::num::NonZeroU32::new(11));
+    }
+
+    #[test]
     fn syntax_error_has_location() {
         let error = Toml::new()
-            .parse("file", "config.toml", b"hello = \n")
+            .parse(&file_source("config.toml"), b"hello = \n")
             .unwrap_err();
         if let Error::Parse { location, .. } = &error {
             assert!(location.is_some());

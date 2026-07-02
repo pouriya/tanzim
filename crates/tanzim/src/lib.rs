@@ -376,24 +376,12 @@ impl Config {
         let mut result = Vec::new();
         for payload in loaded {
             let config_source = &payload.source;
-            let resource = {
-                let r = config_source.resource();
-                if !r.is_empty() {
-                    r.to_string()
-                } else {
-                    match (&payload.maybe_name, &payload.maybe_format) {
-                        (Some(name), Some(format)) => format!("{name}.{format}"),
-                        _ => config_source.to_string(),
-                    }
-                }
-            };
-            let source_name = config_source.source();
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
-                    tracing::debug!(msg = "Parsing configuration payload", source = source_name, resource = resource, format = payload.maybe_format.as_deref().unwrap_or("auto"));
+                    tracing::debug!(msg = "Parsing configuration payload", source = %payload.source, format = payload.maybe_format.as_deref().unwrap_or("auto"));
                 } else if #[cfg(feature = "logging")] {
                     let fmt = payload.maybe_format.as_deref().unwrap_or("auto");
-                    log::debug!("msg=\"Parsing configuration payload\" source={source_name} resource={resource} format={fmt}");
+                    log::debug!("msg=\"Parsing configuration payload\" source={} format={fmt}", payload.source);
                 }
             }
             let mut found_parser = None;
@@ -436,21 +424,20 @@ impl Config {
             };
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
-                    tracing::trace!(msg = "Found parser for configuration payload", parser = parser.name(), resource = resource);
+                    tracing::trace!(msg = "Found parser for configuration payload", parser = parser.name(), source = %payload.source);
                 } else if #[cfg(feature = "logging")] {
-                    log::trace!("msg=\"Found parser for configuration payload\" parser={} resource={resource}", parser.name());
+                    log::trace!("msg=\"Found parser for configuration payload\" parser={} source={}", parser.name(), payload.source);
                 }
             }
-            let value = match parser.parse(source_name, &resource, &payload.content) {
+            let value = match parser.parse(&payload.source, &payload.content) {
                 Ok(v) => v,
                 Err(e) => {
                     if config_source.ignore_errors() {
                         cfg_if! {
                             if #[cfg(feature = "tracing")] {
-                                tracing::warn!(msg = "Skipped parse error for payload", source = source_display(config_source), resource = resource, error = ?e);
+                                tracing::warn!(msg = "Skipped parse error for payload", source = %payload.source, error = ?e);
                             } else if #[cfg(feature = "logging")] {
-                                let display = source_display(config_source);
-                                log::warn!("msg=\"Skipped parse error for payload\" source={display} resource={resource} error={e:?}");
+                                log::warn!("msg=\"Skipped parse error for payload\" source={} error={e:?}", payload.source);
                             }
                         }
                         continue;

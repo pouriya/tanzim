@@ -13,32 +13,38 @@
 //!
 //! ```
 //! use tanzim_parse::{closure::Closure, Parse};
+//! use tanzim_source::SourceBuilder;
 //! use tanzim_value::{LocatedValue, Location, Value};
 //!
 //! let parser = Closure::new(
 //!     "upper",
 //!     "txt",
-//!     Box::new(|source, resource, bytes| {
+//!     Box::new(|source, bytes| {
 //!         Ok(LocatedValue {
 //!             value: Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
-//!             location: Location::at(source, resource, None, None, None),
+//!             location: Location::at(source.source(), source.resource(), None, None, None),
 //!         })
 //!     }),
 //! );
-//! let value = parser.parse("file", "test.txt", b"hello").unwrap();
+//! let source = SourceBuilder::new()
+//!     .with_source("file")
+//!     .with_resource("test.txt")
+//!     .build()
+//!     .unwrap();
+//! let value = parser.parse(&source, b"hello").unwrap();
 //! assert_eq!(value.value.as_string().unwrap(), "HELLO");
 //! ```
 
-use crate::Parse;
+use crate::{Parse, Source};
 use tanzim_value::{Error, LocatedValue};
 
 /// The parse closure driving a [`Closure`] parser — same contract as
 /// [`Parse::parse`].
 ///
-/// Called with, in order: the source kind (`&str`), the resource identifier (`&str`), and the raw
-/// `&[u8]` bytes. Return a [`LocatedValue`] tree (ideally with a [`Location`](tanzim_value::Location)
-/// on every node), or an [`Error`] on failure.
-pub type BoxedParseFn = Box<dyn Fn(&str, &str, &[u8]) -> Result<LocatedValue, Error>>;
+/// Called with the [`Source`] declaration and the raw `&[u8]` bytes. Return a [`LocatedValue`]
+/// tree (ideally with a [`Location`](tanzim_value::Location) on every node), or an [`Error`] on
+/// failure.
+pub type BoxedParseFn = Box<dyn Fn(&Source, &[u8]) -> Result<LocatedValue, Error>>;
 
 /// The optional auto-detection probe for a [`Closure`] parser — same contract as
 /// [`Parse::is_format_supported`].
@@ -108,8 +114,8 @@ impl Parse for Closure {
         self.supported_format_list.clone()
     }
 
-    fn parse(&self, source: &str, resource: &str, bytes: &[u8]) -> Result<LocatedValue, Error> {
-        (self.parser)(source, resource, bytes)
+    fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        (self.parser)(source, bytes)
     }
 
     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool> {
@@ -120,6 +126,7 @@ impl Parse for Closure {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tanzim_source::SourceBuilder;
     use tanzim_value::{Location, Value};
 
     #[test]
@@ -127,15 +134,20 @@ mod tests {
         let parser = Closure::new(
             "upper",
             "txt",
-            Box::new(|source, resource, bytes| {
+            Box::new(|source, bytes| {
                 Ok(LocatedValue {
                     value: Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
-                    location: Location::at(source, resource, None, None, None),
+                    location: Location::at(source.source(), source.resource(), None, None, None),
                 })
             }),
         )
         .with_validator(Box::new(|bytes| Some(!bytes.is_empty())));
-        let parsed = parser.parse("file", "test.txt", b"hello").unwrap();
+        let source = SourceBuilder::new()
+            .with_source("file")
+            .with_resource("test.txt")
+            .build()
+            .unwrap();
+        let parsed = parser.parse(&source, b"hello").unwrap();
         assert_eq!(parsed.value.as_string().unwrap(), "HELLO");
         assert_eq!(parser.is_format_supported(b"x"), Some(true));
         assert_eq!(parser.is_format_supported(b""), Some(false));

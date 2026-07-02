@@ -52,3 +52,6 @@ qux:
           follow_redirects:
             required: false
             validator: { type: bool }
+          retries:
+            required: false
+            validator: { type: integer, min: 1 }

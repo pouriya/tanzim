@@ -19,9 +19,15 @@
 //!
 //! ```
 //! use tanzim_parse::{Parse, json::Json};
+//! use tanzim_source::SourceBuilder;
 //!
+//! let source = SourceBuilder::new()
+//!     .with_source("file")
+//!     .with_resource("config.json")
+//!     .build()
+//!     .unwrap();
 //! let value = Json::new()
-//!     .parse("file", "config.json", br#"{"host":"127.0.0.1"}"#)
+//!     .parse(&source, br#"{"host":"127.0.0.1"}"#)
 //!     .unwrap();
 //! assert_eq!(
 //!     value.value.as_map().unwrap().get("host").unwrap().value.as_string().unwrap(),
@@ -29,8 +35,8 @@
 //! );
 //! ```
 
-use crate::Parse;
 use crate::span::is_single_line;
+use crate::{Parse, Source};
 use cfg_if::cfg_if;
 use spanned_json_parser::value::Value as JsonValue;
 use spanned_json_parser::{Position, parse};
@@ -43,8 +49,14 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///
 /// ```
 /// use tanzim_parse::{Parse, json::Json};
+/// use tanzim_source::SourceBuilder;
 ///
-/// let value = Json::new().parse("file", "config.json", br#"{"port":8080}"#).unwrap();
+/// let source = SourceBuilder::new()
+///     .with_source("file")
+///     .with_resource("config.json")
+///     .build()
+///     .unwrap();
+/// let value = Json::new().parse(&source, br#"{"port":8080}"#).unwrap();
 /// let port = value.value.as_map().unwrap().get("port").unwrap();
 /// assert_eq!(port.value.as_int().unwrap(), 8080);
 /// ```
@@ -67,7 +79,9 @@ impl Parse for Json {
         vec!["json".into()]
     }
 
-    fn parse(&self, source: &str, resource: &str, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        let source = src.source();
+        let resource = src.resource();
         cfg_if! {
             if #[cfg(feature = "tracing")] {
                 tracing::debug!(msg = "Parsing JSON configuration", source = source, resource = resource, bytes = bytes.len());
@@ -250,11 +264,20 @@ fn location_from_position(
 #[cfg(all(test, feature = "json"))]
 mod tests {
     use super::*;
+    use tanzim_source::SourceBuilder;
+
+    fn file_source(resource: &str) -> Source {
+        SourceBuilder::new()
+            .with_source("file")
+            .with_resource(resource)
+            .build()
+            .unwrap()
+    }
 
     #[test]
     fn parses_json_object() {
         let parsed = Json::new()
-            .parse("file", "config.json", br#"{"hello":"world"}"#)
+            .parse(&file_source("config.json"), br#"{"hello":"world"}"#)
             .unwrap();
         assert_eq!(
             parsed
@@ -279,7 +302,9 @@ mod tests {
 
     #[test]
     fn single_line_json_omits_position() {
-        let root = Json::new().parse("file", "a.json", br#"{"a":1}"#).unwrap();
+        let root = Json::new()
+            .parse(&file_source("a.json"), br#"{"a":1}"#)
+            .unwrap();
         let map = root.value.as_map().unwrap();
         let entry = map.get("a").unwrap();
         assert_eq!(entry.location.line, None);
@@ -289,7 +314,7 @@ mod tests {
     #[test]
     fn rejects_null() {
         let error = Json::new()
-            .parse("file", "a.json", b"{\n  \"a\": null\n}")
+            .parse(&file_source("a.json"), b"{\n  \"a\": null\n}")
             .unwrap_err();
         assert!(matches!(error, Error::UnsupportedNull { .. }));
         let message = format!("{error:#}");
@@ -300,7 +325,7 @@ mod tests {
     #[test]
     fn syntax_error_has_location() {
         let error = Json::new()
-            .parse("file", "a.json", b"{\n  \"a\":\n}\n")
+            .parse(&file_source("a.json"), b"{\n  \"a\":\n}\n")
             .unwrap_err();
         if let Error::Parse { ref location, .. } = error {
             let location = location.as_ref().expect("syntax error location");

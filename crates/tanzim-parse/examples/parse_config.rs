@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::process;
 use tanzim_parse::{Parse, env::Env, json::Json, toml::Toml, yaml::Yaml};
+use tanzim_source::SourceBuilder;
 use tanzim_value::{LocatedValue, Value};
 
 fn main() {
@@ -17,6 +18,17 @@ fn main() {
         Ok(bytes) => bytes,
         Err(error) => {
             eprintln!("failed to read {path}: {error}");
+            process::exit(1);
+        }
+    };
+    let src = match SourceBuilder::new()
+        .with_source("file")
+        .with_resource(&path)
+        .build()
+    {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("failed to build source: {error}");
             process::exit(1);
         }
     };
@@ -38,10 +50,10 @@ fn main() {
         }
     };
     let result = match format {
-        "json" => Json::new().parse("file", &path, &bytes),
-        "yaml" => Yaml::new().parse("file", &path, &bytes),
-        "toml" => Toml::new().parse("file", &path, &bytes),
-        "env" => Env::new().parse("file", &path, &bytes),
+        "json" => Json::new().parse(&src, &bytes),
+        "yaml" => Yaml::new().parse(&src, &bytes),
+        "toml" => Toml::new().parse(&src, &bytes),
+        "env" => Env::new().parse(&src, &bytes),
         _ => unreachable!(),
     };
     match result {
