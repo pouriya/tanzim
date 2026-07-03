@@ -46,5 +46,5 @@ No optional features. This crate is always included as-is.
 ## Relations
 
 - Used by all other tanzim crates.
-- [`tanzim-parse`](https://docs.rs/tanzim-parse/latest/tanzim_parse/) produces `LocatedValue` trees from raw bytes.
-- [`tanzim-merge`](https://docs.rs/tanzim-merge/latest/tanzim_merge/) consumes `LocatedValue` trees to produce merged maps.
+- [`tanzim-parse`](https://crates.io/crates/tanzim-parse) produces `LocatedValue` trees from raw bytes.
+- [`tanzim-merge`](https://crates.io/crates/tanzim-merge) consumes `LocatedValue` trees to produce merged maps.

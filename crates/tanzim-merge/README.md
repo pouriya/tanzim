@@ -65,6 +65,6 @@ spans via the `log` / `tracing` crates.
 
 ## Relations
 
-- Consumes `LocatedValue` from [`tanzim-parse`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-parse).
-- Uses `Payload` from [`tanzim-load`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-load) (which embeds `Source`) to track provenance.
-- Full pipeline wired in [`tanzim`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim).
+- Consumes `LocatedValue` from [`tanzim-parse`](https://crates.io/crates/tanzim-parse).
+- Uses `Payload` from [`tanzim-load`](https://crates.io/crates/tanzim-load) (which embeds `Source`) to track provenance.
+- Full pipeline wired in [`tanzim`](https://crates.io/crates/tanzim).

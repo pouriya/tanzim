@@ -32,10 +32,6 @@ full = ["env", "file", "http"]
 tempdir = "0.3.7"
 
 [[example]]
-name = "custom_loader"
-path = "examples/custom_loader.rs"
-
-[[example]]
 name = "load_config"
 path = "examples/load_config.rs"
 

@@ -68,7 +68,7 @@ Default features: `env`. Logging/tracing are opt-in.
 
 ## Relations
 
-- Consumes `Payload` from [`tanzim-load`](https://docs.rs/tanzim-load/latest/tanzim_load/).
-- Depends on [`tanzim-value`](https://docs.rs/tanzim-value/latest/tanzim_value/) for `LocatedValue`, `Value`, `Map`, `Error`.
-- Produces `LocatedValue` trees consumed by [`tanzim-merge`](https://docs.rs/tanzim-merge/latest/tanzim_merge/).
-- Full pipeline wired in [`tanzim`](https://docs.rs/tanzim/latest/tanzim/).
+- Consumes `Payload` from [`tanzim-load`](https://crates.io/crates/tanzim-load).
+- Depends on [`tanzim-value`](https://crates.io/crates/tanzim-value) for `LocatedValue`, `Value`, `Map`, `Error`.
+- Produces `LocatedValue` trees consumed by [`tanzim-merge`](https://crates.io/crates/tanzim-merge).
+- Full pipeline wired in [`tanzim`](https://crates.io/crates/tanzim).

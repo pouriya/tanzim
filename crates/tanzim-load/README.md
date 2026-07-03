@@ -20,8 +20,7 @@ bytes* — parsing happens in a later stage. The contract:
 
 Register a loader with `tanzim::Config::with_loader`; it's dispatched by the source strings its
 `supported_source_list()` returns. For a quick, stateless adapter, use `closure::Closure` instead
-of a full `impl Load`. See the [`Load`] rustdoc and the [`custom_loader`](examples/custom_loader.rs)
-example for worked details.
+of a full `impl Load`. See the [`Load`] rustdoc for worked details.
 
 ## Built-in loaders
 
@@ -79,6 +78,6 @@ Default features: `env`, `file`, `http`. Logging/tracing are opt-in.
 
 ## Relations
 
-- Depends on [`tanzim-source`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-source) for `Source` and `Options`.
-- Produces `Payload` values consumed by [`tanzim-parse`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-parse).
-- Full pipeline wired in [`tanzim`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim).
+- Depends on [`tanzim-source`](https://crates.io/crates/tanzim-source) for `Source` and `Options`.
+- Produces `Payload` values consumed by [`tanzim-parse`](https://crates.io/crates/tanzim-parse).
+- Full pipeline wired in [`tanzim`](https://crates.io/crates/tanzim).

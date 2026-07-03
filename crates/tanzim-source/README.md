@@ -121,5 +121,5 @@ Use `{error}` for one-line errors.
 ## Relations
 
 - Used by all other tanzim crates to represent where and how to load from.
-- [`tanzim-load`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-load) consumes `Source` fields (`source`, `options`, `resource`) in its loaders.
-- Full pipeline wired in [`tanzim`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim).
+- [`tanzim-load`](https://crates.io/crates/tanzim-load) consumes `Source` fields (`source`, `options`, `resource`) in its loaders.
+- Full pipeline wired in [`tanzim`](https://crates.io/crates/tanzim).
