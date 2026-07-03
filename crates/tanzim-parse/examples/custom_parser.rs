@@ -47,7 +47,7 @@ impl Parse for KvParser {
             Ok(t) => t,
             Err(_) => {
                 return Err(Error::InvalidUtf8 {
-                    location: Location::at(source, resource, None, None, None),
+                    location: Box::new(Location::at(source, resource, None, None, None)),
                 });
             }
         };
@@ -63,13 +63,13 @@ impl Parse for KvParser {
                 None => {
                     return Err(Error::Parse {
                         text: text.to_string(),
-                        location: Some(Location::at(
+                        location: Some(Box::new(Location::at(
                             source,
                             resource,
                             Some(line_number),
                             None,
                             None,
-                        )),
+                        ))),
                         message: format!(
                             "line {line_number}: expected `key=value`, got: {trimmed:?}"
                         ),

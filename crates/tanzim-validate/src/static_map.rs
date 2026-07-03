@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 struct Field {
@@ -15,13 +15,21 @@ struct Field {
 /// [`StaticMap::allow_unknown`] to permit them.
 #[derive(Default)]
 pub struct StaticMap {
+    meta: Meta,
     fields: Vec<Field>,
     deny_unknown: bool,
 }
 
 impl StaticMap {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self {
+            meta: Meta::default(),
             fields: Vec::new(),
             deny_unknown: true,
         }
@@ -89,7 +97,15 @@ impl StaticMap {
 }
 
 impl Validator for StaticMap {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let map = match value.map_mut() {
             Some(map) => map,
             None => {

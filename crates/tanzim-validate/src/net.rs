@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// RFC 1123 hostname check: 1–253 chars, dot-separated labels of 1–63 chars made of
@@ -38,16 +38,34 @@ fn as_string(value: &mut Value) -> Result<&mut String, Error> {
 
 /// (`net` feature) Accepts a hostname or an IP address literal.
 #[derive(Debug, Clone, Default)]
-pub struct Host;
+pub struct Host {
+    meta: Meta,
+}
 
 impl Host {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for Host {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_string(value)?;
         if text.parse::<std::net::IpAddr>().is_ok() || is_hostname(text) {
             Ok(())
@@ -60,10 +78,17 @@ impl Validator for Host {
 /// (`net` feature) Accepts a DNS domain name, normalizing it to lowercase.
 #[derive(Debug, Clone, Default)]
 pub struct Domain {
+    meta: Meta,
     require_dot: bool,
 }
 
 impl Domain {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -76,7 +101,15 @@ impl Domain {
 }
 
 impl Validator for Domain {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_string(value)?;
         *text = text.to_lowercase();
         if !is_hostname(text) || (self.require_dot && !text.contains('.')) {
@@ -88,16 +121,34 @@ impl Validator for Domain {
 
 /// (`net` feature) Accepts an email address, normalizing the domain part to lowercase.
 #[derive(Debug, Clone, Default)]
-pub struct Email;
+pub struct Email {
+    meta: Meta,
+}
 
 impl Email {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for Email {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_string(value)?;
         let (local, domain) = match text.rsplit_once('@') {
             Some(parts) => parts,
@@ -114,6 +165,7 @@ impl Validator for Email {
 /// (`net` feature) Accepts a TCP/UDP port number, coercing numeric strings and floats like [`crate::Integer`].
 #[derive(Debug, Clone)]
 pub struct Port {
+    meta: Meta,
     allow_zero: bool,
     privileged_ok: bool,
 }
@@ -121,6 +173,7 @@ pub struct Port {
 impl Default for Port {
     fn default() -> Self {
         Self {
+            meta: Meta::default(),
             allow_zero: false,
             privileged_ok: true,
         }
@@ -128,6 +181,12 @@ impl Default for Port {
 }
 
 impl Port {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -146,7 +205,15 @@ impl Port {
 }
 
 impl Validator for Port {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let min = if self.allow_zero { 0 } else { 1 };
         crate::Integer::new().range(min, 65535).validate(value)?;
         let port = match value.as_int() {
@@ -165,11 +232,18 @@ impl Validator for Port {
 /// (`net` feature) Accepts an IP address literal.
 #[derive(Debug, Clone, Default)]
 pub struct IpAddr {
+    meta: Meta,
     v4_only: bool,
     v6_only: bool,
 }
 
 impl IpAddr {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -188,7 +262,15 @@ impl IpAddr {
 }
 
 impl Validator for IpAddr {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_string(value)?;
         let parsed = match text.parse::<std::net::IpAddr>() {
             Ok(parsed) => parsed,
@@ -214,16 +296,34 @@ impl Validator for IpAddr {
 
 /// (`net` feature) Accepts a `host:port` socket address (IP or hostname host).
 #[derive(Debug, Clone, Default)]
-pub struct SocketAddr;
+pub struct SocketAddr {
+    meta: Meta,
+}
 
 impl SocketAddr {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for SocketAddr {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_string(value)?;
         if text.parse::<std::net::SocketAddr>().is_ok() {
             return Ok(());

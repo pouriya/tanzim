@@ -5,10 +5,10 @@ Foundational value types used throughout the tanzim pipeline.
 ## What lives here
 
 - `Value` — six-variant dynamically typed enum (Bool, Int, Float, String, List, Map). No null.
-- `LocatedValue` — a `Value` paired with a `Location` (source name, resource path, optional line/column).
+- `LocatedValue` — a `Value` paired with a `Location` (full originating `tanzim_source::Source`, optional line/column).
 - `Map` — ordered `Vec`-backed map of `String → LocatedValue`. Last inserted key wins on lookup.
-- `Location` — human-readable source position used in error messages and diagnostics. `line`/`column`/`length` are 1-based and stored as `Option<NonZeroU32>` (compact, so `Error` stays small and avoids `clippy::result_large_err`). Build via `Location::at`, which accepts `Option<usize>` and converts internally — never expose `NonZeroU32` to callers.
-- `Error` — parse-time error with optional source snippet; use `{error:#}` for the caret underline. Keep it under the `result_large_err` size threshold (no `Box` in return types); shrink fields rather than adding `#[allow]`.
+- `Location` — holds the full originating `Source` (name, options, resource, `on_error` policy) so values can be traced to their declaration. `line`/`column`/`length` are 1-based and stored as `Option<NonZeroU32>`. Build via `Location::in_source` (real source) or `Location::at` (bare name/resource for synthetic origins); neither exposes `NonZeroU32` to callers.
+- `Error` — parse-time error with optional source snippet; use `{error:#}` for the caret underline. `Error` boxes its `Location` field so it stays under the `result_large_err` size threshold. Shrink other fields rather than adding `#[allow]`.
 
 ## No external logic
 

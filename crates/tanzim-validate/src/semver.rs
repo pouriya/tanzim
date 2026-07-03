@@ -1,19 +1,37 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// (`semver` feature) Accepts a semantic version string such as `1.4.2` or `2.0.0-rc.1`.
 #[derive(Debug, Clone, Default)]
-pub struct Semver;
+pub struct Semver {
+    meta: Meta,
+}
 
 impl Semver {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for Semver {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = match value {
             Value::String(text) => text,
             other => {

@@ -39,7 +39,7 @@ pub mod single {
     use crate::validate;
     use crate::{loader, merge, parser, source};
     use cfg_if::cfg_if;
-    use tanzim_source::Source;
+    use tanzim_source::{OnError, Source, Stage};
 
     /// A loaded payload paired with the value tree produced by parsing it.
     pub type Parsed = (loader::Payload, parser::LocatedValue);
@@ -49,9 +49,6 @@ pub mod single {
 
     fn source_display(cs: &Source) -> String {
         let mut s = cs.source().to_string();
-        if cs.ignore_errors() {
-            s.push('?');
-        }
         if cs.resource_colon() || !cs.resource().is_empty() {
             s.push(':');
             s.push_str(cs.resource());
@@ -406,7 +403,7 @@ pub mod single {
                 let payloads = match loader.load(config_source.clone()) {
                     Ok(payloads) => payloads,
                     Err(e) => {
-                        if config_source.ignore_errors() {
+                        if config_source.on_error(Stage::Load) == OnError::Skip {
                             cfg_if! {
                                 if #[cfg(feature = "tracing")] {
                                     tracing::warn!(msg = "Skipped load error for source", source = source_display(config_source), error = ?e);
@@ -494,7 +491,7 @@ pub mod single {
                 let value = match parser.parse(&payload.source, &payload.content) {
                     Ok(v) => v,
                     Err(e) => {
-                        if config_source.ignore_errors() {
+                        if config_source.on_error(Stage::Parse) == OnError::Skip {
                             cfg_if! {
                                 if #[cfg(feature = "tracing")] {
                                     tracing::warn!(msg = "Skipped parse error for payload", source = %payload.source, error = ?e);
@@ -678,7 +675,7 @@ pub mod multi {
     use crate::validate;
     use crate::{loader, merge, parser, source};
     use cfg_if::cfg_if;
-    use tanzim_source::Source;
+    use tanzim_source::{OnError, Source, Stage};
 
     /// A loaded payload paired with the value tree produced by parsing it.
     pub type Parsed = (loader::Payload, parser::LocatedValue);
@@ -692,9 +689,6 @@ pub mod multi {
 
     fn source_display(cs: &Source) -> String {
         let mut s = cs.source().to_string();
-        if cs.ignore_errors() {
-            s.push('?');
-        }
         if cs.resource_colon() || !cs.resource().is_empty() {
             s.push(':');
             s.push_str(cs.resource());
@@ -1079,7 +1073,7 @@ pub mod multi {
                 let payloads = match loader.load(config_source.clone()) {
                     Ok(payloads) => payloads,
                     Err(e) => {
-                        if config_source.ignore_errors() {
+                        if config_source.on_error(Stage::Load) == OnError::Skip {
                             cfg_if! {
                                 if #[cfg(feature = "tracing")] {
                                     tracing::warn!(msg = "Skipped load error for source", source = source_display(config_source), error = ?e);
@@ -1167,7 +1161,7 @@ pub mod multi {
                 let value = match parser.parse(&payload.source, &payload.content) {
                     Ok(v) => v,
                     Err(e) => {
-                        if config_source.ignore_errors() {
+                        if config_source.on_error(Stage::Parse) == OnError::Skip {
                             cfg_if! {
                                 if #[cfg(feature = "tracing")] {
                                     tracing::warn!(msg = "Skipped parse error for payload", source = %payload.source, error = ?e);

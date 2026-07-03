@@ -33,23 +33,25 @@ are independently usable:
 
 | Re-export | Crate | Responsibility |
 |-----------|-------|----------------|
-| `source` | [`tanzim-source`](crates/tanzim-source/README.md) | Parse the `SOURCE[(OPTIONS)][?][:RESOURCE]` source-string format into a validated [`Source`] |
-| `loader` | [`tanzim-load`](crates/tanzim-load/README.md) | `Load` trait + `env`/`file`/`http`/`closure` loaders → `Payload` |
-| `parser` | [`tanzim-parse`](crates/tanzim-parse/README.md) | `Parse` trait + `env`/`json`/`yaml`/`toml` parsers → `LocatedValue` |
-| `merge` | [`tanzim-merge`](crates/tanzim-merge/README.md) | `Merge` trait + `LastWins`/`DeepMerge` strategies → grouped map |
-| — | [`tanzim-value`](crates/tanzim-value/README.md) | Core `Value`, `LocatedValue`, `Map`, `Location`, `Error` types shared by every stage |
+| `source` | [`tanzim-source`](https://docs.rs/tanzim-source/latest/tanzim_source/) | Parse the `SOURCE[(OPTIONS)][:RESOURCE]` source-string format into a validated [`Source`] |
+| `loader` | [`tanzim-load`](https://docs.rs/tanzim-load/latest/tanzim_load/) | `Load` trait + `env`/`file`/`http`/`closure` loaders → `Payload` |
+| `parser` | [`tanzim-parse`](https://docs.rs/tanzim-parse/latest/tanzim_parse/) | `Parse` trait + `env`/`json`/`yaml`/`toml` parsers → `LocatedValue` |
+| `merge` | [`tanzim-merge`](https://docs.rs/tanzim-merge/latest/tanzim_merge/) | `Merge` trait + `LastWins`/`DeepMerge` strategies → grouped map |
+| `validate` | [`tanzim-validate`](https://docs.rs/tanzim-validate/latest/tanzim_validate/) | `Validator` trait + built-in validators + optional schema machinery |
+| — | [`tanzim-value`](https://docs.rs/tanzim-value/latest/tanzim_value/) | Core `Value`, `LocatedValue`, `Map`, `Location`, `Error` types shared by every stage |
 
 ## Key concepts
 
-- **Source strings** use the [`tanzim-source`](crates/tanzim-source/README.md) format
-  `SOURCE [(OPTIONS)] [?] [:RESOURCE]`, e.g. `env(prefix=APP_)`, `file?:.env`.
+- **Source strings** use the [`tanzim-source`](https://docs.rs/tanzim-source/latest/tanzim_source/) format
+  `SOURCE [(OPTIONS)] [:RESOURCE]`, e.g. `env(prefix=APP_)`, `file:/etc/app`.
 - **Named entries** — each `Payload` carries an optional `maybe_name`. The merger groups
   by name; unnamed payloads (`maybe_name == None`) all share the `None` key.
 - **Format auto-detection** — if a payload has no `maybe_format`, parsers are probed via
   `is_format_supported`; otherwise the format hint selects the parser.
-- **`ignore_errors` (`?`)** — sources marked with `?` swallow load/parse failures
-  silently instead of aborting the pipeline.
-- **Located errors** — [`Error`] renders one line by default; use `{error:#}` for a
+- **`on_error`** — the reserved option `on_error=(<stage>=skip)` (where `<stage>` is `load`,
+  `parse`, or `validate`) makes a source silently skip failures for that stage instead of
+  aborting the pipeline. E.g. `file(on_error=(load=skip)):.env`.
+- **Located errors** — `Error` renders one line by default; use `{error:#}` for a
   source snippet with a caret underline.
 - **Result aliases** — `parse()` returns `Vec<Parsed>` and `merge()`/`run()` return
   `Merged` (`HashMap<Option<String>, (Vec<Payload>, LocatedValue)>`).
@@ -70,11 +72,11 @@ are independently usable:
 
 Defaults: `load-env`, `load-file`, `load-http`, `parse-env`, `validate-default`, `validate-schema`.
 
-Use individual workspace crates if you only need one stage — see [tanzim-load/README.md](crates/tanzim-load/README.md), [tanzim-parse/README.md](crates/tanzim-parse/README.md), [tanzim-merge/README.md](crates/tanzim-merge/README.md).
+Use individual workspace crates if you only need one stage — see [`tanzim-load`](https://docs.rs/tanzim-load/latest/tanzim_load/), [`tanzim-parse`](https://docs.rs/tanzim-parse/latest/tanzim_parse/), [`tanzim-merge`](https://docs.rs/tanzim-merge/latest/tanzim_merge/).
 
 ## Quick start
 
-```rust,no_run
+```rust,ignore
 use tanzim::multi::PipelineMultiBuilder;
 use tanzim::loader::{env::Env, file::File};
 use tanzim::parser::{env::Env as EnvParser, json::Json, yaml::Yaml, toml::Toml};

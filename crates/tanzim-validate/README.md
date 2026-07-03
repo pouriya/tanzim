@@ -1,6 +1,7 @@
 # tanzim-validate
+[**Package**](https://crates.io/crates/tanzim-validate)   |   [**Documentation**](https://docs.rs/tanzim-validate)   |   [**Repository**](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-validate)
 
-Validate and coerce [`tanzim-value`](https://crates.io/crates/tanzim-value)
+Validate and coerce [`tanzim-value`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-value)
 configuration trees against a schema built from composable validators.
 
 Validators do two jobs:

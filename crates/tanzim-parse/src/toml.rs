@@ -76,7 +76,9 @@ impl Parse for Toml {
     }
 
     fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let source = src.source();
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let resource = src.resource();
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -89,7 +91,7 @@ impl Parse for Toml {
             Ok(value) => value,
             Err(_) => {
                 return Err(Error::InvalidUtf8 {
-                    location: Location::at(source, resource, None, None, None),
+                    location: Box::new(Location::in_source(src.clone(), None, None, None)),
                 });
             }
         };
@@ -101,13 +103,12 @@ impl Parse for Toml {
                     Some(span) => {
                         let (line, column) = line_column(text, span.start);
                         let length = char_count(text, span.start, span.end).max(1);
-                        Some(Location::at(
-                            source,
-                            resource,
+                        Some(Box::new(Location::in_source(
+                            src.clone(),
                             Some(line),
                             Some(column),
                             Some(length),
-                        ))
+                        )))
                     }
                     None => None,
                 };
@@ -118,7 +119,7 @@ impl Parse for Toml {
                 });
             }
         };
-        let result = convert_table(source, resource, text, single_line, document.as_table(), 0);
+        let result = convert_table(src, text, single_line, document.as_table(), 0);
         if result.is_ok() {
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
@@ -222,58 +223,33 @@ fn to_toml_value(
 }
 
 fn convert_table(
-    source: &str,
-    resource: &str,
+    source: &Source,
     text: &str,
     single_line: bool,
     table: &Table,
     fallback_offset: usize,
 ) -> Result<LocatedValue, Error> {
-    let location = location_from_span(
-        source,
-        resource,
-        text,
-        single_line,
-        table.span(),
-        fallback_offset,
-    );
+    let location = location_from_span(source, text, single_line, table.span(), fallback_offset);
     let mut map = Map::new();
     for (key, item) in table {
         let item_fallback = span_start(item.span(), fallback_offset);
         let value = match item {
             Item::Value(value) => convert_toml_value(
                 source,
-                resource,
                 text,
                 single_line,
                 value,
-                location_from_span(
-                    source,
-                    resource,
-                    text,
-                    single_line,
-                    value.span(),
-                    item_fallback,
-                ),
+                location_from_span(source, text, single_line, value.span(), item_fallback),
             ),
-            Item::Table(table) => {
-                convert_table(source, resource, text, single_line, table, item_fallback)
-            }
+            Item::Table(table) => convert_table(source, text, single_line, table, item_fallback),
             Item::ArrayOfTables(array) => {
-                let location = location_from_span(
-                    source,
-                    resource,
-                    text,
-                    single_line,
-                    item.span(),
-                    item_fallback,
-                );
+                let location =
+                    location_from_span(source, text, single_line, item.span(), item_fallback);
                 let mut list = Vec::new();
                 for index in 0..array.len() {
                     if let Some(table) = array.get(index) {
                         list.push(convert_table(
                             source,
-                            resource,
                             text,
                             single_line,
                             table,
@@ -288,14 +264,13 @@ fn convert_table(
             }
             Item::None => Err(Error::Parse {
                 text: text.to_string(),
-                location: Some(location_from_span(
+                location: Some(Box::new(location_from_span(
                     source,
-                    resource,
                     text,
                     single_line,
                     item.span(),
                     item_fallback,
-                )),
+                ))),
                 message: "unexpected empty toml item".to_string(),
             }),
         }?;
@@ -308,8 +283,7 @@ fn convert_table(
 }
 
 fn convert_toml_value(
-    source: &str,
-    resource: &str,
+    source: &Source,
     text: &str,
     single_line: bool,
     value: &TomlValue,
@@ -339,7 +313,6 @@ fn convert_toml_value(
                 if let Some(value) = array.get(index) {
                     let item_location = location_from_span(
                         source,
-                        resource,
                         text,
                         single_line,
                         value.span(),
@@ -347,7 +320,6 @@ fn convert_toml_value(
                     );
                     list.push(convert_toml_value(
                         source,
-                        resource,
                         text,
                         single_line,
                         value,
@@ -364,16 +336,10 @@ fn convert_toml_value(
             let mut map = Map::new();
             let fallback_offset = span_start(table.span(), 0);
             for (key, value) in table {
-                let item_location = location_from_span(
-                    source,
-                    resource,
-                    text,
-                    single_line,
-                    value.span(),
-                    fallback_offset,
-                );
+                let item_location =
+                    location_from_span(source, text, single_line, value.span(), fallback_offset);
                 let converted =
-                    convert_toml_value(source, resource, text, single_line, value, item_location)?;
+                    convert_toml_value(source, text, single_line, value, item_location)?;
                 map.insert(key.to_string(), converted);
             }
             Ok(LocatedValue {
@@ -383,7 +349,7 @@ fn convert_toml_value(
         }
         TomlValue::Datetime(_) => Err(Error::UnsupportedType {
             text: text.to_string(),
-            location,
+            location: Box::new(location),
             found: "datetime",
         }),
     }
@@ -397,15 +363,14 @@ fn span_start(span: Option<std::ops::Range<usize>>, fallback_offset: usize) -> u
 }
 
 fn location_from_span(
-    source: &str,
-    resource: &str,
+    source: &Source,
     text: &str,
     single_line: bool,
     span: Option<std::ops::Range<usize>>,
     fallback_offset: usize,
 ) -> Location {
     if single_line {
-        return Location::at(source, resource, None, None, None);
+        return Location::in_source(source.clone(), None, None, None);
     }
     let mut length = 0usize;
     if let Some(range) = &span {
@@ -413,9 +378,8 @@ fn location_from_span(
     }
     let offset = span_start(span, fallback_offset);
     let (line, column) = line_column(text, offset);
-    Location::at(
-        source,
-        resource,
+    Location::in_source(
+        source.clone(),
         Some(line),
         Some(column),
         if length > 0 { Some(length) } else { None },

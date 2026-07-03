@@ -1,6 +1,6 @@
 [package]
 name = "tanzim-merge"
-version = "0.9.0"
+version = "0.10.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -13,9 +13,9 @@ keywords = ["config", "configuration", "merge", "settings", "override"]
 include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
-tanzim-load = { path = "../tanzim-load", version = "0.8.0", default-features = false }
-tanzim-source = { path = "../tanzim-source", version = "0.4.0" }
-tanzim-value = { path = "../tanzim-value", version = "0.4.0" }
+tanzim-load = { path = "../tanzim-load", version = "0.9.0", default-features = false }
+tanzim-source = { path = "../tanzim-source", version = "0.5.0" }
+tanzim-value = { path = "../tanzim-value", version = "0.5.0" }
 thiserror = "1.0.56"
 cfg-if = "1.0.0"
 log = { version = "0.4.20", optional = true }

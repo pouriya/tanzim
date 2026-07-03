@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// (`path` feature) The kind of filesystem entry a [`Path`] must point at.
@@ -18,6 +18,7 @@ pub enum PathKind {
 /// exposes no such flag the check is a no-op that accepts.
 #[derive(Debug, Clone, Default)]
 pub struct Path {
+    meta: Meta,
     absolute: bool,
     relative: bool,
     extensions: Vec<String>,
@@ -28,6 +29,12 @@ pub struct Path {
 }
 
 impl Path {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -93,7 +100,15 @@ fn is_readable(_metadata: &std::fs::Metadata) -> bool {
 }
 
 impl Validator for Path {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = match value {
             Value::String(text) => text,
             other => {

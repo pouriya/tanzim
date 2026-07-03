@@ -79,7 +79,7 @@ pub mod yaml;
 ///             Ok(value) => value,
 ///             Err(_) => {
 ///                 return Err(Error::InvalidUtf8 {
-///                     location: Location::at(source_name, resource, None, None, None),
+///                     location: Box::new(Location::at(source_name, resource, None, None, None)),
 ///                 });
 ///             }
 ///         };

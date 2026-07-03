@@ -80,7 +80,9 @@ impl Parse for Json {
     }
 
     fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let source = src.source();
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let resource = src.resource();
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -93,7 +95,7 @@ impl Parse for Json {
             Ok(value) => value,
             Err(_) => {
                 return Err(Error::InvalidUtf8 {
-                    location: Location::at(source, resource, None, None, None),
+                    location: Box::new(Location::in_source(src.clone(), None, None, None)),
                 });
             }
         };
@@ -103,27 +105,19 @@ impl Parse for Json {
             Err(error) => {
                 return Err(Error::Parse {
                     text: text.to_string(),
-                    location: Some(location_from_position(
-                        source,
-                        resource,
+                    location: Some(Box::new(location_from_position(
+                        src,
                         single_line,
                         &error.start,
                         Some(&error.end),
-                    )),
+                    ))),
                     message: format!("{:?}", error.kind),
                 });
             }
         };
-        let location = location_from_position(
-            source,
-            resource,
-            single_line,
-            &parsed.start,
-            Some(&parsed.end),
-        );
+        let location = location_from_position(src, single_line, &parsed.start, Some(&parsed.end));
         let result = convert_value(
-            source,
-            resource,
+            src,
             text,
             single_line,
             parsed.value,
@@ -259,8 +253,7 @@ fn write_json_string(out: &mut String, value: &str) {
 }
 
 fn convert_value(
-    source: &str,
-    resource: &str,
+    source: &Source,
     text: &str,
     single_line: bool,
     value: JsonValue,
@@ -270,7 +263,7 @@ fn convert_value(
     match value {
         JsonValue::Null => Err(Error::UnsupportedNull {
             text: text.to_string(),
-            location,
+            location: Box::new(location),
         }),
         JsonValue::Bool(value) => Ok(LocatedValue {
             value: Value::Bool(value),
@@ -297,16 +290,10 @@ fn convert_value(
         JsonValue::Array(values) => {
             let mut list = Vec::new();
             for item in &values {
-                let item_location = location_from_position(
-                    source,
-                    resource,
-                    single_line,
-                    &item.start,
-                    Some(&item.end),
-                );
+                let item_location =
+                    location_from_position(source, single_line, &item.start, Some(&item.end));
                 let converted = convert_value(
                     source,
-                    resource,
                     text,
                     single_line,
                     item.value.clone(),
@@ -323,16 +310,10 @@ fn convert_value(
         JsonValue::Object(values) => {
             let mut map = Map::new();
             for (key, item) in values {
-                let item_location = location_from_position(
-                    source,
-                    resource,
-                    single_line,
-                    &item.start,
-                    Some(&item.end),
-                );
+                let item_location =
+                    location_from_position(source, single_line, &item.start, Some(&item.end));
                 let converted = convert_value(
                     source,
-                    resource,
                     text,
                     single_line,
                     item.value.clone(),
@@ -350,14 +331,13 @@ fn convert_value(
 }
 
 fn location_from_position(
-    source: &str,
-    resource: &str,
+    source: &Source,
     single_line: bool,
     start: &Position,
     end: Option<&Position>,
 ) -> Location {
     if single_line {
-        return Location::at(source, resource, None, None, None);
+        return Location::in_source(source.clone(), None, None, None);
     }
     let mut length = None;
     if let Some(end) = end
@@ -366,7 +346,7 @@ fn location_from_position(
     {
         length = Some(end.col - start.col + 1);
     }
-    Location::at(source, resource, Some(start.line), Some(start.col), length)
+    Location::in_source(source.clone(), Some(start.line), Some(start.col), length)
 }
 
 #[cfg(all(test, feature = "json"))]

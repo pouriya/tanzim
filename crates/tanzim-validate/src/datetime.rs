@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// Borrow the inner string, or produce a `Type` error expecting a string.
@@ -15,16 +15,34 @@ fn as_str(value: &mut Value) -> Result<&str, Error> {
 
 /// (`datetime` feature) Accepts an RFC 3339 timestamp such as `2024-01-02T15:04:05Z`.
 #[derive(Debug, Clone, Default)]
-pub struct DateTime;
+pub struct DateTime {
+    meta: Meta,
+}
 
 impl DateTime {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for DateTime {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_str(value)?;
         match text.parse::<jiff::Timestamp>() {
             Ok(_) => Ok(()),
@@ -37,16 +55,34 @@ impl Validator for DateTime {
 
 /// (`datetime` feature) Accepts a calendar date such as `2024-01-02`.
 #[derive(Debug, Clone, Default)]
-pub struct Date;
+pub struct Date {
+    meta: Meta,
+}
 
 impl Date {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for Date {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_str(value)?;
         match text.parse::<jiff::civil::Date>() {
             Ok(_) => Ok(()),

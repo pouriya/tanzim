@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use base64::Engine;
 use tanzim_value::{Value, ValueType};
 
@@ -16,16 +16,34 @@ fn as_str(value: &mut Value) -> Result<&str, Error> {
 
 /// (`encoding` feature) Accepts a standard (RFC 4648) base64-encoded string.
 #[derive(Debug, Clone, Default)]
-pub struct Base64;
+pub struct Base64 {
+    meta: Meta,
+}
 
 impl Base64 {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for Base64 {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_str(value)?;
         match base64::engine::general_purpose::STANDARD.decode(text) {
             Ok(_) => Ok(()),
@@ -36,16 +54,34 @@ impl Validator for Base64 {
 
 /// (`encoding` feature) Accepts a hexadecimal string (even number of `0-9a-fA-F` digits).
 #[derive(Debug, Clone, Default)]
-pub struct Hex;
+pub struct Hex {
+    meta: Meta,
+}
 
 impl Hex {
     pub fn new() -> Self {
-        Self
+        Self {
+            meta: Meta::default(),
+        }
+    }
+
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
 impl Validator for Hex {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = as_str(value)?;
         let bytes = text.as_bytes();
         if bytes.is_empty() || bytes.len() % 2 != 0 {

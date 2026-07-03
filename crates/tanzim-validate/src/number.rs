@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::Value;
 
 /// A sign constraint shared by [`Number`], [`crate::Integer`], and [`crate::Float`].
@@ -34,12 +34,19 @@ pub(crate) fn check_sign(sign: Option<Sign>, value: f64) -> Result<(), Error> {
 /// numerically but never rewrite it.
 #[derive(Debug, Clone, Default)]
 pub struct Number {
+    meta: Meta,
     min: Option<f64>,
     max: Option<f64>,
     sign: Option<Sign>,
 }
 
 impl Number {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -86,7 +93,15 @@ impl Number {
 }
 
 impl Validator for Number {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let number = match value {
             Value::Int(number) => *number as f64,
             Value::Float(number) => *number,

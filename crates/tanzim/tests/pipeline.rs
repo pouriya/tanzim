@@ -165,7 +165,7 @@ fn single_load_errors_when_no_loader_matches() {
 #[test]
 fn single_load_skips_errors_when_source_ignores_them() {
     let pipeline = PipelineSingleBuilder::new()
-        .with_source("mock?:bad")
+        .with_source("mock(on_error=(load=skip)):bad")
         .unwrap()
         .with_loader(failing_loader())
         .with_parser(txt_parser())
@@ -460,7 +460,7 @@ fn failing_parser() -> ParserClosure {
         "txt",
         Box::new(|source, _| {
             Err(tanzim_value::Error::InvalidUtf8 {
-                location: Location::at(source.source(), source.resource(), None, None, None),
+                location: Box::new(Location::in_source(source.clone(), None, None, None)),
             })
         }),
     )
@@ -485,15 +485,13 @@ fn single_load_propagates_loader_error() {
 #[test]
 fn single_parse_skips_errors_when_payload_source_ignores_them() {
     let pipeline = PipelineSingleBuilder::new()
-        .with_source("mock:one")
+        .with_source("mock(on_error=(parse=skip)):one")
         .unwrap()
         .with_loader(LoaderClosure::new(
             "mock",
             |source| {
-                let mut ignored = source.clone();
-                ignored.set_ignore_errors(true);
                 Ok(vec![Payload {
-                    source: ignored,
+                    source: source.clone(),
                     maybe_name: Some("app".into()),
                     maybe_format: Some("txt".into()),
                     content: b"x".to_vec(),
@@ -827,15 +825,13 @@ fn single_run_with_logging_enabled_exercises_pipeline_stages() {
 fn multi_parse_skips_errors_when_payload_source_ignores_them() {
     init_logging();
     let pipeline = PipelineMultiBuilder::new()
-        .with_source("mock:one")
+        .with_source("mock(on_error=(parse=skip)):one")
         .unwrap()
         .with_loader(LoaderClosure::new(
             "mock",
             |source| {
-                let mut ignored = source.clone();
-                ignored.set_ignore_errors(true);
                 Ok(vec![Payload {
-                    source: ignored,
+                    source: source.clone(),
                     maybe_name: Some("app".into()),
                     maybe_format: Some("txt".into()),
                     content: b"x".to_vec(),
@@ -855,7 +851,7 @@ fn multi_parse_skips_errors_when_payload_source_ignores_them() {
 #[test]
 fn multi_load_skips_errors_when_source_ignores_them() {
     let pipeline = PipelineMultiBuilder::new()
-        .with_source("mock?:bad")
+        .with_source("mock(on_error=(load=skip)):bad")
         .unwrap()
         .with_loader(failing_loader())
         .with_parser(txt_parser())

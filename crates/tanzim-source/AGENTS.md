@@ -5,14 +5,14 @@ Parses the declarative source string format used to declare where configuration 
 ## Format
 
 ```
-SOURCE [(OPTIONS)] [?] [:RESOURCE]
+SOURCE [(OPTIONS)] [:RESOURCE]
 ```
 
-Examples: `env`, `env(prefix=APP_)`, `file:/etc/app`, `file?:.env`, `http(timeout=5)?:https://...`
+Examples: `env`, `env(prefix=APP_)`, `file:/etc/app`, `file(on_error=(load=skip)):.env`, `http(timeout=5,on_error=(load=skip)):https://...`
 
 ## Key types
 
-- `Source` — parsed, validated source declaration. Has `source()`, `options()`, `resource()`, `ignore_errors()`.
+- `Source` — parsed, validated source declaration. Has `source()`, `options()`, `resource()`, `on_error(Stage)` → `OnError`.
 - `SourceBuilder` — builder for constructing `Source` programmatically.
 - `Options` / `OptionValue` — ordered map and dynamically typed value used for loader options.
 - `ParseError` — detailed parse error; use `{error:#}` for snippet + caret.

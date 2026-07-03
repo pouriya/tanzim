@@ -1,17 +1,17 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::num::NonZeroU32;
+use tanzim_source::Source;
 
 /// Source and optional position of a configuration value.
 ///
-/// Positions are 1-based and stored as [`NonZeroU32`] so that the whole
-/// [`Location`] (and therefore [`crate::Error`]) stays small enough to return by
-/// value without triggering `clippy::result_large_err`. Construct via
-/// [`Location::at`], which accepts ordinary `usize` positions and discards any
-/// out-of-range or zero value as "absent".
+/// Holds the full originating [`Source`] (name, options, resource — including any `on_error`
+/// policy), so a value or error can be traced back to where and how it was declared. Positions are
+/// 1-based and stored as [`NonZeroU32`]; [`crate::Error`] boxes the [`Location`] so results stay
+/// small. Construct via [`Location::in_source`] (the real source) or [`Location::at`] (a bare
+/// name/resource, for synthetic origins).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Location {
-    pub source_name: String,
-    pub resource: String,
+    pub source: Source,
     pub line: Option<NonZeroU32>,
     pub column: Option<NonZeroU32>,
     /// UTF-8 character span length for error underlines; defaults to one caret.
@@ -27,6 +27,23 @@ fn position(value: usize) -> Option<NonZeroU32> {
 }
 
 impl Location {
+    /// Build a location from the full originating [`Source`].
+    pub fn in_source(
+        source: Source,
+        line: Option<usize>,
+        column: Option<usize>,
+        length: Option<usize>,
+    ) -> Self {
+        Self {
+            source,
+            line: line.and_then(position),
+            column: column.and_then(position),
+            length: length.and_then(position),
+        }
+    }
+
+    /// Build a location from a bare source name and resource (a synthetic [`Source`] with no
+    /// options), for origins that do not come from parsing a real source string.
     pub fn at(
         source_name: &str,
         resource: &str,
@@ -34,13 +51,22 @@ impl Location {
         column: Option<usize>,
         length: Option<usize>,
     ) -> Self {
-        Self {
-            source_name: source_name.to_string(),
-            resource: resource.to_string(),
-            line: line.and_then(position),
-            column: column.and_then(position),
-            length: length.and_then(position),
-        }
+        Self::in_source(
+            Source::named(source_name).with_resource(resource),
+            line,
+            column,
+            length,
+        )
+    }
+
+    /// The originating source's name (loader kind).
+    pub fn source_name(&self) -> &str {
+        self.source.source()
+    }
+
+    /// The originating source's resource (address).
+    pub fn resource(&self) -> &str {
+        self.source.resource()
     }
 
     pub fn with_length(mut self, length: usize) -> Self {
@@ -51,10 +77,11 @@ impl Location {
 
 impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.resource.is_empty() {
-            write!(f, "{}", self.source_name)?;
+        let resource = self.source.resource();
+        if resource.is_empty() {
+            write!(f, "{}", self.source.source())?;
         } else {
-            write!(f, "{}:{}", self.source_name, self.resource)?;
+            write!(f, "{}:{}", self.source.source(), resource)?;
         }
         match (self.line, self.column) {
             (Some(line), Some(column)) => write!(f, ":{line}:{column}"),

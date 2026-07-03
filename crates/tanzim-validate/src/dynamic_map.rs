@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// (`dynamic_map` feature) Accepts a map with arbitrary keys and uniform values.
@@ -9,12 +9,19 @@ use tanzim_value::{Value, ValueType};
 /// collection). A non-empty list or any other type is rejected.
 #[derive(Default)]
 pub struct DynamicMap {
+    meta: Meta,
     min_len: Option<usize>,
     max_len: Option<usize>,
     values: Option<Box<dyn Validator>>,
 }
 
 impl DynamicMap {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -37,7 +44,15 @@ impl DynamicMap {
 }
 
 impl Validator for DynamicMap {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         match value {
             Value::Map(_) => {}
             Value::List(list) if list.is_empty() => *value = Value::new_map(),

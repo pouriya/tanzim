@@ -1,3 +1,4 @@
+use crate::Meta;
 use std::fmt::{self, Display, Formatter};
 use tanzim_value::{Location, ValueType};
 
@@ -90,6 +91,11 @@ pub struct Error {
     ///
     /// Boxed to keep [`Error`] small enough to return by value (`clippy::result_large_err`).
     pub location: Option<Box<Location>>,
+    /// The failing validator's human-facing metadata (name/description/examples/default).
+    ///
+    /// Boxed for the same size reason as `location`; filled in by the validator that failed
+    /// (innermost wins).
+    pub meta: Option<Box<Meta>>,
 }
 
 impl Error {
@@ -99,6 +105,7 @@ impl Error {
             kind,
             path: Vec::new(),
             location: None,
+            meta: None,
         }
     }
 
@@ -108,6 +115,24 @@ impl Error {
             self.location = Some(Box::new(location.clone()));
         }
         self
+    }
+
+    /// Attach the failing validator's [`Meta`] unless one is already set (innermost wins).
+    pub fn with_meta(mut self, meta: &Meta) -> Self {
+        if self.meta.is_none() {
+            self.meta = Some(Box::new(meta.clone()));
+        }
+        self
+    }
+
+    /// The failing validator's name, if known.
+    pub fn name(&self) -> Option<&str> {
+        self.meta.as_ref().map(|meta| meta.name.as_str())
+    }
+
+    /// The failing validator's default value, if it declared one.
+    pub fn default_value(&self) -> Option<&tanzim_value::Value> {
+        self.meta.as_ref().and_then(|meta| meta.default.as_ref())
     }
 
     /// Record that this error happened under map key `key`, whose value lives at `location`.
@@ -140,6 +165,11 @@ impl Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if let Some(meta) = &self.meta
+            && !meta.name.is_empty()
+        {
+            write!(f, "{}: ", meta.name)?;
+        }
         if !self.path.is_empty() {
             self.write_path(f)?;
             write!(f, ": ")?;
@@ -147,6 +177,19 @@ impl Display for Error {
         write!(f, "{}", self.kind)?;
         if let Some(location) = &self.location {
             write!(f, " at {location}")?;
+        }
+        if f.alternate()
+            && let Some(meta) = &self.meta
+        {
+            if let Some(description) = &meta.description {
+                write!(f, "\n  {description}")?;
+            }
+            for (value, note) in &meta.examples {
+                match note {
+                    Some(note) => write!(f, "\n  example: {value} ({note})")?,
+                    None => write!(f, "\n  example: {value}")?,
+                }
+            }
         }
         Ok(())
     }

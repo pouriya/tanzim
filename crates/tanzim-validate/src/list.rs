@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// (`list` feature) Accepts a list, with optional length bounds, a uniqueness check, and an optional
@@ -9,6 +9,7 @@ use tanzim_value::{Value, ValueType};
 /// collection as `{}`). A non-empty map or any other type is rejected.
 #[derive(Default)]
 pub struct List {
+    meta: Meta,
     min_len: Option<usize>,
     max_len: Option<usize>,
     unique: bool,
@@ -16,6 +17,12 @@ pub struct List {
 }
 
 impl List {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -43,7 +50,15 @@ impl List {
 }
 
 impl Validator for List {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         match value {
             Value::List(_) => {}
             Value::Map(map) if map.is_empty() => *value = Value::new_list(),

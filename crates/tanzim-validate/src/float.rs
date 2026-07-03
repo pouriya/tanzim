@@ -1,6 +1,6 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use crate::number::{Sign, check_sign};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// (`float` feature) Accepts a float, with optional inclusive bounds and lenient coercion.
@@ -11,12 +11,19 @@ use tanzim_value::{Value, ValueType};
 /// - a string is parsed as a float (which also accepts integer-looking strings).
 #[derive(Debug, Clone, Default)]
 pub struct Float {
+    meta: Meta,
     min: Option<f64>,
     max: Option<f64>,
     sign: Option<Sign>,
 }
 
 impl Float {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -63,7 +70,15 @@ impl Float {
 }
 
 impl Validator for Float {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let coerced = match value {
             Value::Float(number) => *number,
             Value::Int(number) => *number as f64,

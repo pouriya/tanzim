@@ -63,10 +63,10 @@ mod tests {
     #[test]
     fn serializes_config_source_as_string() {
         let app = App {
-            source: Source::parse("file?:.env").unwrap(),
+            source: Source::parse("file(on_error=(load=skip)):.env").unwrap(),
         };
         let json = serde_json::to_string(&app).unwrap();
-        assert_eq!(json, r#"{"source":"file?:.env"}"#);
+        assert_eq!(json, r#"{"source":"file(on_error=(load=skip)):.env"}"#);
     }
 
     #[test]

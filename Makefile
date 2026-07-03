@@ -1,7 +1,7 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all build test clippy check-style docs examples example-full
+.PHONY: all build test clippy check-style docs open-docs examples example-full
 
 all: build clippy test check-style
 
@@ -31,6 +31,9 @@ check-style:
 
 docs:
 	cargo doc --workspace --all-features
+
+open-docs:
+	cargo doc --workspace --all-features --open
 
 examples: example-full
 

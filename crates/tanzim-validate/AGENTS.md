@@ -4,9 +4,15 @@ Fourth stage of the pipeline: validates (and coerces) a configuration value agai
 
 ## Key types
 
-- `Validator` — trait: `fn validate(&self, value: &mut Value) -> Result<(), Error>`. Takes
-  `&mut Value` (not `LocatedValue`) so it can **coerce in place** (numeric string → int,
-  integral float → int, empty map ↔ empty list, etc.).
+- `Validator` — trait with three required methods: `meta() -> &Meta`, `meta_mut() -> &mut Meta`,
+  and `check(&self, value: &mut Value) -> Result<(), Error>` (the rule). `validate()` is a
+  provided method: runs `check`, attaches this validator's `Meta` on error, then applies the
+  output cast in `meta().convert` on success. Takes `&mut Value` (not `LocatedValue`) so it can
+  **coerce in place** (numeric string → int, integral float → int, empty map ↔ empty list, etc.).
+- `Meta` — human-facing metadata every validator carries: `name`, `description`, `examples`,
+  `default`, and an optional output-cast `convert`. Set through the `WithMeta` blanket-implemented
+  builder methods (`with_name`, `with_description`, `with_default`, `to_int`, …).
+- `WithMeta` — blanket-implemented trait that adds fluent getters/setters for every `Validator`'s `Meta`.
 - `validate(validator, &mut LocatedValue)` — free fn that validates a whole node and seeds the
   root `Location` into any error.
 - `Error` / `ErrorKind` / `Segment` — validation failure with a breadcrumb `path` and an

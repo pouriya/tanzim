@@ -1,15 +1,22 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// (`duration` feature) Accepts a human duration string (e.g. `"30s"`, `"5m"`, `"1h30m"`) and coerces it to an
 /// integer number of seconds (or milliseconds with [`Duration::millis`]).
 #[derive(Debug, Clone, Default)]
 pub struct Duration {
+    meta: Meta,
     millis: bool,
 }
 
 impl Duration {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -22,7 +29,15 @@ impl Duration {
 }
 
 impl Validator for Duration {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let text = match value {
             Value::String(text) => text,
             other => {

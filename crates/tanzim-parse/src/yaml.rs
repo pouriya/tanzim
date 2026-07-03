@@ -77,7 +77,9 @@ impl Parse for Yaml {
     }
 
     fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let source = src.source();
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let resource = src.resource();
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -90,7 +92,7 @@ impl Parse for Yaml {
             Ok(value) => value,
             Err(_) => {
                 return Err(Error::InvalidUtf8 {
-                    location: Location::at(source, resource, None, None, None),
+                    location: Box::new(Location::in_source(src.clone(), None, None, None)),
                 });
             }
         };
@@ -101,13 +103,12 @@ impl Parse for Yaml {
                 let marker = error.marker();
                 return Err(Error::Parse {
                     text: text.to_string(),
-                    location: Some(Location::at(
-                        source,
-                        resource,
+                    location: Some(Box::new(Location::in_source(
+                        src.clone(),
                         Some(marker.line()),
                         Some(marker.col() + 1),
                         None,
-                    )),
+                    ))),
                     message: error.info().to_string(),
                 });
             }
@@ -122,10 +123,10 @@ impl Parse for Yaml {
             }
             return Ok(LocatedValue {
                 value: Value::Map(Map::new()),
-                location: Location::at(source, resource, None, None, None),
+                location: Location::in_source(src.clone(), None, None, None),
             });
         }
-        let result = convert_node(source, resource, text, single_line, &docs[0]);
+        let result = convert_node(src, text, single_line, &docs[0]);
         if result.is_ok() {
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
@@ -324,14 +325,13 @@ fn write_yaml_string(out: &mut String, value: &str) {
 }
 
 fn convert_node(
-    source: &str,
-    resource: &str,
+    source: &Source,
     text: &str,
     single_line: bool,
     node: &MarkedYaml<'_>,
 ) -> Result<LocatedValue, Error> {
     let location = if single_line {
-        Location::at(source, resource, None, None, None)
+        Location::in_source(source.clone(), None, None, None)
     } else {
         let marker = node.span.start;
         let length = if !node.span.is_empty() {
@@ -339,9 +339,8 @@ fn convert_node(
         } else {
             None
         };
-        Location::at(
-            source,
-            resource,
+        Location::in_source(
+            source.clone(),
             Some(marker.line()),
             Some(marker.col() + 1),
             length,
@@ -351,7 +350,7 @@ fn convert_node(
         YamlData::Value(scalar) => match scalar {
             Scalar::Null => Err(Error::UnsupportedNull {
                 text: text.to_string(),
-                location,
+                location: Box::new(location),
             }),
             Scalar::Boolean(value) => Ok(LocatedValue {
                 value: Value::Bool(*value),
@@ -373,7 +372,7 @@ fn convert_node(
         YamlData::Sequence(sequence) => {
             let mut list = Vec::new();
             for node in sequence {
-                list.push(convert_node(source, resource, text, single_line, node)?);
+                list.push(convert_node(source, text, single_line, node)?);
             }
             Ok(LocatedValue {
                 value: Value::List(list),
@@ -394,7 +393,7 @@ fn convert_node(
                         });
                     }
                 };
-                let value = convert_node(source, resource, text, single_line, value_node)?;
+                let value = convert_node(source, text, single_line, value_node)?;
                 map.insert(key, value);
             }
             Ok(LocatedValue {
@@ -402,12 +401,12 @@ fn convert_node(
                 location,
             })
         }
-        YamlData::Tagged(_, inner) => convert_node(source, resource, text, single_line, inner),
+        YamlData::Tagged(_, inner) => convert_node(source, text, single_line, inner),
         YamlData::Representation(representation, _, _) => {
             if representation == "~" || representation == "null" || representation == "Null" {
                 return Err(Error::UnsupportedNull {
                     text: text.to_string(),
-                    location,
+                    location: Box::new(location),
                 });
             }
             Ok(LocatedValue {
@@ -417,7 +416,7 @@ fn convert_node(
         }
         YamlData::Alias(_) | YamlData::BadValue => Err(Error::Parse {
             text: text.to_string(),
-            location: Some(location),
+            location: Some(Box::new(location)),
             message: "unsupported yaml node".to_string(),
         }),
     }

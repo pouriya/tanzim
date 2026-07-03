@@ -21,6 +21,50 @@ pub enum Error {
     Parse(#[from] ParseError),
 }
 
+/// A pipeline stage whose errors a [`Source`] can choose to tolerate.
+///
+/// Declared in the source string via the reserved `on_error` option, e.g.
+/// `file(on_error=(load=skip,validate=skip)):/etc/app`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Stage {
+    /// The load stage (fetching the raw bytes).
+    Load,
+    /// The parse stage (turning bytes into values).
+    Parse,
+    /// The validate stage (checking values against a schema).
+    Validate,
+}
+
+impl Stage {
+    /// The reserved-option key name for this stage (`load` / `parse` / `validate`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Load => "load",
+            Self::Parse => "parse",
+            Self::Validate => "validate",
+        }
+    }
+}
+
+impl Display for Stage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// What to do when a stage fails for a given [`Source`].
+///
+/// The default for every stage is [`OnError::Fail`]; a source opts into tolerance per stage with
+/// `on_error=(<stage>=skip)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum OnError {
+    /// Abort the pipeline with the error (default).
+    #[default]
+    Fail,
+    /// Skip this source's contribution (load/parse) or fall back to a default (validate).
+    Skip,
+}
+
 /// Kind of value stored in [`OptionValue`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OptionValueType {
@@ -352,13 +396,40 @@ pub struct Source {
     pub(crate) source: String,
     pub(crate) options: Options,
     pub(crate) resource: String,
-    pub(crate) ignore_errors: bool,
     pub(crate) resource_colon: bool,
 }
 
 impl Source {
     pub fn parse(input: &str) -> Result<Self, ParseError> {
         parse::parse(input)
+    }
+
+    /// Build a bare source with just a name — no options, no resource — infallibly.
+    ///
+    /// Used for synthetic origins (e.g. `tanzim_value::Location`s that do not come from parsing a
+    /// real source string). Unlike [`Source::parse`] this performs no validation, so the name may
+    /// even be empty for a placeholder origin.
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            source: name.into(),
+            options: Options::default(),
+            resource: String::new(),
+            resource_colon: false,
+        }
+    }
+
+    /// The error policy this source declares for `stage`, via its reserved `on_error` option.
+    ///
+    /// Defaults to [`OnError::Fail`] when the option is absent, malformed, or does not mention the
+    /// stage. `on_error=(load=skip,validate=skip)` yields [`OnError::Skip`] for those two stages.
+    pub fn on_error(&self, stage: Stage) -> OnError {
+        let Some(OptionValue::Map(map)) = self.options.get("on_error") else {
+            return OnError::Fail;
+        };
+        match map.get(stage.as_str()) {
+            Some(OptionValue::String(value)) if value.eq_ignore_ascii_case("skip") => OnError::Skip,
+            _ => OnError::Fail,
+        }
     }
 
     pub fn source(&self) -> &str {
@@ -427,19 +498,6 @@ impl Source {
         self
     }
 
-    pub fn ignore_errors(&self) -> bool {
-        self.ignore_errors
-    }
-
-    pub fn set_ignore_errors(&mut self, ignore_errors: bool) {
-        self.ignore_errors = ignore_errors;
-    }
-
-    pub fn with_ignore_errors(mut self, ignore_errors: bool) -> Self {
-        self.ignore_errors = ignore_errors;
-        self
-    }
-
     pub fn resource_colon(&self) -> bool {
         self.resource_colon
     }
@@ -460,7 +518,6 @@ pub struct SourceBuilder {
     source: Option<String>,
     options: Options,
     resource: String,
-    ignore_errors: bool,
     resource_colon: bool,
 }
 
@@ -489,11 +546,6 @@ impl SourceBuilder {
         self
     }
 
-    pub fn with_ignore_errors(mut self, ignore_errors: bool) -> Self {
-        self.ignore_errors = ignore_errors;
-        self
-    }
-
     pub fn with_resource_colon(mut self, resource_colon: bool) -> Self {
         self.resource_colon = resource_colon;
         self
@@ -509,7 +561,6 @@ impl SourceBuilder {
             source,
             options: self.options,
             resource: self.resource,
-            ignore_errors: self.ignore_errors,
             resource_colon,
         })
     }
@@ -602,20 +653,39 @@ mod tests {
     }
 
     #[test]
-    fn builder_with_options_and_ignore_errors() {
+    fn builder_with_options() {
         let mut options = Options::new();
         options.insert("prefix", "APP_");
         let source = SourceBuilder::new()
             .with_source("env")
             .with_options(options)
-            .with_ignore_errors(true)
             .build()
             .unwrap();
-        assert!(source.ignore_errors());
         assert_eq!(
             source.options().get("prefix"),
             Some(&OptionValue::String("APP_".into()))
         );
+    }
+
+    #[test]
+    fn on_error_reads_reserved_option() {
+        let fail = Source::parse("file:/etc/app").unwrap();
+        assert_eq!(fail.on_error(Stage::Load), OnError::Fail);
+        assert_eq!(fail.on_error(Stage::Validate), OnError::Fail);
+
+        let source = Source::parse("file(on_error=(load=skip,validate=skip)):/etc/app").unwrap();
+        assert_eq!(source.on_error(Stage::Load), OnError::Skip);
+        assert_eq!(source.on_error(Stage::Parse), OnError::Fail);
+        assert_eq!(source.on_error(Stage::Validate), OnError::Skip);
+    }
+
+    #[test]
+    fn named_builds_bare_source() {
+        let source = Source::named("schema");
+        assert_eq!(source.source(), "schema");
+        assert_eq!(source.resource(), "");
+        assert!(source.options().is_empty());
+        assert_eq!(source.on_error(Stage::Validate), OnError::Fail);
     }
 
     #[test]
@@ -695,7 +765,6 @@ mod tests {
         let mut source = SourceBuilder::new()
             .with_source("file")
             .with_option("ignore", vec!["not-found"])
-            .with_ignore_errors(true)
             .with_resource("/tmp/x")
             .build()
             .unwrap();
@@ -703,7 +772,6 @@ mod tests {
         source.options_mut().insert("extra", "yes");
         assert_eq!(source.source(), "file");
         let text = source.to_string();
-        assert!(text.contains('?'));
         assert!(text.contains("/tmp/x"));
         assert!(text.contains("extra=yes"));
     }
@@ -716,11 +784,9 @@ mod tests {
             .unwrap()
             .with_source("file")
             .with_resource("/etc/app")
-            .with_option("lowercase", false)
-            .with_ignore_errors(true);
+            .with_option("lowercase", false);
         assert_eq!(source.source(), "file");
         assert_eq!(source.resource(), "/etc/app");
-        assert!(source.ignore_errors());
         assert_eq!(
             source.options().get("lowercase"),
             Some(&OptionValue::Bool(false))

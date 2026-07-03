@@ -22,7 +22,7 @@
 //!     Box::new(|source, bytes| {
 //!         Ok(LocatedValue {
 //!             value: Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
-//!             location: Location::at(source.source(), source.resource(), None, None, None),
+//!             location: Location::in_source(source.clone(), None, None, None),
 //!         })
 //!     }),
 //! );
@@ -137,7 +137,7 @@ mod tests {
             Box::new(|source, bytes| {
                 Ok(LocatedValue {
                     value: Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
-                    location: Location::at(source.source(), source.resource(), None, None, None),
+                    location: Location::in_source(source.clone(), None, None, None),
                 })
             }),
         )

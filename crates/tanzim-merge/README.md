@@ -1,4 +1,5 @@
 # tanzim-merge
+[**Package**](https://crates.io/crates/tanzim-merge)   |   [**Documentation**](https://docs.rs/tanzim-merge)   |   [**Repository**](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-merge)
 
 Third stage of the tanzim pipeline: groups parsed payloads by entry name and merges their values.
 
@@ -64,6 +65,6 @@ spans via the `log` / `tracing` crates.
 
 ## Relations
 
-- Consumes `LocatedValue` from [`tanzim-parse`](../tanzim-parse/).
-- Uses `Payload` from [`tanzim-load`](../tanzim-load/) (which embeds `Source`) to track provenance.
-- Full pipeline wired in [`tanzim`](../tanzim/).
+- Consumes `LocatedValue` from [`tanzim-parse`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-parse).
+- Uses `Payload` from [`tanzim-load`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-load) (which embeds `Source`) to track provenance.
+- Full pipeline wired in [`tanzim`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim).

@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
+use crate::{Meta, Validator};
 use tanzim_value::Value;
 
 /// (`either` feature) Accepts the value if **either** of two validators accepts it.
@@ -9,16 +9,24 @@ use tanzim_value::Value;
 /// a partial coercion from the first attempt is never observed. If both fail, the two
 /// errors are combined into a single [`ErrorKind::Either`] that reports what each expected.
 pub struct Either {
+    meta: Meta,
     first: Box<dyn Validator>,
     second: Box<dyn Validator>,
 }
 
 impl Either {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new(
         first: impl Into<Box<dyn Validator>>,
         second: impl Into<Box<dyn Validator>>,
     ) -> Self {
         Self {
+            meta: Meta::default(),
             first: first.into(),
             second: second.into(),
         }
@@ -26,7 +34,15 @@ impl Either {
 }
 
 impl Validator for Either {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         // Validate on a copy so a failing branch never leaves a half-coerced value behind;
         // only the branch that succeeds is committed back.
         let mut candidate = value.clone();

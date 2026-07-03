@@ -1,4 +1,5 @@
 # tanzim-parse
+[**Package**](https://crates.io/crates/tanzim-parse)   |   [**Documentation**](https://docs.rs/tanzim-parse)   |   [**Repository**](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-parse)
 
 Second stage of the tanzim pipeline: parses raw bytes into typed, source-located value trees.
 
@@ -33,7 +34,7 @@ example below for worked details.
 
 ## Example
 
-```rust,no_run
+```rust,ignore
 use tanzim_parse::{Parse, json::Json};
 use tanzim_source::SourceBuilder;
 
@@ -67,7 +68,7 @@ Default features: `env`. Logging/tracing are opt-in.
 
 ## Relations
 
-- Consumes `Payload` from [`tanzim-load`](../tanzim-load/).
-- Depends on [`tanzim-value`](../tanzim-value/) for `LocatedValue`, `Value`, `Map`, `Error`.
-- Produces `LocatedValue` trees consumed by [`tanzim-merge`](../tanzim-merge/).
-- Full pipeline wired in [`tanzim`](../tanzim/).
+- Consumes `Payload` from [`tanzim-load`](https://docs.rs/tanzim-load/latest/tanzim_load/).
+- Depends on [`tanzim-value`](https://docs.rs/tanzim-value/latest/tanzim_value/) for `LocatedValue`, `Value`, `Map`, `Error`.
+- Produces `LocatedValue` trees consumed by [`tanzim-merge`](https://docs.rs/tanzim-merge/latest/tanzim_merge/).
+- Full pipeline wired in [`tanzim`](https://docs.rs/tanzim/latest/tanzim/).

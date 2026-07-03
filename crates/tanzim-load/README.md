@@ -1,4 +1,5 @@
 # tanzim-load
+[**Package**](https://crates.io/crates/tanzim-load)   |   [**Documentation**](https://docs.rs/tanzim-load)   |   [**Repository**](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-load)
 
 First stage of the tanzim pipeline: reads raw configuration bytes from a declared source.
 
@@ -78,6 +79,6 @@ Default features: `env`, `file`, `http`. Logging/tracing are opt-in.
 
 ## Relations
 
-- Depends on [`tanzim-source`](../tanzim-source/) for `Source` and `Options`.
-- Produces `Payload` values consumed by [`tanzim-parse`](../tanzim-parse/).
-- Full pipeline wired in [`tanzim`](../tanzim/).
+- Depends on [`tanzim-source`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-source) for `Source` and `Options`.
+- Produces `Payload` values consumed by [`tanzim-parse`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-parse).
+- Full pipeline wired in [`tanzim`](https://github.com/pouriya/tanzim/tree/master/crates/tanzim).

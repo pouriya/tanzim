@@ -61,8 +61,12 @@ pub enum ParseError {
         at: usize,
         rest: String,
     },
-    /// Skip marker `?` appears before `(...)` options (`source?(...)` is invalid).
-    SkipMarkerBeforeOptions { input: String, at: usize },
+    /// The reserved `on_error` option is malformed (bad shape, unknown stage, or bad value).
+    InvalidOnError {
+        input: String,
+        at: usize,
+        message: String,
+    },
 }
 
 impl Display for ParseError {
@@ -73,7 +77,12 @@ impl Display for ParseError {
                 *at,
                 "configuration source is required".to_string(),
             ),
-            Self::UnexpectedEnd { input, at, expected, .. } => (
+            Self::UnexpectedEnd {
+                input,
+                at,
+                expected,
+                ..
+            } => (
                 input.as_str(),
                 *at,
                 format!("configuration source: expected {expected}, found end of input"),
@@ -89,7 +98,9 @@ impl Display for ParseError {
                 *at,
                 format!("configuration source: expected {expected}, found `{found}`"),
             ),
-            Self::InvalidIdentifier { input, at, found, .. } => (
+            Self::InvalidIdentifier {
+                input, at, found, ..
+            } => (
                 input.as_str(),
                 *at,
                 format!("configuration source: invalid identifier `{found}`"),
@@ -129,21 +140,24 @@ impl Display for ParseError {
                 *at,
                 "configuration source: trailing comma".to_string(),
             ),
-            Self::InvalidNumber { input, at, found, .. } => (
+            Self::InvalidNumber {
+                input, at, found, ..
+            } => (
                 input.as_str(),
                 *at,
                 format!("configuration source: invalid number `{found}`"),
             ),
-            Self::TrailingInput { input, at, rest, .. } => (
+            Self::TrailingInput {
+                input, at, rest, ..
+            } => (
                 input.as_str(),
                 *at,
                 format!("configuration source: unexpected trailing input `{rest}`"),
             ),
-            Self::SkipMarkerBeforeOptions { input, at, .. } => (
+            Self::InvalidOnError { input, at, message } => (
                 input.as_str(),
                 *at,
-                "configuration source: skip marker `?` must come after options `(...)`; use `source(...)?` not `source?(...)`"
-                    .to_string(),
+                format!("configuration source: {message}"),
             ),
         };
         write!(
@@ -183,9 +197,6 @@ impl Display for Source {
                 write_option_value(f, value)?;
             }
             write!(f, ")")?;
-        }
-        if self.ignore_errors() {
-            write!(f, "?")?;
         }
         if self.resource_colon() || !self.resource().is_empty() {
             write!(f, ":{}", self.resource())?;
@@ -271,22 +282,11 @@ impl<'a> Parser<'a> {
 
     fn parse(mut self) -> Result<Source, ParseError> {
         let source = self.parse_source()?;
-        if self.peek() == Some('?') && self.input[self.pos..].starts_with("?(") {
-            return Err(ParseError::SkipMarkerBeforeOptions {
-                input: self.owned_input(),
-                at: self.pos,
-            });
-        }
+        let options_at = self.pos;
         let options = if self.peek() == Some('(') {
             self.parse_options_block()?
         } else {
             Options::default()
-        };
-        let ignore_errors = if self.peek() == Some('?') {
-            self.bump();
-            true
-        } else {
-            false
         };
         let (resource_colon, resource) = if self.peek() == Some(':') {
             self.bump();
@@ -303,11 +303,17 @@ impl<'a> Parser<'a> {
                 rest: self.input[self.pos..].to_string(),
             });
         }
+        if let Some(message) = validate_on_error(&options) {
+            return Err(ParseError::InvalidOnError {
+                input: self.owned_input(),
+                at: options_at,
+                message,
+            });
+        }
         Ok(Source {
             source,
             options,
             resource,
-            ignore_errors,
             resource_colon,
         })
     }
@@ -682,6 +688,37 @@ fn is_float_token(token: &str) -> bool {
         && fraction.chars().all(|ch| ch.is_ascii_digit())
 }
 
+/// Validate the reserved `on_error` option, returning a message when it is malformed.
+///
+/// Shape: `on_error=(<stage>=<policy>,…)` where `<stage>` is `load`/`parse`/`validate` and
+/// `<policy>` is `skip`/`fail` (case-insensitive). Absent option → `Ok`.
+fn validate_on_error(options: &Options) -> Option<String> {
+    let value = options.get("on_error")?;
+    let OptionValue::Map(map) = value else {
+        return Some(format!(
+            "`on_error` must be a map like `(load=skip)`, found {}",
+            value.type_name()
+        ));
+    };
+    for (stage, policy) in map.iter() {
+        if !matches!(stage, "load" | "parse" | "validate") {
+            return Some(format!(
+                "unknown `on_error` stage `{stage}`; expected load, parse, or validate"
+            ));
+        }
+        match policy {
+            OptionValue::String(text)
+                if text.eq_ignore_ascii_case("skip") || text.eq_ignore_ascii_case("fail") => {}
+            _ => {
+                return Some(format!(
+                    "`on_error` policy for `{stage}` must be `skip` or `fail`, found `{policy}`"
+                ));
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -697,7 +734,7 @@ mod tests {
         assert_eq!(env.source(), "env");
         assert!(env.options().is_empty());
         assert_eq!(env.resource(), "");
-        assert!(!env.ignore_errors());
+        assert_eq!(env.on_error(crate::Stage::Load), crate::OnError::Fail);
         assert!(!env.resource_colon());
 
         let env_opts = parsed("env(prefix=APP_)");
@@ -708,17 +745,17 @@ mod tests {
 
         let file = parsed("file:/x/y/z");
         assert_eq!(file.resource(), "/x/y/z");
-        assert!(!file.ignore_errors());
+        assert_eq!(file.on_error(crate::Stage::Load), crate::OnError::Fail);
 
-        let file_skip = parsed("file?:.env");
-        assert!(file_skip.ignore_errors());
+        let file_skip = parsed("file(on_error=(load=skip)):.env");
+        assert_eq!(file_skip.on_error(crate::Stage::Load), crate::OnError::Skip);
         assert_eq!(file_skip.resource(), ".env");
 
         let http = parsed(
-            r#"http(headers=(Authorization="TOKEN"),timeout=3s)?:https://domain.tld/my/config.yml"#,
+            r#"http(headers=(Authorization="TOKEN"),timeout=3s,on_error=(load=skip)):https://domain.tld/my/config.yml"#,
         );
         assert_eq!(http.source(), "http");
-        assert!(http.ignore_errors());
+        assert_eq!(http.on_error(crate::Stage::Load), crate::OnError::Skip);
         assert_eq!(http.resource(), "https://domain.tld/my/config.yml");
         assert_eq!(
             http.options().get("timeout"),
@@ -732,8 +769,7 @@ mod tests {
             "env",
             "env(prefix=APP_)",
             "file:/x/y/z",
-            "file?:.env",
-            "file?",
+            "file(on_error=(load=skip)):.env",
             "env:",
         ] {
             let source = parsed(input);
@@ -741,7 +777,7 @@ mod tests {
         }
 
         let http = parsed(
-            r#"http(headers=(Authorization="TOKEN"),timeout=3s)?:https://domain.tld/my/config.yml"#,
+            r#"http(headers=(Authorization="TOKEN"),timeout=3s,on_error=(load=skip,validate=skip)):https://domain.tld/my/config.yml"#,
         );
         assert_eq!(parsed(&http.to_string()), http);
     }
@@ -754,16 +790,38 @@ mod tests {
     }
 
     #[test]
-    fn rejects_question_mark_before_options() {
-        let error = parse(r#"env?(kv=salam):oops"#).unwrap_err();
-        assert!(matches!(error, ParseError::SkipMarkerBeforeOptions { .. }));
-        assert!(error.to_string().contains("configuration source:"));
+    fn old_skip_marker_now_errors() {
+        // The legacy `?` ignore-errors marker is gone; it is now trailing input.
+        assert!(matches!(
+            parse("file?:.env"),
+            Err(ParseError::TrailingInput { .. })
+        ));
+        assert!(matches!(
+            parse("env?(kv=salam):oops"),
+            Err(ParseError::TrailingInput { .. })
+        ));
     }
 
     #[test]
-    fn parses_complex_options_before_skip_marker() {
-        let source = parsed(r#"env(kv=salam,h=(o=b,z=[1,2,3.14,""]))?:oops"#);
-        assert!(source.ignore_errors());
+    fn rejects_malformed_on_error() {
+        assert!(matches!(
+            parse("file(on_error=skip):.env"),
+            Err(ParseError::InvalidOnError { .. })
+        ));
+        assert!(matches!(
+            parse("file(on_error=(bogus=skip)):.env"),
+            Err(ParseError::InvalidOnError { .. })
+        ));
+        assert!(matches!(
+            parse("file(on_error=(load=maybe)):.env"),
+            Err(ParseError::InvalidOnError { .. })
+        ));
+    }
+
+    #[test]
+    fn parses_complex_options_with_on_error() {
+        let source = parsed(r#"env(kv=salam,h=(o=b,z=[1,2,3.14,""]),on_error=(parse=skip)):oops"#);
+        assert_eq!(source.on_error(crate::Stage::Parse), crate::OnError::Skip);
         assert_eq!(source.resource(), "oops");
         assert_eq!(
             source.options().get("kv"),

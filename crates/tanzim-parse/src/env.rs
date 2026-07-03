@@ -120,7 +120,9 @@ impl Parse for Env {
             }
         }
 
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let source_name = source.source();
+        #[cfg(any(feature = "tracing", feature = "logging"))]
         let resource = source.resource();
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -144,7 +146,7 @@ impl Parse for Env {
             Ok(value) => value,
             Err(_) => {
                 return Err(Error::InvalidUtf8 {
-                    location: Location::at(source_name, resource, None, None, None),
+                    location: Box::new(Location::in_source(source.clone(), None, None, None)),
                 });
             }
         };
@@ -218,11 +220,10 @@ impl Parse for Env {
                             value_part.to_string()
                         };
                         let location = if single_line {
-                            Location::at(source_name, resource, None, None, None)
+                            Location::in_source(source.clone(), None, None, None)
                         } else {
-                            Location::at(
-                                source_name,
-                                resource,
+                            Location::in_source(
+                                source.clone(),
                                 Some(line_number),
                                 Some(column),
                                 None,
@@ -277,7 +278,7 @@ impl Parse for Env {
         }
         Ok(LocatedValue {
             value: Value::Map(map),
-            location: Location::at(source_name, resource, None, None, None),
+            location: Location::in_source(source.clone(), None, None, None),
         })
     }
 

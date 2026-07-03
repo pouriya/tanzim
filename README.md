@@ -15,7 +15,7 @@ way they do. Each stage's own README covers the details of *how*.
 - **Located everything.** Every value *and every error* remembers its exact source, line, and column. Errors render a caret-underlined snippet pointing straight at the offending input.
 - **Pluggable at every stage.** Loading, parsing, merging, and validating are each just a trait. Bring your own source kind, format, merge strategy, or validator without forking anything.
 - **Pay for what you use.** Every source, format, and validator is feature-gated. Take the whole pipeline through the facade, or depend on a single stage crate on its own.
-- **Declarative sources.** Say *where* configuration comes from with short strings like `env(prefix=APP_)` or `file?:/etc/app` — not hand-wired setup code.
+- **Declarative sources.** Say *where* configuration comes from with short strings like `env(prefix=APP_)` or `file(on_error=(load=skip)):/etc/app` — not hand-wired setup code.
 - **Validation is part of the pipeline.** Schema-driven checking and coercion is a first-class final stage, not something you bolt on afterward.
 - **One config, or many.** Collapse everything into a single unified value, or keep named entries as a map — whichever fits how your application reads its configuration.
 

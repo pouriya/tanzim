@@ -4,23 +4,27 @@ use std::fmt::{self, Display, Formatter};
 /// Error while deserializing configuration input.
 ///
 /// [`Display`] is one line by default; use `{error:#}` for source context and caret.
+///
+/// [`Location`] is boxed so the whole [`Error`] stays small enough to return by value without
+/// tripping `clippy::result_large_err` (a [`Location`] now carries the full originating
+/// [`tanzim_source::Source`]).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     InvalidUtf8 {
-        location: Location,
+        location: Box<Location>,
     },
     UnsupportedNull {
         text: String,
-        location: Location,
+        location: Box<Location>,
     },
     UnsupportedType {
         text: String,
-        location: Location,
+        location: Box<Location>,
         found: &'static str,
     },
     Parse {
         text: String,
-        location: Option<Location>,
+        location: Option<Box<Location>>,
         message: String,
     },
 }
@@ -154,7 +158,7 @@ mod tests {
     fn default_display_is_single_line() {
         let error = Error::UnsupportedNull {
             text: "foo: bar\nbaz: ~\n".to_string(),
-            location: Location::at("file", "config.yaml", Some(2), Some(7), None),
+            location: Box::new(Location::at("file", "config.yaml", Some(2), Some(7), None)),
         };
         let message = error.to_string();
         assert!(!message.contains('\n'));
@@ -166,7 +170,13 @@ mod tests {
     fn alternate_display_underlines_token() {
         let error = Error::UnsupportedNull {
             text: "foo: bar\nbaz: null\n".to_string(),
-            location: Location::at("file", "config.yaml", Some(2), Some(6), Some(4)),
+            location: Box::new(Location::at(
+                "file",
+                "config.yaml",
+                Some(2),
+                Some(6),
+                Some(4),
+            )),
         };
         let message = format!("{error:#}");
         assert!(message.contains("^^^^"));
@@ -177,7 +187,7 @@ mod tests {
     fn alternate_display_aligns_gutter_pipe() {
         let error = Error::UnsupportedNull {
             text: "foo: bar\n\nbaz:\n\n  qux: ~\n".to_string(),
-            location: Location::at("file", "config.yaml", Some(5), Some(8), None),
+            location: Box::new(Location::at("file", "config.yaml", Some(5), Some(8), None)),
         };
         let message = format!("{error:#}");
         let source_line = message

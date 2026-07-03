@@ -1,7 +1,7 @@
 # tanzim-source/src
 
 - `lib.rs` — public API: `Source`, `SourceBuilder`, `Options`, `OptionValue`, `Error`
-- `parse.rs` — recursive descent parser for the `SOURCE[(OPTIONS)][?][:RESOURCE]` grammar and `Display` impl
+- `parse.rs` — recursive descent parser for the `SOURCE[(OPTIONS)][:RESOURCE]` grammar and `Display` impl
 - `impls.rs` — `From`/`TryFrom` blanket conversions
 - `serde.rs` — serde glue (feature-gated)
 

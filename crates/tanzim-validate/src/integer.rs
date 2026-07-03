@@ -1,6 +1,6 @@
-use crate::Validator;
 use crate::error::{Error, ErrorKind};
 use crate::number::{Sign, check_sign};
+use crate::{Meta, Validator};
 use tanzim_value::{Value, ValueType};
 
 /// Convert an integral `f64` into an `isize`, or `None` if it has a fraction or
@@ -23,12 +23,19 @@ fn f64_to_isize(number: f64) -> Option<isize> {
 /// - a float with no fractional part (e.g. `3.0`) becomes an integer.
 #[derive(Debug, Clone, Default)]
 pub struct Integer {
+    meta: Meta,
     min: Option<isize>,
     max: Option<isize>,
     sign: Option<Sign>,
 }
 
 impl Integer {
+    /// Attach human-facing metadata (name, description, examples, default, output conversion).
+    pub fn with_meta(mut self, meta: Meta) -> Self {
+        self.meta = meta;
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -75,7 +82,15 @@ impl Integer {
 }
 
 impl Validator for Integer {
-    fn validate(&self, value: &mut Value) -> Result<(), Error> {
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    fn check(&self, value: &mut Value) -> Result<(), Error> {
         let coerced = match value {
             Value::Int(number) => *number,
             Value::Float(number) => match f64_to_isize(*number) {

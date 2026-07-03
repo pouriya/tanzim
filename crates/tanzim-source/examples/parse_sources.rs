@@ -9,9 +9,9 @@ fn main() {
         eprintln!("  parse_sources env");
         eprintln!("  parse_sources 'env(prefix=APP_)'");
         eprintln!("  parse_sources 'file:/etc/app/config.json'");
-        eprintln!("  parse_sources 'file?:.env'");
+        eprintln!("  parse_sources 'file(on_error=(load=skip)):.env'");
         eprintln!(
-            "  parse_sources 'http(headers=(Authorization=\"TOKEN\"),timeout=3s)?:https://example.com/config.yml'"
+            "  parse_sources 'http(headers=(Authorization=\"TOKEN\"),timeout=3s,on_error=(load=skip)):https://example.com/config.yml'"
         );
         std::process::exit(1);
     }
@@ -26,7 +26,13 @@ fn main() {
         match Source::parse(input) {
             Ok(source) => {
                 println!("  source: {}", source.source());
-                println!("  ignore_errors: {}", source.ignore_errors());
+                for stage in [
+                    tanzim_source::Stage::Load,
+                    tanzim_source::Stage::Parse,
+                    tanzim_source::Stage::Validate,
+                ] {
+                    println!("  on_error[{stage}]: {:?}", source.on_error(stage));
+                }
                 if source.resource().is_empty() {
                     println!("  resource: (none)");
                 } else {
