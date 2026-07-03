@@ -156,6 +156,14 @@ pub trait Validator {
     /// Run [`check`](Validator::check); on error attach this validator's [`Meta`] (innermost wins);
     /// on success apply the output conversion in `meta().convert`, if any.
     fn validate(&self, value: &mut Value) -> Result<(), Error> {
+        if matches!(value, Value::Comment(_)) {
+            return Ok(());
+        }
+        if matches!(value, Value::Null)
+            && let Some(default) = self.meta().default.as_ref()
+        {
+            *value = default.clone();
+        }
         if let Err(error) = self.check(value) {
             return Err(error.with_meta(self.meta()));
         }
@@ -266,6 +274,9 @@ impl<T: Validator> WithMeta for T {}
 /// Cast a validated [`Value`] to `target`, reusing the same lenient coercions the leaf validators
 /// use. An impossible cast is a [`ErrorKind::NotConvertible`] error.
 fn cast(value: &mut Value, target: ValueType) -> Result<(), Error> {
+    if matches!(value, Value::Null | Value::Comment(_)) {
+        return Ok(());
+    }
     if value.type_name() == target {
         return Ok(());
     }
@@ -320,7 +331,7 @@ fn cast(value: &mut Value, target: ValueType) -> Result<(), Error> {
                 }));
             }
         },
-        ValueType::List | ValueType::Map => {
+        ValueType::List | ValueType::Map | ValueType::Null | ValueType::Comment => {
             return Err(Error::new(ErrorKind::NotConvertible {
                 target,
                 found: value.type_name(),

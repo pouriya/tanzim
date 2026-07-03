@@ -8,7 +8,7 @@
 //!   scalars become strings/integers/floats/booleans. An empty document yields an empty map.
 //! - Every node carries its marker as a [`Location`] (line/column); for single-line input the
 //!   line/column are omitted.
-//! - YAML `null` is rejected with [`Error::UnsupportedNull`]. Non-scalar mapping keys, aliases,
+//! - YAML `null` becomes [`Value::Null`]. Non-scalar mapping keys, aliases,
 //!   and malformed nodes become [`Error::Parse`]; non-UTF-8 input fails with
 //!   [`Error::InvalidUtf8`].
 //! - [`is_format_supported`](crate::Parse::is_format_supported) returns `Some(true)` when
@@ -41,7 +41,7 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 /// Parser for the `yml`/`yaml` formats: YAML into a source-located value tree.
 ///
 /// Mappings, sequences, and scalars map to the value tree with a per-node marker [`Location`];
-/// YAML `null` is rejected with [`Error::UnsupportedNull`]. Stateless — construct with
+/// YAML `null` becomes [`Value::Null`]. Stateless — construct with
 /// [`Yaml::new`].
 ///
 /// ```
@@ -190,6 +190,14 @@ fn write_yaml_map(
     indent: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     for (key, item) in map.entries() {
+        if let Value::Comment(text) = &item.value {
+            push_yaml_indent(out, indent);
+            out.push_str(text);
+            if !text.ends_with('\n') {
+                out.push('\n');
+            }
+            continue;
+        }
         push_yaml_indent(out, indent);
         write_yaml_string(out, key);
         out.push(':');
@@ -222,6 +230,12 @@ fn write_yaml_list(
     for item in items {
         push_yaml_indent(out, indent);
         match &item.value {
+            Value::Comment(text) => {
+                out.push_str(text);
+                if !text.ends_with('\n') {
+                    out.push('\n');
+                }
+            }
             Value::Map(inner) if inner.entries().is_empty() => out.push_str("- {}\n"),
             Value::List(inner) if inner.is_empty() => out.push_str("- []\n"),
             Value::Map(inner) => {
@@ -256,6 +270,8 @@ fn write_yaml_scalar(
             out.push_str(&format!("{value:?}"));
         }
         Value::String(value) => write_yaml_string(out, value),
+        Value::Null => out.push('~'),
+        Value::Comment(value) => out.push_str(value),
         Value::List(_) | Value::Map(_) => {
             return Err("internal error: write_yaml_scalar called on a collection".into());
         }
@@ -348,9 +364,9 @@ fn convert_node(
     };
     match &node.data {
         YamlData::Value(scalar) => match scalar {
-            Scalar::Null => Err(Error::UnsupportedNull {
-                text: text.to_string(),
-                location: Box::new(location),
+            Scalar::Null => Ok(LocatedValue {
+                value: Value::Null,
+                location,
             }),
             Scalar::Boolean(value) => Ok(LocatedValue {
                 value: Value::Bool(*value),
@@ -404,9 +420,9 @@ fn convert_node(
         YamlData::Tagged(_, inner) => convert_node(source, text, single_line, inner),
         YamlData::Representation(representation, _, _) => {
             if representation == "~" || representation == "null" || representation == "Null" {
-                return Err(Error::UnsupportedNull {
-                    text: text.to_string(),
-                    location: Box::new(location),
+                return Ok(LocatedValue {
+                    value: Value::Null,
+                    location,
                 });
             }
             Ok(LocatedValue {
@@ -500,68 +516,19 @@ mod tests {
     }
 
     #[test]
-    fn rejects_yaml_null_at_correct_column() {
+    fn parses_yaml_null_at_correct_column() {
         let text = "foo: bar\n\nbaz:\n\n  qux: ~\n";
-        let error = Yaml::new()
+        let root = Yaml::new()
             .parse(&file_source("config.yaml"), text.as_bytes())
-            .unwrap_err();
-        if let Error::UnsupportedNull { location, .. } = &error {
-            assert_eq!(location.line, std::num::NonZeroU32::new(5));
-            assert_eq!(location.column, std::num::NonZeroU32::new(8));
-            assert_eq!(location.length, std::num::NonZeroU32::new(1));
-        } else {
-            panic!("expected unsupported null");
-        }
-        let message = format!("{error:#}");
-        let mut source_line = "";
-        for line in message.split('\n') {
-            if line.contains("qux: ~") {
-                source_line = line;
-                break;
-            }
-        }
-        let mut caret_line = "";
-        for line in message.split('\n') {
-            if line.contains('^') {
-                caret_line = line;
-                break;
-            }
-        }
-        let mut tilde_column = 0usize;
-        if let Some(after_pipe) = source_line.split('|').nth(1) {
-            let mut index = 0usize;
-            let mut byte_index = 0usize;
-            while byte_index < after_pipe.len() {
-                let ch = after_pipe[byte_index..]
-                    .chars()
-                    .next()
-                    .expect("valid utf-8");
-                if ch == '~' {
-                    tilde_column = index;
-                    break;
-                }
-                index += 1;
-                byte_index += ch.len_utf8();
-            }
-        }
-        let mut caret_column = 0usize;
-        if let Some(after_pipe) = caret_line.split('|').nth(1) {
-            let mut index = 0usize;
-            let mut byte_index = 0usize;
-            while byte_index < after_pipe.len() {
-                let ch = after_pipe[byte_index..]
-                    .chars()
-                    .next()
-                    .expect("valid utf-8");
-                if ch == '^' {
-                    caret_column = index;
-                    break;
-                }
-                index += 1;
-                byte_index += ch.len_utf8();
-            }
-        }
-        assert_eq!(caret_column, tilde_column);
+            .unwrap();
+        let map = root.value.as_map().unwrap();
+        let baz = map.get("baz").unwrap();
+        let nested = baz.value.as_map().unwrap();
+        let qux = nested.get("qux").unwrap();
+        assert!(qux.value.is_null());
+        assert_eq!(qux.location.line, std::num::NonZeroU32::new(5));
+        assert_eq!(qux.location.column, std::num::NonZeroU32::new(8));
+        assert_eq!(qux.location.length, std::num::NonZeroU32::new(1));
     }
 
     #[test]

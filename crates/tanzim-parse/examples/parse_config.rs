@@ -97,5 +97,7 @@ fn print_located(located: &LocatedValue, indent: usize) {
             }
             println!("{prefix}}}");
         }
+        Value::Null => println!("{prefix}null {location}"),
+        Value::Comment(value) => println!("{prefix}{value} {location}"),
     }
 }

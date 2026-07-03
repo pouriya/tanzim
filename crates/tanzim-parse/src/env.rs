@@ -341,6 +341,16 @@ fn write_env(
     separator: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     for (key, item) in map.entries() {
+        if let Value::Comment(text) = &item.value {
+            out.push_str(text);
+            if !text.ends_with('\n') {
+                out.push('\n');
+            }
+            continue;
+        }
+        if matches!(item.value, Value::Null) {
+            continue;
+        }
         let full_key = format!("{prefix}{key}");
         match &item.value {
             Value::Map(inner) => {
@@ -395,6 +405,7 @@ fn write_env(
                             out.push_str(value);
                         }
                     }
+                    Value::Null | Value::Comment(_) => {}
                     // Maps and lists are handled by the arms above.
                     Value::List(_) | Value::Map(_) => {}
                 }

@@ -9,8 +9,7 @@
 //!   distinguished.
 //! - Every node — root, map values, and list items — carries its span as a [`Location`]
 //!   (line/column); for single-line input the line/column are omitted.
-//! - JSON `null` is rejected with [`Error::UnsupportedNull`], since the config model has no null.
-//!   Non-UTF-8 input fails with [`Error::InvalidUtf8`], and any syntax error becomes
+//! - JSON `null` becomes [`Value::Null`]. Non-UTF-8 input fails with [`Error::InvalidUtf8`], and any syntax error becomes
 //!   [`Error::Parse`] with the failing position.
 //! - [`is_format_supported`](crate::Parse::is_format_supported) returns `Some(true)` when
 //!   the bytes parse as JSON, else `Some(false)`.
@@ -45,7 +44,7 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 /// Parser for the `json` format: standard JSON into a source-located value tree.
 ///
 /// Objects, arrays, and scalars map to the value tree with a per-node span [`Location`]; JSON
-/// `null` is rejected with [`Error::UnsupportedNull`]. Stateless — construct with [`Json::new`].
+/// `null` becomes [`Value::Null`]. Stateless — construct with [`Json::new`].
 ///
 /// ```
 /// use tanzim_parse::{Parse, json::Json};
@@ -224,6 +223,10 @@ fn write_json(
             push_indent(out, indent);
             out.push('}');
         }
+        Value::Null => out.push_str("null"),
+        Value::Comment(_) => {
+            return Err("cannot serialize comment as JSON".into());
+        }
     }
     Ok(())
 }
@@ -254,16 +257,16 @@ fn write_json_string(out: &mut String, value: &str) {
 
 fn convert_value(
     source: &Source,
-    text: &str,
+    _text: &str,
     single_line: bool,
     value: JsonValue,
     _start: &Position,
     location: Location,
 ) -> Result<LocatedValue, Error> {
     match value {
-        JsonValue::Null => Err(Error::UnsupportedNull {
-            text: text.to_string(),
-            location: Box::new(location),
+        JsonValue::Null => Ok(LocatedValue {
+            value: Value::Null,
+            location,
         }),
         JsonValue::Bool(value) => Ok(LocatedValue {
             value: Value::Bool(value),
@@ -294,7 +297,7 @@ fn convert_value(
                     location_from_position(source, single_line, &item.start, Some(&item.end));
                 let converted = convert_value(
                     source,
-                    text,
+                    _text,
                     single_line,
                     item.value.clone(),
                     &item.start,
@@ -314,7 +317,7 @@ fn convert_value(
                     location_from_position(source, single_line, &item.start, Some(&item.end));
                 let converted = convert_value(
                     source,
-                    text,
+                    _text,
                     single_line,
                     item.value.clone(),
                     &item.start,
@@ -432,14 +435,14 @@ mod tests {
     }
 
     #[test]
-    fn rejects_null() {
-        let error = Json::new()
+    fn parses_null() {
+        let root = Json::new()
             .parse(&file_source("a.json"), b"{\n  \"a\": null\n}")
-            .unwrap_err();
-        assert!(matches!(error, Error::UnsupportedNull { .. }));
-        let message = format!("{error:#}");
-        assert!(message.contains('^'));
-        assert!(message.contains("null"));
+            .unwrap();
+        let map = root.value.as_map().unwrap();
+        let entry = map.get("a").unwrap();
+        assert!(entry.value.is_null());
+        assert_eq!(entry.location.line, std::num::NonZeroU32::new(2));
     }
 
     #[test]

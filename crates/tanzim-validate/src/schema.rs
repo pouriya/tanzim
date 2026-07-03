@@ -103,11 +103,11 @@ impl<'de> Visitor<'de> for SchemaValueVisitor {
     }
 
     fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
-        Err(de::Error::custom("null is not supported in configuration"))
+        Ok(SchemaValue(Value::Null))
     }
 
     fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
-        Err(de::Error::custom("null is not supported in configuration"))
+        Ok(SchemaValue(Value::Null))
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
@@ -952,9 +952,9 @@ mod tests {
     }
 
     #[test]
-    fn schema_value_rejects_null() {
-        let error = serde_json::from_str::<SchemaValue>("null").unwrap_err();
-        assert!(error.to_string().contains("null"));
+    fn schema_value_deserializes_null() {
+        let value: SchemaValue = serde_json::from_str("null").unwrap();
+        assert!(value.into_value().is_null());
     }
 
     #[test]

@@ -46,7 +46,6 @@ pub mod yaml;
 /// - [`Error::InvalidUtf8`] — the bytes aren't valid UTF-8.
 /// - [`Error::Parse`] — a syntax or structural error; set `location` when you can pinpoint it,
 ///   otherwise `None`.
-/// - [`Error::UnsupportedNull`] — the input contained a null the config model doesn't represent.
 /// - [`Error::UnsupportedType`] — a value of a type that has no configuration representation
 ///   (e.g. a date-time).
 ///

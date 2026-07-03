@@ -100,6 +100,8 @@ pub enum ValueType {
     String,
     List,
     Map,
+    Null,
+    Comment,
 }
 
 impl Display for ValueType {
@@ -111,6 +113,8 @@ impl Display for ValueType {
             Self::String => "string",
             Self::List => "list",
             Self::Map => "map",
+            Self::Null => "null",
+            Self::Comment => "comment",
         })
     }
 }
@@ -212,7 +216,7 @@ impl Display for Map {
     }
 }
 
-/// Dynamically typed configuration value (six variants, no null).
+/// Dynamically typed configuration value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Bool(bool),
@@ -221,6 +225,8 @@ pub enum Value {
     String(String),
     List(Vec<LocatedValue>),
     Map(Map),
+    Null,
+    Comment(String),
 }
 
 /// A [`Value`] with its [`Location`].
@@ -424,6 +430,28 @@ impl Value {
         }
     }
 
+    pub fn is_null(&self) -> bool {
+        matches!(self, Self::Null)
+    }
+
+    pub fn is_comment(&self) -> bool {
+        matches!(self, Self::Comment(_))
+    }
+
+    pub fn as_comment(&self) -> Option<&str> {
+        match self {
+            Self::Comment(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn into_comment(self) -> Option<String> {
+        match self {
+            Self::Comment(value) => Some(value),
+            _ => None,
+        }
+    }
+
     pub fn type_name(&self) -> ValueType {
         match self {
             Self::Bool(_) => ValueType::Bool,
@@ -432,6 +460,8 @@ impl Value {
             Self::String(_) => ValueType::String,
             Self::List(_) => ValueType::List,
             Self::Map(_) => ValueType::Map,
+            Self::Null => ValueType::Null,
+            Self::Comment(_) => ValueType::Comment,
         }
     }
 }
@@ -456,6 +486,8 @@ impl Display for Value {
                 list.finish()
             }
             Self::Map(value) => Display::fmt(value, f),
+            Self::Null => f.write_str("null"),
+            Self::Comment(value) => f.write_str(value),
         }
     }
 }
