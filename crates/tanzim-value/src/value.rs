@@ -493,4 +493,61 @@ mod tests {
         );
         assert!(!message.contains('@'));
     }
+
+    #[test]
+    fn value_accessors_and_constructors() {
+        let mut value = Value::Bool(true);
+        assert!(value.is_bool());
+        assert_eq!(value.as_bool(), Some(true));
+        assert_eq!(value.type_name(), ValueType::Bool);
+        if let Some(flag) = value.bool_mut() {
+            *flag = false;
+        }
+        assert_eq!(value.into_bool(), Some(false));
+
+        let list = Value::new_list();
+        assert!(list.is_list());
+        let map = Value::new_map();
+        assert!(map.is_map());
+        let text = Value::new_string();
+        assert!(text.is_string());
+    }
+
+    #[test]
+    fn map_remove_get_mut_and_display() {
+        let mut map = Map::new();
+        map.insert("a".to_string(), located_string("one"));
+        map.insert("b".to_string(), located_string("two"));
+        assert_eq!(map.len(), 2);
+        assert!(map.contains_key("a"));
+        assert!(map.get_mut("b").is_some());
+        let removed = map.remove("a");
+        assert!(removed.is_some());
+        assert!(!map.contains_key("a"));
+
+        let compact = format!("{map}");
+        assert!(compact.contains("b"));
+        let detailed = format!("{map:#}");
+        assert!(detailed.contains("location"));
+    }
+
+    #[test]
+    fn location_display_and_with_length() {
+        let location = Location::at("file", "", Some(1), Some(2), None).with_length(3);
+        assert_eq!(location.to_string(), "file:1:2");
+        let resourceful = Location::at("file", "cfg.yml", Some(4), None, None);
+        assert_eq!(resourceful.to_string(), "file:cfg.yml:4");
+    }
+
+    #[test]
+    fn value_list_and_map_display_modes() {
+        let list = Value::List(vec![located_string("a"), located_string("b")]);
+        assert!(format!("{list}").contains("a"));
+        assert!(format!("{list:#}").contains("location"));
+
+        let mut map = Map::new();
+        map.insert("k".to_string(), located_string("v"));
+        let map_value = Value::Map(map);
+        assert!(format!("{map_value}").contains("k"));
+    }
 }

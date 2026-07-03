@@ -152,4 +152,23 @@ mod tests {
         assert_eq!(parser.is_format_supported(b"x"), Some(true));
         assert_eq!(parser.is_format_supported(b""), Some(false));
     }
+
+    #[test]
+    fn closure_parser_with_format_list() {
+        let parser = Closure::new(
+            "yaml",
+            "yml",
+            Box::new(|source, bytes| {
+                Ok(LocatedValue {
+                    value: Value::String(String::from_utf8_lossy(bytes).to_string()),
+                    location: Location::at(source.source(), source.resource(), None, None, None),
+                })
+            }),
+        )
+        .with_format_list(&["yml", "yaml"]);
+        assert_eq!(
+            parser.supported_format_list(),
+            vec!["yml".to_string(), "yaml".to_string()]
+        );
+    }
 }

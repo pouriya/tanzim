@@ -153,3 +153,159 @@ impl Merge for DeepMerge {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tanzim_load::Payload;
+    use tanzim_source::SourceBuilder;
+    use tanzim_value::{LocatedValue, Location, Map, Value};
+
+    fn source() -> tanzim_source::Source {
+        SourceBuilder::new()
+            .with_source("mock")
+            .with_resource("test")
+            .build()
+            .unwrap()
+    }
+
+    fn payload(name: Option<&str>) -> Payload {
+        Payload {
+            source: source(),
+            maybe_name: name.map(str::to_string),
+            maybe_format: Some("txt".into()),
+            content: Vec::new(),
+        }
+    }
+
+    fn string_value(text: &str) -> LocatedValue {
+        LocatedValue {
+            value: Value::String(text.to_string()),
+            location: Location::at("mock", "test", None, None, None),
+        }
+    }
+
+    fn map_value(entries: &[(&str, &str)]) -> LocatedValue {
+        let mut map = Map::new();
+        for (key, value) in entries {
+            map.insert(key.to_string(), string_value(value));
+        }
+        LocatedValue {
+            value: Value::Map(map),
+            location: Location::at("mock", "test", None, None, None),
+        }
+    }
+
+    #[test]
+    fn last_wins_empty_input() {
+        let merged = LastWins.merge(&[]).unwrap();
+        assert!(merged.is_empty());
+    }
+
+    #[test]
+    fn last_wins_keeps_last_value_for_same_name() {
+        let parsed = vec![
+            (payload(Some("app")), string_value("first")),
+            (payload(Some("app")), string_value("second")),
+        ];
+        let merged = LastWins.merge(&parsed).unwrap();
+        let (_, value) = merged.get(&Some("app".into())).unwrap();
+        assert_eq!(value.value.as_string().unwrap(), "second");
+    }
+
+    #[test]
+    fn last_wins_groups_unnamed_entries() {
+        let parsed = vec![
+            (payload(None), string_value("first")),
+            (payload(None), string_value("second")),
+        ];
+        let merged = LastWins.merge(&parsed).unwrap();
+        let (_, value) = merged.get(&None).unwrap();
+        assert_eq!(value.value.as_string().unwrap(), "second");
+    }
+
+    #[test]
+    fn last_wins_distinct_names() {
+        let parsed = vec![
+            (payload(Some("alpha")), string_value("a")),
+            (payload(Some("beta")), string_value("b")),
+        ];
+        let merged = LastWins.merge(&parsed).unwrap();
+        assert_eq!(merged.len(), 2);
+        assert_eq!(
+            merged
+                .get(&Some("alpha".into()))
+                .unwrap()
+                .1
+                .value
+                .as_string()
+                .unwrap(),
+            "a"
+        );
+        assert_eq!(
+            merged
+                .get(&Some("beta".into()))
+                .unwrap()
+                .1
+                .value
+                .as_string()
+                .unwrap(),
+            "b"
+        );
+    }
+
+    #[test]
+    fn deep_merge_empty_input() {
+        let merged = DeepMerge.merge(&[]).unwrap();
+        assert!(merged.is_empty());
+    }
+
+    #[test]
+    fn deep_merge_recurses_into_shared_map_keys() {
+        let parsed = vec![
+            (
+                payload(Some("app")),
+                map_value(&[("host", "localhost"), ("port", "8080")]),
+            ),
+            (
+                payload(Some("app")),
+                map_value(&[("port", "9090"), ("debug", "true")]),
+            ),
+        ];
+        let merged = DeepMerge.merge(&parsed).unwrap();
+        let (payloads, value) = merged.get(&Some("app".into())).unwrap();
+        assert_eq!(payloads.len(), 2);
+        let map = value.value.as_map().unwrap();
+        assert_eq!(
+            map.get("host").unwrap().value.as_string().unwrap(),
+            "localhost"
+        );
+        assert_eq!(map.get("port").unwrap().value.as_string().unwrap(), "9090");
+        assert_eq!(map.get("debug").unwrap().value.as_string().unwrap(), "true");
+    }
+
+    #[test]
+    fn deep_merge_scalar_overlay_replaces_map() {
+        let parsed = vec![
+            (payload(Some("app")), map_value(&[("mode", "auto")])),
+            (payload(Some("app")), string_value("override")),
+        ];
+        let merged = DeepMerge.merge(&parsed).unwrap();
+        let (_, value) = merged.get(&Some("app".into())).unwrap();
+        assert_eq!(value.value.as_string().unwrap(), "override");
+    }
+
+    #[test]
+    fn deep_merge_unnamed_bucket() {
+        let parsed = vec![
+            (payload(None), map_value(&[("a", "1")])),
+            (payload(None), map_value(&[("b", "2")])),
+        ];
+        let merged = DeepMerge.merge(&parsed).unwrap();
+        let (payloads, value) = merged.get(&None).unwrap();
+        assert_eq!(payloads.len(), 2);
+        let map = value.value.as_map().unwrap();
+        assert_eq!(map.get("a").unwrap().value.as_string().unwrap(), "1");
+        assert_eq!(map.get("b").unwrap().value.as_string().unwrap(), "2");
+    }
+}

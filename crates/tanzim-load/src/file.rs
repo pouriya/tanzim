@@ -549,4 +549,79 @@ mod tests {
         let error = File::new().load(source).unwrap_err();
         assert!(matches!(error, Error::InvalidResource { .. }));
     }
+
+    #[test]
+    fn load_single_file_path() {
+        let tmp = TempDir::new("tanzim-file-single").unwrap();
+        let file_path = tmp.path().join("solo.json");
+        fs::write(&file_path, br#"{"ok":true}"#).unwrap();
+        let loaded = File::new()
+            .load(make_source(&file_path.display().to_string()))
+            .unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].maybe_name.as_deref(), Some("solo"));
+        assert_eq!(loaded[0].source.resource(), file_path.display().to_string());
+    }
+
+    #[test]
+    fn load_rejects_unknown_option() {
+        let source = SourceBuilder::new()
+            .with_source("file")
+            .with_resource("/tmp")
+            .with_option("bogus", true)
+            .build()
+            .unwrap();
+        let error = File::new().load(source).unwrap_err();
+        assert!(matches!(error, Error::InvalidOption { .. }));
+    }
+
+    #[test]
+    fn load_rejects_invalid_ignore_list() {
+        let source = SourceBuilder::new()
+            .with_source("file")
+            .with_resource("/tmp")
+            .with_option("ignore", "not-a-list")
+            .build()
+            .unwrap();
+        let error = File::new().load(source).unwrap_err();
+        assert!(matches!(error, Error::InvalidOption { key, .. } if key == "ignore"));
+    }
+
+    #[test]
+    fn load_rejects_unknown_ignore_value() {
+        let source = SourceBuilder::new()
+            .with_source("file")
+            .with_resource("/tmp")
+            .with_option("ignore", vec!["bogus"])
+            .build()
+            .unwrap();
+        let error = File::new().load(source).unwrap_err();
+        assert!(matches!(error, Error::InvalidOption { key, .. } if key == "ignore"));
+    }
+
+    #[test]
+    fn load_preserves_case_when_lowercase_disabled() {
+        let tmp = TempDir::new("tanzim-file-case").unwrap();
+        fs::write(tmp.path().join("Demo.JSON"), b"{}").unwrap();
+        let source = SourceBuilder::new()
+            .with_source("file")
+            .with_resource(tmp.path().display().to_string())
+            .with_option("lowercase", false)
+            .build()
+            .unwrap();
+        let loaded = File::new().load(source).unwrap();
+        assert_eq!(loaded[0].maybe_name.as_deref(), Some("Demo"));
+        assert_eq!(loaded[0].maybe_format.as_deref(), Some("JSON"));
+    }
+
+    #[test]
+    fn load_reports_not_found_for_missing_path() {
+        let source = SourceBuilder::new()
+            .with_source("file")
+            .with_resource("/no/such/tanzim-file-path")
+            .build()
+            .unwrap();
+        let error = File::new().load(source).unwrap_err();
+        assert!(matches!(error, Error::NotFound { .. }));
+    }
 }

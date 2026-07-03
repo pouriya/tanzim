@@ -133,4 +133,18 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].content, b"hello");
     }
+
+    #[test]
+    fn closure_loader_with_name_and_supported_source_list() {
+        let loader = Closure::new("old", |_source: Source| Ok(vec![]), "mock")
+            .with_name("custom")
+            .with_supported_source_list(vec!["mock", "other"]);
+        assert_eq!(loader.name(), "custom");
+        assert_eq!(
+            loader.supported_source_list(),
+            vec!["mock".to_string(), "other".to_string()]
+        );
+        let source = SourceBuilder::new().with_source("other").build().unwrap();
+        assert!(loader.load(source).unwrap().is_empty());
+    }
 }

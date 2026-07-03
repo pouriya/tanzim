@@ -812,4 +812,125 @@ mod tests {
         assert!(!message.contains('^'));
         assert!(!message.contains('\n'));
     }
+
+    #[test]
+    fn rejects_more_invalid_forms() {
+        assert!(matches!(parse("env(=1)"), Err(ParseError::EmptyKey { .. })));
+        assert!(matches!(
+            parse("env(@a=1)"),
+            Err(ParseError::UnexpectedChar { .. })
+        ));
+        assert!(matches!(
+            parse(r#"env(x="unclosed)"#),
+            Err(ParseError::UnclosedString { .. })
+        ));
+        assert!(matches!(
+            parse(r#"env(x="\q")"#),
+            Err(ParseError::InvalidEscape { .. })
+        ));
+    }
+
+    #[test]
+    fn parses_resource_colon_without_path() {
+        let source = parsed("env:");
+        assert!(source.resource_colon());
+        assert_eq!(source.resource(), "");
+        assert_eq!(source.to_string(), "env:");
+    }
+
+    #[test]
+    fn rejects_unclosed_list_and_map_forms() {
+        assert!(matches!(
+            parse("env(x=[1"),
+            Err(ParseError::UnclosedList { .. })
+        ));
+        assert!(matches!(
+            parse("env(a=1"),
+            Err(ParseError::UnclosedMap { .. })
+        ));
+        assert!(matches!(
+            parse("env(x=(a=1"),
+            Err(ParseError::UnclosedMap { .. })
+        ));
+        assert!(matches!(
+            parse("env("),
+            Err(ParseError::InvalidIdentifier { .. })
+        ));
+        assert!(matches!(
+            parse("env(a"),
+            Err(ParseError::UnexpectedEnd { .. })
+        ));
+    }
+
+    #[test]
+    fn parses_empty_options_list_and_map_values() {
+        let source = parsed("env()");
+        assert!(source.options().is_empty());
+
+        let source = parsed("env(items=[],nested=())");
+        assert_eq!(
+            source.options().get("items"),
+            Some(&OptionValue::List(Vec::new()))
+        );
+        assert!(source.options().get("nested").unwrap().is_map());
+    }
+
+    #[test]
+    fn parses_numeric_and_escaped_string_values() {
+        let source = parsed(r#"env(n=-7,pi=2.5,token="a\"b",nl="x\ny")"#);
+        assert_eq!(source.options().get("n"), Some(&OptionValue::Integer(-7)));
+        assert_eq!(source.options().get("pi"), Some(&OptionValue::Float(2.5)));
+        assert_eq!(
+            source.options().get("token"),
+            Some(&OptionValue::String("a\"b".into()))
+        );
+        assert_eq!(
+            source.options().get("nl"),
+            Some(&OptionValue::String("x\ny".into()))
+        );
+    }
+
+    #[test]
+    fn display_quotes_ambiguous_strings_and_formats_collections() {
+        let source = parsed(r#"env(empty="",name="007",items=[a,b],nested=(k=v))"#);
+        let text = source.to_string();
+        assert!(text.contains(r#"empty="""#));
+        assert!(text.contains(r#"name="007""#));
+        assert!(text.contains("items=[a,b]"));
+        assert!(text.contains("nested=(k=v)"));
+        assert_eq!(parsed(&text), source);
+    }
+
+    #[test]
+    fn display_renders_whole_number_floats_with_one_decimal_place() {
+        let source = parsed("env(n=2.0)");
+        assert_eq!(source.to_string(), "env(n=2.0)");
+    }
+
+    #[test]
+    fn list_and_map_reject_trailing_commas_and_bad_separators() {
+        assert!(matches!(
+            parse("env(x=[1,])"),
+            Err(ParseError::TrailingComma { .. })
+        ));
+        assert!(matches!(
+            parse("env(x=[1 2])"),
+            Err(ParseError::UnexpectedChar { .. })
+        ));
+        assert!(matches!(
+            parse("env(x=(a=1,))"),
+            Err(ParseError::TrailingComma { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_error_variants_include_context_in_display() {
+        let error = parse("env()oops").unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("unexpected trailing input"));
+        assert!(message.contains("column"));
+
+        let error = parse("env(a=.5)").unwrap_err();
+        assert!(error.to_string().contains("invalid number"));
+    }
 }

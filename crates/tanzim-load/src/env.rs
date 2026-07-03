@@ -389,4 +389,53 @@ mod tests {
         let error = Env::new().load(source).unwrap_err();
         assert!(matches!(error, Error::InvalidResource { .. }));
     }
+
+    #[test]
+    fn load_honors_strip_prefix_and_lowercase_options() {
+        unsafe {
+            env::set_var("TANZIM_CASE__Foo__BAR", "1");
+        }
+        let mut options = Options::new();
+        options.insert("prefix", "TANZIM_CASE__");
+        options.insert("separator", "__");
+        options.insert("lowercase", false);
+        let loaded = Env::new().load(make_source_with_options(options)).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].maybe_name.as_deref(), Some("Foo"));
+    }
+
+    #[test]
+    fn load_rejects_unknown_option() {
+        let mut options = Options::new();
+        options.insert("bogus", true);
+        let error = Env::new()
+            .load(make_source_with_options(options))
+            .unwrap_err();
+        assert!(matches!(error, Error::InvalidOption { .. }));
+    }
+
+    #[test]
+    fn load_rejects_bad_separator_type() {
+        let mut options = Options::new();
+        options.insert("separator", 1_i64);
+        let error = Env::new()
+            .load(make_source_with_options(options))
+            .unwrap_err();
+        assert!(matches!(error, Error::InvalidOption { key, .. } if key == "separator"));
+    }
+
+    #[test]
+    fn with_prefix_override_skips_source_option() {
+        unsafe {
+            env::set_var("PINNED__X", "yes");
+        }
+        let source = SourceBuilder::new()
+            .with_source("env")
+            .with_option("prefix", "OTHER__")
+            .build()
+            .unwrap();
+        let loaded = Env::new().with_prefix("PINNED__").load(source).unwrap();
+        let content = String::from_utf8_lossy(&loaded[0].content);
+        assert!(content.contains(r#"X="yes""#));
+    }
 }
