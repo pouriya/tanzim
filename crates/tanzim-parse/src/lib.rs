@@ -86,14 +86,14 @@ pub mod yaml;
 ///         for (line_idx, line) in text.lines().enumerate() {
 ///             if let Some((key, val)) = line.split_once(',') {
 ///                 let loc = Location::at(source_name, resource, Some(line_idx + 1), None, None);
-///                 map.insert(key.trim().to_string(), LocatedValue {
-///                     value: Value::String(val.trim().to_string()),
-///                     location: loc,
-///                 });
+///                 map.insert(key.trim().to_string(), LocatedValue::new(
+///                     Value::String(val.trim().to_string()),
+///                     loc,
+///                 ));
 ///             }
 ///         }
 ///         let root_loc = Location::at(source_name, resource, None, None, None);
-///         Ok(LocatedValue { value: Value::Map(map), location: root_loc })
+///         Ok(LocatedValue::new(Value::Map(map), root_loc))
 ///     }
 /// }
 ///
@@ -106,9 +106,9 @@ pub mod yaml;
 ///     .parse(&source, b"host,127.0.0.1\nport,8080\n")
 ///     .unwrap();
 ///
-/// let map = value.value.as_map().unwrap();
-/// assert_eq!(map.get("host").unwrap().value.as_string().unwrap(), "127.0.0.1");
-/// assert_eq!(map.get("port").unwrap().value.as_string().unwrap(), "8080");
+/// let map = value.value().as_map().unwrap();
+/// assert_eq!(map.get("host").unwrap().value().as_string().unwrap(), "127.0.0.1");
+/// assert_eq!(map.get("port").unwrap().value().as_string().unwrap(), "8080");
 /// // `port` is a string — this parser stores every field verbatim.
 /// ```
 pub trait Parse {

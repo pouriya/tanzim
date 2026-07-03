@@ -5,8 +5,8 @@
 //! # Behaviour
 //!
 //! - Parses TOML with source spans. Tables and inline tables become maps, arrays become lists, and
-//!   strings/integers/floats/booleans become the matching scalar values. Prefix comments on keys
-//!   become [`Value::Comment`] map entries.
+//!   strings/integers/floats/booleans become the matching scalar values. Prefix and inline comments
+//!   are preserved on each [`LocatedValue`] via [`tanzim_value::Comment`].
 //! - Every node carries its span as a [`Location`] (line/column); for single-line input the
 //!   line/column are omitted.
 //! - TOML date-times have no configuration representation and are rejected with
@@ -28,7 +28,7 @@
 //!     .unwrap();
 //! let value = Toml::new().parse(&source, b"host = \"127.0.0.1\"\n").unwrap();
 //! assert_eq!(
-//!     value.value.as_map().unwrap().get("host").unwrap().value.as_string().unwrap(),
+//!     value.value().as_map().unwrap().get("host").unwrap().value().as_string().unwrap(),
 //!     "127.0.0.1"
 //! );
 //! ```
@@ -36,7 +36,7 @@
 use crate::span::{char_count, is_single_line, line_column};
 use crate::{Parse, Source};
 use cfg_if::cfg_if;
-use tanzim_value::{Error, LocatedValue, Location, Map, Value};
+use tanzim_value::{Comment, Error, LocatedValue, Location, Map, Value};
 use toml_edit::{
     Array, DocumentMut, ImDocument, InlineTable, Item, RawString, Table, Value as TomlValue,
 };
@@ -56,8 +56,8 @@ use toml_edit::{
 ///     .build()
 ///     .unwrap();
 /// let value = Toml::new().parse(&source, b"port = 8080\n").unwrap();
-/// let port = value.value.as_map().unwrap().get("port").unwrap();
-/// assert_eq!(port.value.as_int().unwrap(), 8080);
+/// let port = value.value().as_map().unwrap().get("port").unwrap();
+/// assert_eq!(port.value().as_int().unwrap(), 8080);
 /// ```
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Toml;
@@ -157,10 +157,10 @@ impl Parse for Toml {
 ///
 /// let source = SourceBuilder::new().with_source("file").build().unwrap();
 /// let mut map = Map::new();
-/// map.insert("port".into(), LocatedValue {
-///     value: Value::Int(8080),
-///     location: Location::at("file", "", None, None, None),
-/// });
+/// map.insert("port".into(), LocatedValue::new(
+///     Value::Int(8080),
+///     Location::at("file", "", None, None, None),
+/// ));
 /// assert_eq!(unparse(&source, Value::Map(map)).unwrap(), "port = 8080\n");
 /// ```
 pub fn unparse<V: AsRef<Value>>(
@@ -175,35 +175,43 @@ pub fn unparse<V: AsRef<Value>>(
         }
     };
     let mut document = DocumentMut::new();
-    insert_table_entries(document.as_table_mut(), map)?;
+    build_table(document.as_table_mut(), map)?;
     Ok(document.to_string())
 }
 
-fn insert_table_entries(
+fn build_table(
     table: &mut Table,
     map: &Map,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let mut pending_comments = String::new();
-    for (key, item) in map.entries() {
-        if let Value::Comment(text) = &item.value {
-            if !pending_comments.is_empty() && !pending_comments.ends_with('\n') {
-                pending_comments.push('\n');
+    for (key, lv) in map.entries() {
+        let item = to_toml_item(lv.value())?;
+        table.insert(key, item);
+
+        let before = lv.comment().before();
+        if !before.is_empty() {
+            let mut prefix = String::new();
+            for line in before {
+                if !prefix.is_empty() && !prefix.ends_with('\n') {
+                    prefix.push('\n');
+                }
+                prefix.push_str(line);
+                if !line.ends_with('\n') {
+                    prefix.push('\n');
+                }
             }
-            pending_comments.push_str(text);
-            if !text.ends_with('\n') {
-                pending_comments.push('\n');
-            }
-            continue;
-        }
-        let converted = to_toml_item(&item.value)?;
-        table.insert(key, converted);
-        if !pending_comments.is_empty() {
             if let Some(mut key_mut) = table.key_mut(key) {
-                key_mut
-                    .leaf_decor_mut()
-                    .set_prefix(pending_comments.as_str());
+                key_mut.leaf_decor_mut().set_prefix(prefix.as_str());
             }
-            pending_comments.clear();
+        }
+
+        if let Some(after) = lv.comment().after()
+            && let Some(item) = table.get_mut(key)
+        {
+            match item {
+                Item::Value(v) => v.decor_mut().set_suffix(format!(" {after}")),
+                Item::Table(t) => t.decor_mut().set_suffix(format!(" {after}")),
+                Item::ArrayOfTables(_) | Item::None => {}
+            }
         }
     }
     Ok(())
@@ -213,13 +221,10 @@ fn to_toml_item(value: &Value) -> Result<Item, Box<dyn std::error::Error + Send 
     match value {
         Value::Map(map) => {
             let mut table = Table::new();
-            insert_table_entries(&mut table, map)?;
+            build_table(&mut table, map)?;
             Ok(Item::Table(table))
         }
         Value::Null => Err("cannot serialize null as TOML".into()),
-        Value::Comment(_) => {
-            Err("internal error: comment should be handled by insert_table_entries".into())
-        }
         other => Ok(Item::Value(to_toml_value(other)?)),
     }
 }
@@ -240,53 +245,63 @@ fn to_toml_value(
         Value::List(items) => {
             let mut array = Array::new();
             for item in items {
-                array.push(to_toml_value(&item.value)?);
+                array.push(to_toml_value(item.value())?);
             }
             Ok(TomlValue::Array(array))
         }
         Value::Map(map) => {
             let mut table = InlineTable::new();
             for (key, item) in map.entries() {
-                if matches!(item.value, Value::Comment(_) | Value::Null) {
+                if matches!(item.value(), Value::Null) {
                     continue;
                 }
-                table.insert(key, to_toml_value(&item.value)?);
+                table.insert(key, to_toml_value(item.value())?);
             }
             Ok(TomlValue::InlineTable(table))
         }
         Value::Null => Err("cannot serialize null as TOML".into()),
-        Value::Comment(_) => Err("cannot serialize comment as inline TOML value".into()),
     }
 }
 
-fn decor_prefix_text<'a>(prefix: &'a RawString, text: &'a str) -> Option<&'a str> {
-    if let Some(value) = prefix.as_str() {
-        if value.is_empty() {
-            return None;
-        }
-        return Some(value);
-    }
-    let span = prefix.span()?;
-    let slice = text.get(span)?;
-    if slice.is_empty() { None } else { Some(slice) }
+/// Extract comment lines (lines starting with `#`) from raw TOML decor text.
+fn raw_comments_before(raw: &RawString, text: &str) -> Vec<String> {
+    let prefix_str = match raw.as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        Some(_) => return Vec::new(),
+        None => match raw.span() {
+            Some(span) => match text.get(span) {
+                Some(s) if !s.is_empty() => s.to_string(),
+                _ => return Vec::new(),
+            },
+            None => return Vec::new(),
+        },
+    };
+    prefix_str
+        .lines()
+        .filter_map(|l| {
+            let t = l.trim();
+            t.starts_with('#').then(|| t.to_string())
+        })
+        .collect()
 }
 
-fn prefix_comments(prefix: &str, location: &Location) -> Vec<(String, LocatedValue)> {
-    let mut comments = Vec::new();
-    for line in prefix.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('#') {
-            let comment = trimmed.to_string();
-            comments.push((
-                comment.clone(),
-                LocatedValue {
-                    value: Value::Comment(comment),
-                    location: location.clone(),
-                },
-            ));
-        }
-    }
-    comments
+/// Extract the first comment line (starting with `#`) from raw TOML inline suffix text.
+fn raw_comment_after(raw: &RawString, text: &str) -> Option<String> {
+    let suffix_str = match raw.as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        Some(_) => return None,
+        None => match raw.span() {
+            Some(span) => match text.get(span) {
+                Some(s) if !s.is_empty() => s.to_string(),
+                _ => return None,
+            },
+            None => return None,
+        },
+    };
+    suffix_str.lines().next().and_then(|l| {
+        let t = l.trim();
+        t.starts_with('#').then(|| t.to_string())
+    })
 }
 
 fn convert_table(
@@ -300,28 +315,40 @@ fn convert_table(
     let mut map = Map::new();
     for (key, item) in table {
         let item_fallback = span_start(item.span(), fallback_offset);
-        let item_location =
-            location_from_span(source, text, single_line, item.span(), item_fallback);
+
+        let mut before: Vec<String> = Vec::new();
         if let Some(key_obj) = table.key(key)
             && let Some(raw_prefix) = key_obj.leaf_decor().prefix()
-            && let Some(prefix) = decor_prefix_text(raw_prefix, text)
         {
-            for (comment_key, comment_value) in prefix_comments(prefix, &item_location) {
-                map.insert(comment_key, comment_value);
+            for line in raw_comments_before(raw_prefix, text) {
+                before.push(line);
             }
         }
-        let value = match item {
-            Item::Value(value) => convert_toml_value(
-                source,
-                text,
-                single_line,
-                value,
-                location_from_span(source, text, single_line, value.span(), item_fallback),
-            ),
-            Item::Table(table) => convert_table(source, text, single_line, table, item_fallback),
+
+        let (mut located, suffix_raw) = match item {
+            Item::Value(value) => {
+                let suffix = value.decor().suffix().cloned();
+                let lv = convert_toml_value(
+                    source,
+                    text,
+                    single_line,
+                    value,
+                    location_from_span(source, text, single_line, value.span(), item_fallback),
+                )?;
+                (lv, suffix)
+            }
+            Item::Table(table) => {
+                if let Some(raw_prefix) = table.decor().prefix() {
+                    for line in raw_comments_before(raw_prefix, text) {
+                        before.push(line);
+                    }
+                }
+                let suffix = table.decor().suffix().cloned();
+                let lv = convert_table(source, text, single_line, table, item_fallback)?;
+                (lv, suffix)
+            }
             Item::ArrayOfTables(array) => {
-                let location =
-                    location_from_span(source, text, single_line, item.span(), item_fallback);
+                let loc = location_from_span(source, text, single_line, item.span(), item_fallback);
                 let mut list = Vec::new();
                 for index in 0..array.len() {
                     if let Some(table) = array.get(index) {
@@ -334,29 +361,36 @@ fn convert_table(
                         )?);
                     }
                 }
-                Ok(LocatedValue {
-                    value: Value::List(list),
-                    location,
-                })
+                (LocatedValue::new(Value::List(list), loc), None)
             }
-            Item::None => Err(Error::Parse {
-                text: text.to_string(),
-                location: Some(Box::new(location_from_span(
-                    source,
-                    text,
-                    single_line,
-                    item.span(),
-                    item_fallback,
-                ))),
-                message: "unexpected empty toml item".to_string(),
-            }),
-        }?;
-        map.insert(key.to_string(), value);
+            Item::None => {
+                return Err(Error::Parse {
+                    text: text.to_string(),
+                    location: Some(Box::new(location_from_span(
+                        source,
+                        text,
+                        single_line,
+                        item.span(),
+                        item_fallback,
+                    ))),
+                    message: "unexpected empty toml item".to_string(),
+                });
+            }
+        };
+
+        let after: Option<String> = if let Some(raw_suffix) = suffix_raw {
+            raw_comment_after(&raw_suffix, text)
+        } else {
+            None
+        };
+
+        if !before.is_empty() || after.is_some() {
+            located = located.with_comment(Comment::new().with_before(before).with_after(after));
+        }
+
+        map.insert(key.to_string(), located);
     }
-    Ok(LocatedValue {
-        value: Value::Map(map),
-        location,
-    })
+    Ok(LocatedValue::new(Value::Map(map), location))
 }
 
 fn convert_toml_value(
@@ -367,22 +401,16 @@ fn convert_toml_value(
     location: Location,
 ) -> Result<LocatedValue, Error> {
     match value {
-        TomlValue::String(value) => Ok(LocatedValue {
-            value: Value::String(value.value().to_string()),
+        TomlValue::String(value) => Ok(LocatedValue::new(
+            Value::String(value.value().to_string()),
             location,
-        }),
-        TomlValue::Integer(value) => Ok(LocatedValue {
-            value: Value::Int(*value.value() as isize),
+        )),
+        TomlValue::Integer(value) => Ok(LocatedValue::new(
+            Value::Int(*value.value() as isize),
             location,
-        }),
-        TomlValue::Float(value) => Ok(LocatedValue {
-            value: Value::Float(*value.value()),
-            location,
-        }),
-        TomlValue::Boolean(value) => Ok(LocatedValue {
-            value: Value::Bool(*value.value()),
-            location,
-        }),
+        )),
+        TomlValue::Float(value) => Ok(LocatedValue::new(Value::Float(*value.value()), location)),
+        TomlValue::Boolean(value) => Ok(LocatedValue::new(Value::Bool(*value.value()), location)),
         TomlValue::Array(array) => {
             let mut list = Vec::new();
             let fallback_offset = span_start(array.span(), 0);
@@ -404,10 +432,7 @@ fn convert_toml_value(
                     )?);
                 }
             }
-            Ok(LocatedValue {
-                value: Value::List(list),
-                location,
-            })
+            Ok(LocatedValue::new(Value::List(list), location))
         }
         TomlValue::InlineTable(table) => {
             let mut map = Map::new();
@@ -419,10 +444,7 @@ fn convert_toml_value(
                     convert_toml_value(source, text, single_line, value, item_location)?;
                 map.insert(key.to_string(), converted);
             }
-            Ok(LocatedValue {
-                value: Value::Map(map),
-                location,
-            })
+            Ok(LocatedValue::new(Value::Map(map), location))
         }
         TomlValue::Datetime(_) => Err(Error::UnsupportedType {
             text: text.to_string(),
@@ -477,10 +499,7 @@ mod tests {
     }
 
     fn loc(value: Value) -> LocatedValue {
-        LocatedValue {
-            value,
-            location: Location::at("file", "test", None, None, None),
-        }
+        LocatedValue::new(value, Location::at("file", "test", None, None, None))
     }
 
     #[test]
@@ -505,20 +524,20 @@ mod tests {
         let reparsed = Toml::new()
             .parse(&file_source("out.toml"), text.as_bytes())
             .unwrap();
-        let map = reparsed.value.as_map().unwrap();
+        let map = reparsed.value().as_map().unwrap();
         assert_eq!(
-            map.get("name").unwrap().value.as_string().unwrap(),
+            map.get("name").unwrap().value().as_string().unwrap(),
             "tanzim"
         );
-        assert_eq!(map.get("port").unwrap().value.as_int().unwrap(), 8080);
-        assert_eq!(map.get("ratio").unwrap().value.as_float().unwrap(), 0.5);
-        assert!(map.get("debug").unwrap().value.as_bool().unwrap());
-        let tags = map.get("tags").unwrap().value.as_list().unwrap();
-        assert_eq!(tags[0].value.as_string().unwrap(), "a");
-        assert_eq!(tags[1].value.as_string().unwrap(), "b");
-        let nested = map.get("nested").unwrap().value.as_map().unwrap();
+        assert_eq!(map.get("port").unwrap().value().as_int().unwrap(), 8080);
+        assert_eq!(map.get("ratio").unwrap().value().as_float().unwrap(), 0.5);
+        assert!(map.get("debug").unwrap().value().as_bool().unwrap());
+        let tags = map.get("tags").unwrap().value().as_list().unwrap();
+        assert_eq!(tags[0].value().as_string().unwrap(), "a");
+        assert_eq!(tags[1].value().as_string().unwrap(), "b");
+        let nested = map.get("nested").unwrap().value().as_map().unwrap();
         assert_eq!(
-            nested.get("key").unwrap().value.as_string().unwrap(),
+            nested.get("key").unwrap().value().as_string().unwrap(),
             "value"
         );
     }
@@ -535,12 +554,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             parsed
-                .value
+                .value()
                 .as_map()
                 .unwrap()
                 .get("hello")
                 .unwrap()
-                .value
+                .value()
                 .as_string()
                 .unwrap(),
             "world"
@@ -555,11 +574,57 @@ mod tests {
                 b"[https]\nfollow_redirects = false\ninsecure = true\nretries = 3\n",
             )
             .unwrap();
-        let https = parsed.value.as_map().unwrap().get("https").unwrap();
-        let nested = https.value.as_map().unwrap();
+        let https = parsed.value().as_map().unwrap().get("https").unwrap();
+        let nested = https.value().as_map().unwrap();
         let retries = nested.get("retries").unwrap();
-        assert_eq!(retries.location.line, std::num::NonZeroU32::new(4));
-        assert_eq!(retries.location.column, std::num::NonZeroU32::new(11));
+        assert_eq!(retries.location().line, std::num::NonZeroU32::new(4));
+        assert_eq!(retries.location().column, std::num::NonZeroU32::new(11));
+    }
+
+    #[test]
+    fn parses_table_header_prefix_comment() {
+        let parsed = Toml::new()
+            .parse(
+                &file_source("baz.toml"),
+                b"# This is a comment\n[logging]\nlevel = \"debug\"\n",
+            )
+            .unwrap();
+        let root = parsed.value().as_map().unwrap();
+        let logging = root.get("logging").unwrap();
+        assert_eq!(logging.comment().before(), &["# This is a comment"]);
+        assert!(!root.contains_key("# This is a comment"));
+        assert_eq!(
+            logging
+                .value()
+                .as_map()
+                .unwrap()
+                .get("level")
+                .unwrap()
+                .value()
+                .as_string()
+                .unwrap(),
+            "debug"
+        );
+    }
+
+    #[test]
+    fn parses_inline_suffix_comments() {
+        let text = b"# This is a comment\n[logging]\n# log level\nlevel = \"debug\" # debug, info, warn, error\n# output serialize format\noutput_serialize_format = \"json\" # json, yaml\n";
+        let parsed = Toml::new().parse(&file_source("baz.toml"), text).unwrap();
+        let root = parsed.value().as_map().unwrap();
+        let logging_lv = root.get("logging").unwrap();
+        assert_eq!(logging_lv.comment().before(), &["# This is a comment"]);
+        let logging = logging_lv.value().as_map().unwrap();
+        let level = logging.get("level").unwrap();
+        assert_eq!(level.comment().before(), &["# log level"]);
+        assert_eq!(level.comment().after(), Some("# debug, info, warn, error"));
+        let osf = logging.get("output_serialize_format").unwrap();
+        assert_eq!(osf.comment().before(), &["# output serialize format"]);
+        assert_eq!(osf.comment().after(), Some("# json, yaml"));
+
+        let reparsed = unparse(&file_source("out.toml"), parsed.into_value()).unwrap();
+        assert!(reparsed.contains("# debug, info, warn, error"));
+        assert!(reparsed.contains("# json, yaml"));
     }
 
     #[test]
@@ -570,15 +635,13 @@ mod tests {
                 b"# top comment\nhello = \"world\"\n",
             )
             .unwrap();
-        let map = parsed.value.as_map().unwrap();
-        let comment = map.get("# top comment").expect("comment entry");
-        assert_eq!(comment.value.as_comment(), Some("# top comment"));
-        assert_eq!(
-            map.get("hello").unwrap().value.as_string().unwrap(),
-            "world"
-        );
+        let map = parsed.value().as_map().unwrap();
+        let hello = map.get("hello").unwrap();
+        assert_eq!(hello.comment().before(), &["# top comment"]);
+        assert!(!map.contains_key("# top comment"));
+        assert_eq!(hello.value().as_string().unwrap(), "world");
 
-        let text = unparse(&file_source("out.toml"), parsed.value).unwrap();
+        let text = unparse(&file_source("out.toml"), parsed.into_value()).unwrap();
         assert!(text.contains("# top comment"));
         assert!(text.contains("hello = \"world\""));
     }

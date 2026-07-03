@@ -79,20 +79,14 @@ impl Parse for KvParser {
                     let loc = Location::at(source, resource, Some(line_number), None, None);
                     map.insert(
                         key.trim().to_string(),
-                        LocatedValue {
-                            value: Value::String(val.trim().to_string()),
-                            location: loc,
-                        },
+                        LocatedValue::new(Value::String(val.trim().to_string()), loc),
                     );
                 }
             }
         }
 
         let root_loc = Location::at(source, resource, None, None, None);
-        Ok(LocatedValue {
-            value: Value::Map(map),
-            location: root_loc,
-        })
+        Ok(LocatedValue::new(Value::Map(map), root_loc))
     }
 }
 
@@ -123,9 +117,9 @@ fn main() {
     println!("parsed value : {value}");
     println!();
 
-    let map = value.value.as_map().unwrap();
+    let map = value.value().as_map().unwrap();
     for (key, lv) in map.entries() {
-        println!("  {key:15} = {}  (at {})", lv.value, lv.location);
+        println!("  {key:15} = {}  (at {})", lv.value(), lv.location());
     }
 
     // Demonstrate error reporting

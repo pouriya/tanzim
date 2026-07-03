@@ -29,7 +29,7 @@
 //!     .parse(&source, br#"{"host":"127.0.0.1"}"#)
 //!     .unwrap();
 //! assert_eq!(
-//!     value.value.as_map().unwrap().get("host").unwrap().value.as_string().unwrap(),
+//!     value.value().as_map().unwrap().get("host").unwrap().value().as_string().unwrap(),
 //!     "127.0.0.1"
 //! );
 //! ```
@@ -56,8 +56,8 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///     .build()
 ///     .unwrap();
 /// let value = Json::new().parse(&source, br#"{"port":8080}"#).unwrap();
-/// let port = value.value.as_map().unwrap().get("port").unwrap();
-/// assert_eq!(port.value.as_int().unwrap(), 8080);
+/// let port = value.value().as_map().unwrap().get("port").unwrap();
+/// assert_eq!(port.value().as_int().unwrap(), 8080);
 /// ```
 #[derive(Clone, Copy, Default)]
 pub struct Json;
@@ -155,10 +155,10 @@ impl Parse for Json {
 ///
 /// let source = SourceBuilder::new().with_source("file").build().unwrap();
 /// let mut map = Map::new();
-/// map.insert("port".into(), LocatedValue {
-///     value: Value::Int(8080),
-///     location: Location::at("file", "", None, None, None),
-/// });
+/// map.insert("port".into(), LocatedValue::new(
+///     Value::Int(8080),
+///     Location::at("file", "", None, None, None),
+/// ));
 /// let text = unparse(&source, Value::Map(map)).unwrap();
 /// assert_eq!(text, "{\n  \"port\": 8080\n}");
 /// ```
@@ -194,7 +194,7 @@ fn write_json(
             out.push_str("[\n");
             for (index, item) in values.iter().enumerate() {
                 push_indent(out, indent + 1);
-                write_json(out, &item.value, indent + 1)?;
+                write_json(out, item.value(), indent + 1)?;
                 if index + 1 < values.len() {
                     out.push(',');
                 }
@@ -214,7 +214,7 @@ fn write_json(
                 push_indent(out, indent + 1);
                 write_json_string(out, key);
                 out.push_str(": ");
-                write_json(out, &item.value, indent + 1)?;
+                write_json(out, item.value(), indent + 1)?;
                 if index + 1 < entries.len() {
                     out.push(',');
                 }
@@ -224,9 +224,6 @@ fn write_json(
             out.push('}');
         }
         Value::Null => out.push_str("null"),
-        Value::Comment(_) => {
-            return Err("cannot serialize comment as JSON".into());
-        }
     }
     Ok(())
 }
@@ -264,32 +261,20 @@ fn convert_value(
     location: Location,
 ) -> Result<LocatedValue, Error> {
     match value {
-        JsonValue::Null => Ok(LocatedValue {
-            value: Value::Null,
-            location,
-        }),
-        JsonValue::Bool(value) => Ok(LocatedValue {
-            value: Value::Bool(value),
-            location,
-        }),
+        JsonValue::Null => Ok(LocatedValue::new(Value::Null, location)),
+        JsonValue::Bool(value) => Ok(LocatedValue::new(Value::Bool(value), location)),
         JsonValue::Number(number) => match number {
-            spanned_json_parser::value::Number::PosInt(value) => Ok(LocatedValue {
-                value: Value::Int(value as isize),
-                location,
-            }),
-            spanned_json_parser::value::Number::NegInt(value) => Ok(LocatedValue {
-                value: Value::Int(value as isize),
-                location,
-            }),
-            spanned_json_parser::value::Number::Float(value) => Ok(LocatedValue {
-                value: Value::Float(value),
-                location,
-            }),
+            spanned_json_parser::value::Number::PosInt(value) => {
+                Ok(LocatedValue::new(Value::Int(value as isize), location))
+            }
+            spanned_json_parser::value::Number::NegInt(value) => {
+                Ok(LocatedValue::new(Value::Int(value as isize), location))
+            }
+            spanned_json_parser::value::Number::Float(value) => {
+                Ok(LocatedValue::new(Value::Float(value), location))
+            }
         },
-        JsonValue::String(value) => Ok(LocatedValue {
-            value: Value::String(value),
-            location,
-        }),
+        JsonValue::String(value) => Ok(LocatedValue::new(Value::String(value), location)),
         JsonValue::Array(values) => {
             let mut list = Vec::new();
             for item in &values {
@@ -305,10 +290,7 @@ fn convert_value(
                 )?;
                 list.push(converted);
             }
-            Ok(LocatedValue {
-                value: Value::List(list),
-                location,
-            })
+            Ok(LocatedValue::new(Value::List(list), location))
         }
         JsonValue::Object(values) => {
             let mut map = Map::new();
@@ -325,10 +307,7 @@ fn convert_value(
                 )?;
                 map.insert(key, converted);
             }
-            Ok(LocatedValue {
-                value: Value::Map(map),
-                location,
-            })
+            Ok(LocatedValue::new(Value::Map(map), location))
         }
     }
 }
@@ -366,10 +345,7 @@ mod tests {
     }
 
     fn loc(value: Value) -> LocatedValue {
-        LocatedValue {
-            value,
-            location: Location::at("file", "test", None, None, None),
-        }
+        LocatedValue::new(value, Location::at("file", "test", None, None, None))
     }
 
     #[test]
@@ -404,12 +380,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             parsed
-                .value
+                .value()
                 .as_map()
                 .unwrap()
                 .get("hello")
                 .unwrap()
-                .value
+                .value()
                 .as_string()
                 .unwrap(),
             "world"
@@ -428,10 +404,10 @@ mod tests {
         let root = Json::new()
             .parse(&file_source("a.json"), br#"{"a":1}"#)
             .unwrap();
-        let map = root.value.as_map().unwrap();
+        let map = root.value().as_map().unwrap();
         let entry = map.get("a").unwrap();
-        assert_eq!(entry.location.line, None);
-        assert_eq!(entry.location.column, None);
+        assert_eq!(entry.location().line, None);
+        assert_eq!(entry.location().column, None);
     }
 
     #[test]
@@ -439,10 +415,10 @@ mod tests {
         let root = Json::new()
             .parse(&file_source("a.json"), b"{\n  \"a\": null\n}")
             .unwrap();
-        let map = root.value.as_map().unwrap();
+        let map = root.value().as_map().unwrap();
         let entry = map.get("a").unwrap();
-        assert!(entry.value.is_null());
-        assert_eq!(entry.location.line, std::num::NonZeroU32::new(2));
+        assert!(entry.value().is_null());
+        assert_eq!(entry.location().line, std::num::NonZeroU32::new(2));
     }
 
     #[test]

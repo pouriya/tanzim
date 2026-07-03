@@ -76,7 +76,7 @@ impl Merge for LastWins {
 pub struct DeepMerge;
 
 fn deep_merge_value(base: LocatedValue, overlay: LocatedValue) -> LocatedValue {
-    if let (Value::Map(base_map), Value::Map(overlay_map)) = (&base.value, &overlay.value) {
+    if let (Value::Map(base_map), Value::Map(overlay_map)) = (base.value(), overlay.value()) {
         let mut result_map = Map::new();
         let base_entries = base_map.entries();
         let overlay_entries = overlay_map.entries();
@@ -98,10 +98,7 @@ fn deep_merge_value(base: LocatedValue, overlay: LocatedValue) -> LocatedValue {
             }
         }
 
-        return LocatedValue {
-            value: Value::Map(result_map),
-            location: overlay.location.clone(),
-        };
+        return LocatedValue::new(Value::Map(result_map), overlay.location().clone());
     }
     overlay
 }
@@ -179,10 +176,10 @@ mod tests {
     }
 
     fn string_value(text: &str) -> LocatedValue {
-        LocatedValue {
-            value: Value::String(text.to_string()),
-            location: Location::at("mock", "test", None, None, None),
-        }
+        LocatedValue::new(
+            Value::String(text.to_string()),
+            Location::at("mock", "test", None, None, None),
+        )
     }
 
     fn map_value(entries: &[(&str, &str)]) -> LocatedValue {
@@ -190,10 +187,10 @@ mod tests {
         for (key, value) in entries {
             map.insert(key.to_string(), string_value(value));
         }
-        LocatedValue {
-            value: Value::Map(map),
-            location: Location::at("mock", "test", None, None, None),
-        }
+        LocatedValue::new(
+            Value::Map(map),
+            Location::at("mock", "test", None, None, None),
+        )
     }
 
     #[test]
@@ -210,7 +207,7 @@ mod tests {
         ];
         let merged = LastWins.merge(&parsed).unwrap();
         let (_, value) = merged.get(&Some("app".into())).unwrap();
-        assert_eq!(value.value.as_string().unwrap(), "second");
+        assert_eq!(value.value().as_string().unwrap(), "second");
     }
 
     #[test]
@@ -221,7 +218,7 @@ mod tests {
         ];
         let merged = LastWins.merge(&parsed).unwrap();
         let (_, value) = merged.get(&None).unwrap();
-        assert_eq!(value.value.as_string().unwrap(), "second");
+        assert_eq!(value.value().as_string().unwrap(), "second");
     }
 
     #[test]
@@ -237,7 +234,7 @@ mod tests {
                 .get(&Some("alpha".into()))
                 .unwrap()
                 .1
-                .value
+                .value()
                 .as_string()
                 .unwrap(),
             "a"
@@ -247,7 +244,7 @@ mod tests {
                 .get(&Some("beta".into()))
                 .unwrap()
                 .1
-                .value
+                .value()
                 .as_string()
                 .unwrap(),
             "b"
@@ -275,13 +272,19 @@ mod tests {
         let merged = DeepMerge.merge(&parsed).unwrap();
         let (payloads, value) = merged.get(&Some("app".into())).unwrap();
         assert_eq!(payloads.len(), 2);
-        let map = value.value.as_map().unwrap();
+        let map = value.value().as_map().unwrap();
         assert_eq!(
-            map.get("host").unwrap().value.as_string().unwrap(),
+            map.get("host").unwrap().value().as_string().unwrap(),
             "localhost"
         );
-        assert_eq!(map.get("port").unwrap().value.as_string().unwrap(), "9090");
-        assert_eq!(map.get("debug").unwrap().value.as_string().unwrap(), "true");
+        assert_eq!(
+            map.get("port").unwrap().value().as_string().unwrap(),
+            "9090"
+        );
+        assert_eq!(
+            map.get("debug").unwrap().value().as_string().unwrap(),
+            "true"
+        );
     }
 
     #[test]
@@ -292,7 +295,7 @@ mod tests {
         ];
         let merged = DeepMerge.merge(&parsed).unwrap();
         let (_, value) = merged.get(&Some("app".into())).unwrap();
-        assert_eq!(value.value.as_string().unwrap(), "override");
+        assert_eq!(value.value().as_string().unwrap(), "override");
     }
 
     #[test]
@@ -304,8 +307,8 @@ mod tests {
         let merged = DeepMerge.merge(&parsed).unwrap();
         let (payloads, value) = merged.get(&None).unwrap();
         assert_eq!(payloads.len(), 2);
-        let map = value.value.as_map().unwrap();
-        assert_eq!(map.get("a").unwrap().value.as_string().unwrap(), "1");
-        assert_eq!(map.get("b").unwrap().value.as_string().unwrap(), "2");
+        let map = value.value().as_map().unwrap();
+        assert_eq!(map.get("a").unwrap().value().as_string().unwrap(), "1");
+        assert_eq!(map.get("b").unwrap().value().as_string().unwrap(), "2");
     }
 }

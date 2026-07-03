@@ -20,10 +20,10 @@ fn main() {
     // A config document with a string `port` that the `port` validator will coerce.
     let config_json = r#"{ "host": "example.com", "port": "443" }"#;
     let config: SchemaValue = serde_json::from_str(config_json).expect("parse config");
-    let mut value = LocatedValue {
-        value: config.into_value(),
-        location: Location::at("example", "", None, None, None),
-    };
+    let mut value = LocatedValue::new(
+        config.into_value(),
+        Location::at("example", "", None, None, None),
+    );
 
     match validate(validator.as_ref(), &mut value) {
         Ok(()) => println!("valid — coerced config: {value:#}"),

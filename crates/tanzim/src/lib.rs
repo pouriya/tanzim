@@ -587,10 +587,10 @@ pub mod single {
             if flat.is_empty() {
                 return Ok((
                     Vec::new(),
-                    parser::LocatedValue {
-                        value: tanzim_value::Value::Map(tanzim_value::Map::new()),
-                        location: tanzim_value::Location::at("", "", None, None, None),
-                    },
+                    parser::LocatedValue::new(
+                        tanzim_value::Value::Map(tanzim_value::Map::new()),
+                        tanzim_value::Location::at("", "", None, None, None),
+                    ),
                 ));
             }
 
@@ -603,10 +603,10 @@ pub mod single {
                 Some(r) => r,
                 None => (
                     Vec::new(),
-                    parser::LocatedValue {
-                        value: tanzim_value::Value::Map(tanzim_value::Map::new()),
-                        location: tanzim_value::Location::at("", "", None, None, None),
-                    },
+                    parser::LocatedValue::new(
+                        tanzim_value::Value::Map(tanzim_value::Map::new()),
+                        tanzim_value::Location::at("", "", None, None, None),
+                    ),
                 ),
             };
             cfg_if! {

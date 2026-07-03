@@ -101,7 +101,6 @@ pub enum ValueType {
     List,
     Map,
     Null,
-    Comment,
 }
 
 impl Display for ValueType {
@@ -114,7 +113,6 @@ impl Display for ValueType {
             Self::List => "list",
             Self::Map => "map",
             Self::Null => "null",
-            Self::Comment => "comment",
         })
     }
 }
@@ -226,17 +224,146 @@ pub enum Value {
     List(Vec<LocatedValue>),
     Map(Map),
     Null,
-    Comment(String),
 }
 
-/// A [`Value`] with its [`Location`].
+/// Comment text attached to a [`LocatedValue`]: lines preceding the key and an optional
+/// inline comment on the same line as the value.
 ///
-/// [`Display`] is compact by default; use `{value:#}` for a multiline dump with
-/// `@source:resource:line:column` on the first line.
+/// Empty by default — callers check `.before().is_empty()` and `.after()` to detect absence.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Comment {
+    before: Vec<String>,
+    after: Option<String>,
+}
+
+impl Comment {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Comment lines preceding the key; empty when none.
+    pub fn before(&self) -> &[String] {
+        &self.before
+    }
+
+    pub fn before_mut(&mut self) -> &mut Vec<String> {
+        &mut self.before
+    }
+
+    /// Inline comment on the same line as the value; `None` when absent.
+    pub fn after(&self) -> Option<&str> {
+        self.after.as_deref()
+    }
+
+    pub fn after_mut(&mut self) -> &mut Option<String> {
+        &mut self.after
+    }
+
+    /// Builder: set the before-lines (replaces any existing).
+    pub fn with_before(mut self, lines: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.before = lines.into_iter().map(|l| l.into()).collect();
+        self
+    }
+
+    /// Builder: set the inline after-comment.
+    pub fn with_after(mut self, text: Option<impl Into<String>>) -> Self {
+        self.after = text.map(|t| t.into());
+        self
+    }
+
+    /// In-place setter for before-lines.
+    pub fn set_before(&mut self, lines: impl IntoIterator<Item = impl Into<String>>) {
+        self.before = lines.into_iter().map(|l| l.into()).collect();
+    }
+
+    /// In-place setter for the inline after-comment.
+    pub fn set_after(&mut self, text: Option<impl Into<String>>) {
+        self.after = text.map(|t| t.into());
+    }
+}
+
+/// A [`Value`] with its [`Location`] and an optional [`Comment`].
+///
+/// Fields are private; build with [`LocatedValue::new`] and access through the provided
+/// accessor methods. [`Display`] is compact by default; use `{value:#}` for a multiline dump
+/// with `@source:resource:line:column` on the first line.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocatedValue {
-    pub value: Value,
-    pub location: Location,
+    value: Value,
+    location: Location,
+    comment: Comment,
+}
+
+impl LocatedValue {
+    /// Create a located value with an empty (default) comment.
+    pub fn new(value: impl Into<Value>, location: impl Into<Location>) -> Self {
+        Self {
+            value: value.into(),
+            location: location.into(),
+            comment: Comment::new(),
+        }
+    }
+
+    // --- value ---
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+
+    pub fn value_mut(&mut self) -> &mut Value {
+        &mut self.value
+    }
+
+    pub fn into_value(self) -> Value {
+        self.value
+    }
+
+    pub fn with_value(mut self, value: impl Into<Value>) -> Self {
+        self.value = value.into();
+        self
+    }
+
+    pub fn set_value(&mut self, value: impl Into<Value>) {
+        self.value = value.into();
+    }
+
+    // --- location ---
+
+    pub fn location(&self) -> &Location {
+        &self.location
+    }
+
+    pub fn location_mut(&mut self) -> &mut Location {
+        &mut self.location
+    }
+
+    pub fn with_location(mut self, location: impl Into<Location>) -> Self {
+        self.location = location.into();
+        self
+    }
+
+    pub fn set_location(&mut self, location: impl Into<Location>) {
+        self.location = location.into();
+    }
+
+    // --- comment ---
+
+    pub fn comment(&self) -> &Comment {
+        &self.comment
+    }
+
+    pub fn comment_mut(&mut self) -> &mut Comment {
+        &mut self.comment
+    }
+
+    pub fn with_comment(mut self, comment: Comment) -> Self {
+        self.comment = comment;
+        self
+    }
+
+    pub fn set_comment(&mut self, comment: Comment) {
+        self.comment = comment;
+    }
 }
 
 impl Display for LocatedValue {
@@ -248,6 +375,12 @@ impl Display for LocatedValue {
                 &"location",
                 &format_args!("{:?}", self.location.to_string()),
             );
+            if !self.comment.before.is_empty() || self.comment.after.is_some() {
+                map.entry(&"comment_before", &self.comment.before.as_slice());
+                if let Some(after) = &self.comment.after {
+                    map.entry(&"comment_after", &after.as_str());
+                }
+            }
             map.finish()
         } else {
             write!(f, "{}", self.value)
@@ -434,24 +567,6 @@ impl Value {
         matches!(self, Self::Null)
     }
 
-    pub fn is_comment(&self) -> bool {
-        matches!(self, Self::Comment(_))
-    }
-
-    pub fn as_comment(&self) -> Option<&str> {
-        match self {
-            Self::Comment(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    pub fn into_comment(self) -> Option<String> {
-        match self {
-            Self::Comment(value) => Some(value),
-            _ => None,
-        }
-    }
-
     pub fn type_name(&self) -> ValueType {
         match self {
             Self::Bool(_) => ValueType::Bool,
@@ -461,7 +576,6 @@ impl Value {
             Self::List(_) => ValueType::List,
             Self::Map(_) => ValueType::Map,
             Self::Null => ValueType::Null,
-            Self::Comment(_) => ValueType::Comment,
         }
     }
 }
@@ -487,7 +601,6 @@ impl Display for Value {
             }
             Self::Map(value) => Display::fmt(value, f),
             Self::Null => f.write_str("null"),
-            Self::Comment(value) => f.write_str(value),
         }
     }
 }
@@ -497,10 +610,10 @@ mod tests {
     use super::*;
 
     fn located_string(text: &str) -> LocatedValue {
-        LocatedValue {
-            value: Value::String(text.to_string()),
-            location: Location::at("file", "test", None, None, None),
-        }
+        LocatedValue::new(
+            Value::String(text.to_string()),
+            Location::at("file", "test", None, None, None),
+        )
     }
 
     #[test]
@@ -509,14 +622,14 @@ mod tests {
             value.as_ref().clone()
         }
         let value = Value::Int(7);
-        let located = LocatedValue {
-            value: Value::Int(7),
-            location: Location::at("file", "test", None, None, None),
-        };
-        assert_eq!(take(value.clone()), value); // Value
-        assert_eq!(take(&value), value); // &Value
-        assert_eq!(take(located.clone()), value); // LocatedValue
-        assert_eq!(take(&located), value); // &LocatedValue
+        let located = LocatedValue::new(
+            Value::Int(7),
+            Location::at("file", "test", None, None, None),
+        );
+        assert_eq!(take(value.clone()), value);
+        assert_eq!(take(&value), value);
+        assert_eq!(take(located.clone()), value);
+        assert_eq!(take(&located), value);
     }
 
     #[test]
@@ -524,15 +637,18 @@ mod tests {
         let mut map = Map::new();
         map.insert("foo".to_string(), located_string("first"));
         map.insert("foo".to_string(), located_string("second"));
-        assert_eq!(map.get("foo").unwrap().value.as_string().unwrap(), "second");
+        assert_eq!(
+            map.get("foo").unwrap().value().as_string().unwrap(),
+            "second"
+        );
     }
 
     #[test]
     fn default_display_is_compact() {
-        let value = LocatedValue {
-            value: Value::String("hello".to_string()),
-            location: Location::at("file", "config.yaml", Some(2), Some(5), None),
-        };
+        let value = LocatedValue::new(
+            Value::String("hello".to_string()),
+            Location::at("file", "config.yaml", Some(2), Some(5), None),
+        );
         let message = value.to_string();
         assert!(!message.contains('\n'));
         assert!(!message.starts_with('@'));
@@ -541,10 +657,10 @@ mod tests {
 
     #[test]
     fn alternate_display_shows_location_and_multiline() {
-        let value = LocatedValue {
-            value: Value::String("hello".to_string()),
-            location: Location::at("file", "config.yaml", Some(2), Some(5), None),
-        };
+        let value = LocatedValue::new(
+            Value::String("hello".to_string()),
+            Location::at("file", "config.yaml", Some(2), Some(5), None),
+        );
         let message = format!("{value:#}");
         assert_eq!(
             message,
@@ -596,6 +712,37 @@ mod tests {
         assert_eq!(location.to_string(), "file:1:2");
         let resourceful = Location::at("file", "cfg.yml", Some(4), None, None);
         assert_eq!(resourceful.to_string(), "file:cfg.yml:4");
+    }
+
+    #[test]
+    fn comment_attached_to_located_value() {
+        let lv = LocatedValue::new(
+            Value::String("debug".into()),
+            Location::at("file", "baz.toml", Some(4), Some(9), None),
+        )
+        .with_comment(
+            Comment::new()
+                .with_before(["# log level: debug, info, warn, error"])
+                .with_after(Some("# inline")),
+        );
+        assert_eq!(
+            lv.comment().before(),
+            &["# log level: debug, info, warn, error"]
+        );
+        assert_eq!(lv.comment().after(), Some("# inline"));
+        assert_eq!(lv.value().as_string().unwrap(), "debug");
+    }
+
+    #[test]
+    fn comment_alternate_display_shows_comment_fields() {
+        let lv = LocatedValue::new(
+            Value::String("debug".into()),
+            Location::at("file", "baz.toml", Some(4), Some(9), None),
+        )
+        .with_comment(Comment::new().with_before(["# level comment"]));
+        let text = format!("{lv:#}");
+        assert!(text.contains("\"comment_before\""));
+        assert!(text.contains("level comment"));
     }
 
     #[test]

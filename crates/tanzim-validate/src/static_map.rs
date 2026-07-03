@@ -128,9 +128,9 @@ impl Validator for StaticMap {
             if let Some(validator) = &field.validator
                 && let Some(entry) = map.get_mut(&field.key)
             {
-                match validator.validate(&mut entry.value) {
+                match validator.validate(entry.value_mut()) {
                     Ok(()) => {}
-                    Err(error) => return Err(error.under_key(&field.key, &entry.location)),
+                    Err(error) => return Err(error.under_key(&field.key, entry.location())),
                 }
             }
         }
@@ -146,7 +146,7 @@ impl Validator for StaticMap {
                 }
                 if !declared {
                     return Err(Error::new(ErrorKind::UnknownKey { key: key.clone() })
-                        .with_location(&entry.location));
+                        .with_location(entry.location()));
                 }
             }
         }
@@ -162,10 +162,7 @@ mod tests {
     use tanzim_value::{LocatedValue, Location, Map};
 
     fn entry(value: Value) -> LocatedValue {
-        LocatedValue {
-            value,
-            location: Location::at("file", "test", Some(1), Some(1), None),
-        }
+        LocatedValue::new(value, Location::at("file", "test", Some(1), Some(1), None))
     }
 
     fn map_of(pairs: &[(&str, Value)]) -> Value {

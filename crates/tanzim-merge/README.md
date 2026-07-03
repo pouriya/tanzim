@@ -36,14 +36,14 @@ let source = Source::parse("env").unwrap();
 let make_entry = |name: Option<&str>, key: &str, val: &str| {
     let loc = Location::at("env", "", None, None, None);
     let mut map = Map::new();
-    map.insert(key.to_string(), LocatedValue { value: Value::String(val.to_string()), location: loc.clone() });
+    map.insert(key.to_string(), LocatedValue::new(Value::String(val.to_string()), loc.clone()));
     let payload = Payload {
         source: source.clone(),
         maybe_name: name.map(str::to_string),
         maybe_format: Some("env".into()),
         content: vec![],
     };
-    (payload, LocatedValue { value: Value::Map(map), location: loc })
+    (payload, LocatedValue::new(Value::Map(map), loc))
 };
 
 let list = vec![
@@ -54,8 +54,8 @@ let list = vec![
 // LastWins: second entry fully replaces the first
 let merged = LastWins.merge(&list).unwrap();
 let db = merged.get(&Some("db".to_string())).unwrap();
-let host = db.1.value.as_map().unwrap().get("host").unwrap();
-assert_eq!(host.value.as_string().unwrap(), "replica");
+let host = db.1.value().as_map().unwrap().get("host").unwrap();
+assert_eq!(host.value().as_string().unwrap(), "replica");
 ```
 
 ## Features

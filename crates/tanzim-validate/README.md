@@ -29,13 +29,13 @@ let schema = StaticMap::new()
 
 let loc = Location::at("file", "config.toml", None, None, None);
 let mut map = Map::new();
-map.insert("host".into(), LocatedValue { value: Value::String("localhost".into()), location: loc.clone() });
-map.insert("port".into(), LocatedValue { value: Value::String("8080".into()), location: loc.clone() });
-let mut root = LocatedValue { value: Value::Map(map), location: loc };
+map.insert("host".into(), LocatedValue::new(Value::String("localhost".into()), loc.clone()));
+map.insert("port".into(), LocatedValue::new(Value::String("8080".into()), loc.clone()));
+let mut root = LocatedValue::new(Value::Map(map), loc);
 
 validate(&schema, &mut root).unwrap();
 // "8080" was coerced to the integer 8080
-assert_eq!(root.value.as_map().unwrap().get("port").unwrap().value.as_int(), Some(8080));
+assert_eq!(root.value().as_map().unwrap().get("port").unwrap().value().as_int(), Some(8080));
 ```
 
 ## Validators

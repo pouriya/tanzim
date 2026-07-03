@@ -20,10 +20,10 @@
 //!     "upper",
 //!     "txt",
 //!     Box::new(|source, bytes| {
-//!         Ok(LocatedValue {
-//!             value: Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
-//!             location: Location::in_source(source.clone(), None, None, None),
-//!         })
+//!         Ok(LocatedValue::new(
+//!             Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
+//!             Location::in_source(source.clone(), None, None, None),
+//!         ))
 //!     }),
 //! );
 //! let source = SourceBuilder::new()
@@ -32,7 +32,7 @@
 //!     .build()
 //!     .unwrap();
 //! let value = parser.parse(&source, b"hello").unwrap();
-//! assert_eq!(value.value.as_string().unwrap(), "HELLO");
+//! assert_eq!(value.value().as_string().unwrap(), "HELLO");
 //! ```
 
 use crate::{Parse, Source};
@@ -135,10 +135,10 @@ mod tests {
             "upper",
             "txt",
             Box::new(|source, bytes| {
-                Ok(LocatedValue {
-                    value: Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
-                    location: Location::in_source(source.clone(), None, None, None),
-                })
+                Ok(LocatedValue::new(
+                    Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
+                    Location::in_source(source.clone(), None, None, None),
+                ))
             }),
         )
         .with_validator(Box::new(|bytes| Some(!bytes.is_empty())));
@@ -148,7 +148,7 @@ mod tests {
             .build()
             .unwrap();
         let parsed = parser.parse(&source, b"hello").unwrap();
-        assert_eq!(parsed.value.as_string().unwrap(), "HELLO");
+        assert_eq!(parsed.value().as_string().unwrap(), "HELLO");
         assert_eq!(parser.is_format_supported(b"x"), Some(true));
         assert_eq!(parser.is_format_supported(b""), Some(false));
     }
@@ -159,10 +159,10 @@ mod tests {
             "yaml",
             "yml",
             Box::new(|source, bytes| {
-                Ok(LocatedValue {
-                    value: Value::String(String::from_utf8_lossy(bytes).to_string()),
-                    location: Location::at(source.source(), source.resource(), None, None, None),
-                })
+                Ok(LocatedValue::new(
+                    Value::String(String::from_utf8_lossy(bytes).to_string()),
+                    Location::at(source.source(), source.resource(), None, None, None),
+                ))
             }),
         )
         .with_format_list(&["yml", "yaml"]);

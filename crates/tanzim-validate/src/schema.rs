@@ -113,10 +113,7 @@ impl<'de> Visitor<'de> for SchemaValueVisitor {
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
         let mut items = Vec::new();
         while let Some(element) = seq.next_element::<SchemaValue>()? {
-            items.push(LocatedValue {
-                value: element.0,
-                location: schema_location(),
-            });
+            items.push(LocatedValue::new(element.0, schema_location()));
         }
         Ok(SchemaValue(Value::List(items)))
     }
@@ -124,13 +121,7 @@ impl<'de> Visitor<'de> for SchemaValueVisitor {
     fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
         let mut map = Map::new();
         while let Some((key, element)) = access.next_entry::<String, SchemaValue>()? {
-            map.insert(
-                key,
-                LocatedValue {
-                    value: element.0,
-                    location: schema_location(),
-                },
-            );
+            map.insert(key, LocatedValue::new(element.0, schema_location()));
         }
         Ok(SchemaValue(Value::Map(map)))
     }
@@ -255,7 +246,7 @@ impl Node<'_> {
     pub fn opt_str(&self, field: &str) -> Result<Option<&str>, SchemaError> {
         match self.map.get(field) {
             None => Ok(None),
-            Some(entry) => match &entry.value {
+            Some(entry) => match entry.value() {
                 Value::String(text) => Ok(Some(text)),
                 _ => Err(self.wrong(field, "a string")),
             },
@@ -266,7 +257,7 @@ impl Node<'_> {
     pub fn opt_int(&self, field: &str) -> Result<Option<isize>, SchemaError> {
         match self.map.get(field) {
             None => Ok(None),
-            Some(entry) => match &entry.value {
+            Some(entry) => match entry.value() {
                 Value::Int(number) => Ok(Some(*number)),
                 _ => Err(self.wrong(field, "an integer")),
             },
@@ -291,7 +282,7 @@ impl Node<'_> {
     pub fn opt_f64(&self, field: &str) -> Result<Option<f64>, SchemaError> {
         match self.map.get(field) {
             None => Ok(None),
-            Some(entry) => match &entry.value {
+            Some(entry) => match entry.value() {
                 Value::Float(number) => Ok(Some(*number)),
                 Value::Int(number) => Ok(Some(*number as f64)),
                 _ => Err(self.wrong(field, "a number")),
@@ -303,7 +294,7 @@ impl Node<'_> {
     pub fn opt_bool(&self, field: &str) -> Result<Option<bool>, SchemaError> {
         match self.map.get(field) {
             None => Ok(None),
-            Some(entry) => match &entry.value {
+            Some(entry) => match entry.value() {
                 Value::Bool(value) => Ok(Some(*value)),
                 _ => Err(self.wrong(field, "a boolean")),
             },
@@ -322,11 +313,11 @@ impl Node<'_> {
     pub fn values(&self, field: &str) -> Result<Vec<Value>, SchemaError> {
         match self.map.get(field) {
             None => Ok(Vec::new()),
-            Some(entry) => match &entry.value {
+            Some(entry) => match entry.value() {
                 Value::List(items) => {
                     let mut out = Vec::new();
                     for item in items {
-                        out.push(item.value.clone());
+                        out.push(item.value().clone());
                     }
                     Ok(out)
                 }
@@ -339,11 +330,11 @@ impl Node<'_> {
     pub fn str_list(&self, field: &str) -> Result<Vec<String>, SchemaError> {
         match self.map.get(field) {
             None => Ok(Vec::new()),
-            Some(entry) => match &entry.value {
+            Some(entry) => match entry.value() {
                 Value::List(items) => {
                     let mut out = Vec::new();
                     for item in items {
-                        match &item.value {
+                        match item.value() {
                             Value::String(text) => out.push(text.clone()),
                             _ => return Err(self.wrong(field, "a list of strings")),
                         }
@@ -422,10 +413,7 @@ impl Registry {
 
     /// Build a validator from a bare [`Value`] (errors carry no source location).
     pub fn build_value(&self, value: &Value) -> Result<Box<dyn Validator>, SchemaError> {
-        let located = LocatedValue {
-            value: value.clone(),
-            location: schema_location(),
-        };
+        let located = LocatedValue::new(value.clone(), schema_location());
         self.build(&located)
     }
 
@@ -434,17 +422,17 @@ impl Registry {
         value: &'a LocatedValue,
         path: Vec<Segment>,
     ) -> Result<Node<'a>, SchemaError> {
-        match &value.value {
+        match value.value() {
             Value::Map(map) => Ok(Node {
                 registry: self,
                 map,
-                location: &value.location,
+                location: value.location(),
                 path,
             }),
             _ => Err(SchemaError {
                 kind: SchemaErrorKind::NotMap,
                 path,
-                location: Some(Box::new(value.location.clone())),
+                location: Some(Box::new(value.location().clone())),
             }),
         }
     }
@@ -608,7 +596,7 @@ impl Registry {
                 validator = validator.allow_unknown();
             }
             if let Some(entry) = node.map.get("fields") {
-                let fields = match &entry.value {
+                let fields = match entry.value() {
                     Value::Map(map) => map,
                     _ => return Err(node.wrong("fields", "a map")),
                 };
@@ -824,17 +812,15 @@ mod tests {
         );
         let validator = build_value(&schema).unwrap();
 
-        let mut config = LocatedValue {
-            value: parse(
-                r#"{"host": "localhost", "port": "8080", "tags": ["a", "b"], "mode": "auto"}"#,
-            ),
-            location: schema_location(),
-        };
+        let mut config = LocatedValue::new(
+            parse(r#"{"host": "localhost", "port": "8080", "tags": ["a", "b"], "mode": "auto"}"#),
+            schema_location(),
+        );
         crate::validate(validator.as_ref(), &mut config).unwrap();
 
         // port string was coerced to an integer
-        let port = config.value.as_map().unwrap().get("port").unwrap();
-        assert_eq!(port.value, Value::Int(8080));
+        let port = config.value().as_map().unwrap().get("port").unwrap();
+        assert_eq!(*port.value(), Value::Int(8080));
     }
 
     #[test]
@@ -926,10 +912,7 @@ mod tests {
 
     #[test]
     fn build_rejects_non_map_root() {
-        let located = LocatedValue {
-            value: Value::String("nope".into()),
-            location: schema_location(),
-        };
+        let located = LocatedValue::new(Value::String("nope".into()), schema_location());
         let error = match build(&located) {
             Ok(_) => panic!("expected a schema error"),
             Err(error) => error,
@@ -1007,14 +990,8 @@ mod tests {
         ))
         .unwrap();
         let mut dup = Value::List(vec![
-            LocatedValue {
-                value: Value::String("a".into()),
-                location: schema_location(),
-            },
-            LocatedValue {
-                value: Value::String("a".into()),
-                location: schema_location(),
-            },
+            LocatedValue::new(Value::String("a".into()), schema_location()),
+            LocatedValue::new(Value::String("a".into()), schema_location()),
         ]);
         assert!(validator.validate(&mut dup).is_err());
     }
@@ -1028,7 +1005,7 @@ mod tests {
         let mut ok = parse(r#"{"count": "7"}"#);
         validator.validate(&mut ok).unwrap();
         assert_eq!(
-            ok.as_map().unwrap().get("count").unwrap().value,
+            *ok.as_map().unwrap().get("count").unwrap().value(),
             Value::Int(7)
         );
     }

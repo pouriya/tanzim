@@ -35,6 +35,9 @@ baz:
           output_serialize_format:
             required: false
             validator: { type: enum, values: [json, yaml, toml] }
+          histogram_buckets:
+            required: false
+            validator: { type: list, items: { type: float } }
 
 qux:
   type: static_map

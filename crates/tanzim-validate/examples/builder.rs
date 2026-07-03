@@ -16,27 +16,21 @@ fn main() {
     let mut map = Map::new();
     map.insert(
         "host".to_string(),
-        LocatedValue {
-            value: Value::String("localhost".to_string()),
-            location: location.clone(),
-        },
+        LocatedValue::new(Value::String("localhost".to_string()), location.clone()),
     );
     map.insert(
         "port".to_string(),
-        LocatedValue {
-            value: Value::String("8080".to_string()),
-            location: location.clone(),
-        },
+        LocatedValue::new(Value::String("8080".to_string()), location.clone()),
     );
-    let mut root = LocatedValue {
-        value: Value::Map(map),
-        location,
-    };
+    let mut root = LocatedValue::new(Value::Map(map), location);
 
     match validate(&schema, &mut root) {
         Ok(()) => {
-            let port = root.value.as_map().unwrap().get("port").unwrap();
-            println!("valid — `port` was coerced from a string to {}", port.value);
+            let port = root.value().as_map().unwrap().get("port").unwrap();
+            println!(
+                "valid — `port` was coerced from a string to {}",
+                port.value()
+            );
         }
         Err(error) => eprintln!("invalid: {error}"),
     }

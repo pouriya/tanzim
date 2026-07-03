@@ -16,10 +16,10 @@ fn txt_parser() -> ParserClosure {
         "mock",
         "txt",
         Box::new(|source, bytes| {
-            Ok(LocatedValue {
-                value: Value::String(String::from_utf8_lossy(bytes).to_string()),
-                location: Location::at(source.source(), source.resource(), None, None, None),
-            })
+            Ok(LocatedValue::new(
+                Value::String(String::from_utf8_lossy(bytes).to_string()),
+                Location::at(source.source(), source.resource(), None, None, None),
+            ))
         }),
     )
 }
@@ -182,7 +182,7 @@ fn single_parse_uses_explicit_format() {
     let loaded = pipeline.load().unwrap();
     let parsed = pipeline.parse(&loaded).unwrap();
     assert_eq!(parsed.len(), 1);
-    assert_eq!(parsed[0].1.value.as_string().unwrap(), "hello");
+    assert_eq!(parsed[0].1.value().as_string().unwrap(), "hello");
 }
 
 #[test]
@@ -208,7 +208,7 @@ fn single_parse_auto_detects_format() {
         .unwrap();
     let loaded = pipeline.load().unwrap();
     let parsed = pipeline.parse(&loaded).unwrap();
-    assert_eq!(parsed[0].1.value.as_string().unwrap(), "auto");
+    assert_eq!(parsed[0].1.value().as_string().unwrap(), "auto");
 }
 
 #[test]
@@ -245,7 +245,7 @@ fn single_unify_empty_merge_returns_empty_map() {
     let merged = pipeline.merge(&[]).unwrap();
     let (payloads, value) = pipeline.unify(&merged).unwrap();
     assert!(payloads.is_empty());
-    assert!(value.value.as_map().unwrap().entries().is_empty());
+    assert!(value.value().as_map().unwrap().entries().is_empty());
 }
 
 #[test]
@@ -262,23 +262,23 @@ fn single_unify_collapses_named_groups_with_last_wins() {
     let parsed = pipeline.parse(&loaded).unwrap();
     let merged = pipeline.merge(&parsed).unwrap();
     let (_, value) = pipeline.unify(&merged).unwrap();
-    assert_eq!(value.value.as_string().unwrap(), "beta-value");
+    assert_eq!(value.value().as_string().unwrap(), "beta-value");
 }
 
 #[test]
 fn single_run_executes_full_pipeline() {
     let pipeline = build_single();
     let (_, value) = pipeline.run().unwrap();
-    assert_eq!(value.value.as_string().unwrap(), "hello");
+    assert_eq!(value.value().as_string().unwrap(), "hello");
 }
 
 #[test]
 fn single_validate_without_schema_is_noop() {
     let pipeline = build_single();
-    let mut value = LocatedValue {
-        value: Value::String("hello".into()),
-        location: Location::at("mock", "one", None, None, None),
-    };
+    let mut value = LocatedValue::new(
+        Value::String("hello".into()),
+        Location::at("mock", "one", None, None, None),
+    );
     pipeline.validate(&mut value).unwrap();
 }
 
@@ -293,10 +293,10 @@ fn single_validate_rejects_invalid_schema() {
         .with_schema(schema_from_json(r#"{"type": "nope"}"#))
         .build()
         .unwrap();
-    let mut value = LocatedValue {
-        value: Value::String("hello".into()),
-        location: Location::at("mock", "one", None, None, None),
-    };
+    let mut value = LocatedValue::new(
+        Value::String("hello".into()),
+        Location::at("mock", "one", None, None, None),
+    );
     match pipeline.validate(&mut value) {
         Ok(()) => panic!("expected schema error"),
         Err(error) => assert!(matches!(error, SingleError::Schema { .. })),
@@ -314,10 +314,10 @@ fn single_validate_rejects_bad_configuration() {
         .with_schema(schema_from_json(r#"{"type": "integer"}"#))
         .build()
         .unwrap();
-    let mut value = LocatedValue {
-        value: Value::String("hello".into()),
-        location: Location::at("mock", "one", None, None, None),
-    };
+    let mut value = LocatedValue::new(
+        Value::String("hello".into()),
+        Location::at("mock", "one", None, None, None),
+    );
     match pipeline.validate(&mut value) {
         Ok(()) => panic!("expected validation error"),
         Err(error) => assert!(matches!(error, SingleError::Validate { .. })),
@@ -576,13 +576,13 @@ fn single_unify_with_deep_merge_combines_map_groups() {
     let parsed = pipeline.parse(&loaded).unwrap();
     let merged = pipeline.merge(&parsed).unwrap();
     let (_, value) = pipeline.unify(&merged).unwrap();
-    let map = value.value.as_map().unwrap();
+    let map = value.value().as_map().unwrap();
     assert_eq!(
-        map.get("alpha").unwrap().value.as_string().unwrap(),
+        map.get("alpha").unwrap().value().as_string().unwrap(),
         "alpha-value"
     );
     assert_eq!(
-        map.get("beta").unwrap().value.as_string().unwrap(),
+        map.get("beta").unwrap().value().as_string().unwrap(),
         "beta-value"
     );
 }
@@ -620,7 +620,7 @@ fn single_unify_last_wins_prefers_unnamed_bucket() {
     let parsed = pipeline.parse(&loaded).unwrap();
     let merged = pipeline.merge(&parsed).unwrap();
     let (_, value) = pipeline.unify(&merged).unwrap();
-    assert_eq!(value.value.as_string().unwrap(), "unnamed");
+    assert_eq!(value.value().as_string().unwrap(), "unnamed");
 }
 
 #[test]
@@ -635,7 +635,7 @@ fn single_run_with_valid_schema_coerces_configuration() {
         .build()
         .unwrap();
     let (_, value) = pipeline.run().unwrap();
-    assert_eq!(value.value, Value::Int(42));
+    assert_eq!(*value.value(), Value::Int(42));
 }
 
 #[test]
@@ -818,7 +818,7 @@ fn single_run_with_logging_enabled_exercises_pipeline_stages() {
     init_logging();
     let pipeline = build_single();
     let (_, value) = pipeline.run().unwrap();
-    assert_eq!(value.value.as_string().unwrap(), "hello");
+    assert_eq!(value.value().as_string().unwrap(), "hello");
 }
 
 #[test]

@@ -27,7 +27,7 @@
 //!     .unwrap();
 //! let value = Yaml::new().parse(&source, b"host: 127.0.0.1\n").unwrap();
 //! assert_eq!(
-//!     value.value.as_map().unwrap().get("host").unwrap().value.as_string().unwrap(),
+//!     value.value().as_map().unwrap().get("host").unwrap().value().as_string().unwrap(),
 //!     "127.0.0.1"
 //! );
 //! ```
@@ -54,8 +54,8 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///     .build()
 ///     .unwrap();
 /// let value = Yaml::new().parse(&source, b"port: 8080\n").unwrap();
-/// let port = value.value.as_map().unwrap().get("port").unwrap();
-/// assert_eq!(port.value.as_int().unwrap(), 8080);
+/// let port = value.value().as_map().unwrap().get("port").unwrap();
+/// assert_eq!(port.value().as_int().unwrap(), 8080);
 /// ```
 #[derive(Default, Copy, Clone)]
 pub struct Yaml;
@@ -121,10 +121,10 @@ impl Parse for Yaml {
                     log::trace!("msg=\"Parsed YAML configuration (empty document)\" source={source} resource={resource}");
                 }
             }
-            return Ok(LocatedValue {
-                value: Value::Map(Map::new()),
-                location: Location::in_source(src.clone(), None, None, None),
-            });
+            return Ok(LocatedValue::new(
+                Value::Map(Map::new()),
+                Location::in_source(src.clone(), None, None, None),
+            ));
         }
         let result = convert_node(src, text, single_line, &docs[0]);
         if result.is_ok() {
@@ -159,10 +159,10 @@ impl Parse for Yaml {
 ///
 /// let source = SourceBuilder::new().with_source("file").build().unwrap();
 /// let mut map = Map::new();
-/// map.insert("port".into(), LocatedValue {
-///     value: Value::Int(8080),
-///     location: Location::at("file", "", None, None, None),
-/// });
+/// map.insert("port".into(), LocatedValue::new(
+///     Value::Int(8080),
+///     Location::at("file", "", None, None, None),
+/// ));
 /// assert_eq!(unparse(&source, Value::Map(map)).unwrap(), "port: 8080\n");
 /// ```
 pub fn unparse<V: AsRef<Value>>(
@@ -190,18 +190,10 @@ fn write_yaml_map(
     indent: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     for (key, item) in map.entries() {
-        if let Value::Comment(text) = &item.value {
-            push_yaml_indent(out, indent);
-            out.push_str(text);
-            if !text.ends_with('\n') {
-                out.push('\n');
-            }
-            continue;
-        }
         push_yaml_indent(out, indent);
         write_yaml_string(out, key);
         out.push(':');
-        match &item.value {
+        match item.value() {
             Value::Map(inner) if inner.entries().is_empty() => out.push_str(" {}\n"),
             Value::List(items) if items.is_empty() => out.push_str(" []\n"),
             Value::Map(inner) => {
@@ -229,13 +221,7 @@ fn write_yaml_list(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     for item in items {
         push_yaml_indent(out, indent);
-        match &item.value {
-            Value::Comment(text) => {
-                out.push_str(text);
-                if !text.ends_with('\n') {
-                    out.push('\n');
-                }
-            }
+        match item.value() {
             Value::Map(inner) if inner.entries().is_empty() => out.push_str("- {}\n"),
             Value::List(inner) if inner.is_empty() => out.push_str("- []\n"),
             Value::Map(inner) => {
@@ -271,7 +257,6 @@ fn write_yaml_scalar(
         }
         Value::String(value) => write_yaml_string(out, value),
         Value::Null => out.push('~'),
-        Value::Comment(value) => out.push_str(value),
         Value::List(_) | Value::Map(_) => {
             return Err("internal error: write_yaml_scalar called on a collection".into());
         }
@@ -364,36 +349,24 @@ fn convert_node(
     };
     match &node.data {
         YamlData::Value(scalar) => match scalar {
-            Scalar::Null => Ok(LocatedValue {
-                value: Value::Null,
+            Scalar::Null => Ok(LocatedValue::new(Value::Null, location)),
+            Scalar::Boolean(value) => Ok(LocatedValue::new(Value::Bool(*value), location)),
+            Scalar::Integer(value) => Ok(LocatedValue::new(Value::Int(*value as isize), location)),
+            Scalar::FloatingPoint(value) => Ok(LocatedValue::new(
+                Value::Float(value.into_inner()),
                 location,
-            }),
-            Scalar::Boolean(value) => Ok(LocatedValue {
-                value: Value::Bool(*value),
+            )),
+            Scalar::String(value) => Ok(LocatedValue::new(
+                Value::String(value.to_string()),
                 location,
-            }),
-            Scalar::Integer(value) => Ok(LocatedValue {
-                value: Value::Int(*value as isize),
-                location,
-            }),
-            Scalar::FloatingPoint(value) => Ok(LocatedValue {
-                value: Value::Float(value.into_inner()),
-                location,
-            }),
-            Scalar::String(value) => Ok(LocatedValue {
-                value: Value::String(value.to_string()),
-                location,
-            }),
+            )),
         },
         YamlData::Sequence(sequence) => {
             let mut list = Vec::new();
             for node in sequence {
                 list.push(convert_node(source, text, single_line, node)?);
             }
-            Ok(LocatedValue {
-                value: Value::List(list),
-                location,
-            })
+            Ok(LocatedValue::new(Value::List(list), location))
         }
         YamlData::Mapping(mapping) => {
             let mut map = Map::new();
@@ -412,23 +385,17 @@ fn convert_node(
                 let value = convert_node(source, text, single_line, value_node)?;
                 map.insert(key, value);
             }
-            Ok(LocatedValue {
-                value: Value::Map(map),
-                location,
-            })
+            Ok(LocatedValue::new(Value::Map(map), location))
         }
         YamlData::Tagged(_, inner) => convert_node(source, text, single_line, inner),
         YamlData::Representation(representation, _, _) => {
             if representation == "~" || representation == "null" || representation == "Null" {
-                return Ok(LocatedValue {
-                    value: Value::Null,
-                    location,
-                });
+                return Ok(LocatedValue::new(Value::Null, location));
             }
-            Ok(LocatedValue {
-                value: Value::String(representation.to_string()),
+            Ok(LocatedValue::new(
+                Value::String(representation.to_string()),
                 location,
-            })
+            ))
         }
         YamlData::Alias(_) | YamlData::BadValue => Err(Error::Parse {
             text: text.to_string(),
@@ -452,10 +419,7 @@ mod tests {
     }
 
     fn loc(value: Value) -> LocatedValue {
-        LocatedValue {
-            value,
-            location: Location::at("file", "test", None, None, None),
-        }
+        LocatedValue::new(value, Location::at("file", "test", None, None, None))
     }
 
     #[test]
@@ -490,12 +454,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             parsed
-                .value
+                .value()
                 .as_map()
                 .unwrap()
                 .get("hello")
                 .unwrap()
-                .value
+                .value()
                 .as_string()
                 .unwrap(),
             "world"
@@ -507,12 +471,12 @@ mod tests {
         let root = Yaml::new()
             .parse(&file_source("config.yaml"), b"foo: bar\nbaz: qux\n")
             .unwrap();
-        let map = root.value.as_map().unwrap();
+        let map = root.value().as_map().unwrap();
         let foo = map.get("foo").unwrap();
-        assert_eq!(foo.value.as_string().unwrap(), "bar");
-        assert_eq!(foo.location.line, std::num::NonZeroU32::new(1));
+        assert_eq!(foo.value().as_string().unwrap(), "bar");
+        assert_eq!(foo.location().line, std::num::NonZeroU32::new(1));
         let baz = map.get("baz").unwrap();
-        assert_eq!(baz.location.line, std::num::NonZeroU32::new(2));
+        assert_eq!(baz.location().line, std::num::NonZeroU32::new(2));
     }
 
     #[test]
@@ -521,14 +485,14 @@ mod tests {
         let root = Yaml::new()
             .parse(&file_source("config.yaml"), text.as_bytes())
             .unwrap();
-        let map = root.value.as_map().unwrap();
+        let map = root.value().as_map().unwrap();
         let baz = map.get("baz").unwrap();
-        let nested = baz.value.as_map().unwrap();
+        let nested = baz.value().as_map().unwrap();
         let qux = nested.get("qux").unwrap();
-        assert!(qux.value.is_null());
-        assert_eq!(qux.location.line, std::num::NonZeroU32::new(5));
-        assert_eq!(qux.location.column, std::num::NonZeroU32::new(8));
-        assert_eq!(qux.location.length, std::num::NonZeroU32::new(1));
+        assert!(qux.value().is_null());
+        assert_eq!(qux.location().line, std::num::NonZeroU32::new(5));
+        assert_eq!(qux.location().column, std::num::NonZeroU32::new(8));
+        assert_eq!(qux.location().length, std::num::NonZeroU32::new(1));
     }
 
     #[test]

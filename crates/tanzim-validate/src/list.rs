@@ -89,9 +89,9 @@ impl Validator for List {
 
         if let Some(validator) = &self.items {
             for (index, item) in items.iter_mut().enumerate() {
-                match validator.validate(&mut item.value) {
+                match validator.validate(item.value_mut()) {
                     Ok(()) => {}
-                    Err(error) => return Err(error.under_index(index, &item.location)),
+                    Err(error) => return Err(error.under_index(index, item.location())),
                 }
             }
         }
@@ -100,12 +100,12 @@ impl Validator for List {
             let mut seen: Vec<&Value> = Vec::new();
             for (index, item) in items.iter().enumerate() {
                 for previous in &seen {
-                    if **previous == item.value {
+                    if **previous == *item.value() {
                         return Err(Error::new(ErrorKind::Duplicate { index })
-                            .with_location(&item.location));
+                            .with_location(item.location()));
                     }
                 }
-                seen.push(&item.value);
+                seen.push(item.value());
             }
         }
 
@@ -120,10 +120,7 @@ mod tests {
     use tanzim_value::{LocatedValue, Location};
 
     fn item(value: Value) -> LocatedValue {
-        LocatedValue {
-            value,
-            location: Location::at("file", "test", Some(1), Some(1), None),
-        }
+        LocatedValue::new(value, Location::at("file", "test", Some(1), Some(1), None))
     }
 
     #[test]
@@ -165,6 +162,6 @@ mod tests {
             .items(Integer::new())
             .validate(&mut value)
             .unwrap();
-        assert_eq!(value.as_list().unwrap()[0].value, Value::Int(5));
+        assert_eq!(*value.as_list().unwrap()[0].value(), Value::Int(5));
     }
 }

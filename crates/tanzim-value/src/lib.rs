@@ -4,4 +4,4 @@ mod error;
 mod value;
 
 pub use error::Error;
-pub use value::{LocatedValue, Location, Map, Value, ValueType};
+pub use value::{Comment, LocatedValue, Location, Map, Value, ValueType};

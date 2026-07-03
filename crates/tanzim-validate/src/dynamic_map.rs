@@ -83,9 +83,9 @@ impl Validator for DynamicMap {
 
         if let Some(validator) = &self.values {
             for (key, entry) in map.entries_mut() {
-                match validator.validate(&mut entry.value) {
+                match validator.validate(entry.value_mut()) {
                     Ok(()) => {}
-                    Err(error) => return Err(error.under_key(key, &entry.location)),
+                    Err(error) => return Err(error.under_key(key, entry.location())),
                 }
             }
         }
@@ -101,10 +101,7 @@ mod tests {
     use tanzim_value::{LocatedValue, Location, Map};
 
     fn entry(value: Value) -> LocatedValue {
-        LocatedValue {
-            value,
-            location: Location::at("file", "test", Some(1), Some(1), None),
-        }
+        LocatedValue::new(value, Location::at("file", "test", Some(1), Some(1), None))
     }
 
     #[test]

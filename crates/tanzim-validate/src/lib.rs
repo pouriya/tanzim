@@ -156,9 +156,6 @@ pub trait Validator {
     /// Run [`check`](Validator::check); on error attach this validator's [`Meta`] (innermost wins);
     /// on success apply the output conversion in `meta().convert`, if any.
     fn validate(&self, value: &mut Value) -> Result<(), Error> {
-        if matches!(value, Value::Comment(_)) {
-            return Ok(());
-        }
         if matches!(value, Value::Null)
             && let Some(default) = self.meta().default.as_ref()
         {
@@ -274,7 +271,7 @@ impl<T: Validator> WithMeta for T {}
 /// Cast a validated [`Value`] to `target`, reusing the same lenient coercions the leaf validators
 /// use. An impossible cast is a [`ErrorKind::NotConvertible`] error.
 fn cast(value: &mut Value, target: ValueType) -> Result<(), Error> {
-    if matches!(value, Value::Null | Value::Comment(_)) {
+    if matches!(value, Value::Null) {
         return Ok(());
     }
     if value.type_name() == target {
@@ -331,7 +328,7 @@ fn cast(value: &mut Value, target: ValueType) -> Result<(), Error> {
                 }));
             }
         },
-        ValueType::List | ValueType::Map | ValueType::Null | ValueType::Comment => {
+        ValueType::List | ValueType::Map | ValueType::Null => {
             return Err(Error::new(ErrorKind::NotConvertible {
                 target,
                 found: value.type_name(),
@@ -348,16 +345,16 @@ fn cast(value: &mut Value, target: ValueType) -> Result<(), Error> {
 /// use tanzim_validate::{validate, Integer};
 /// use tanzim_value::{LocatedValue, Location, Value};
 ///
-/// let mut node = LocatedValue {
-///     value: Value::String("42".into()),
-///     location: Location::at("file", "config.toml", Some(1), Some(1), None),
-/// };
+/// let mut node = LocatedValue::new(
+///     Value::String("42".into()),
+///     Location::at("file", "config.toml", Some(1), Some(1), None),
+/// );
 /// validate(&Integer::new().range(0, 100), &mut node).unwrap();
-/// assert_eq!(node.value.as_int(), Some(42)); // coerced from string
+/// assert_eq!(node.value().as_int(), Some(42)); // coerced from string
 /// ```
 pub fn validate(validator: &dyn Validator, value: &mut LocatedValue) -> Result<(), Error> {
-    match validator.validate(&mut value.value) {
+    match validator.validate(value.value_mut()) {
         Ok(()) => Ok(()),
-        Err(error) => Err(error.with_location(&value.location)),
+        Err(error) => Err(error.with_location(value.location())),
     }
 }

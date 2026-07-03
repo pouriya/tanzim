@@ -59,7 +59,7 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
     if let Some((sources, value)) = merged.get(&Some("foo".to_string())) {
         assert!(!sources.is_empty());
         assert!(
-            value.value.as_map().is_some(),
+            value.value().as_map().is_some(),
             "'foo' value should be a map"
         );
     }
@@ -72,7 +72,7 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "{display} (from {} source(s)): {}",
             sources.len(),
-            value.value
+            value.value()
         );
     }
 

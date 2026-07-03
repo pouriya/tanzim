@@ -29,11 +29,11 @@ let mut map = Map::new();
 let location = Location::at("env", "", None, None, None);
 map.insert(
     "port".to_string(),
-    LocatedValue { value: Value::Int(8080), location: location.clone() },
+    LocatedValue::new(Value::Int(8080), location.clone()),
 );
 map.insert(
     "host".to_string(),
-    LocatedValue { value: Value::String("localhost".to_string()), location },
+    LocatedValue::new(Value::String("localhost".to_string()), location),
 );
 assert!(map.contains_key("port"));
 assert_eq!(map.len(), 2);

@@ -70,13 +70,13 @@ fn main() {
 
 fn print_located(located: &LocatedValue, indent: usize) {
     let prefix = "  ".repeat(indent);
-    let source = located.location.to_string();
-    let location = match (located.location.line, located.location.column) {
+    let source = located.location().to_string();
+    let location = match (located.location().line, located.location().column) {
         (Some(line), Some(column)) => format!("@ {source}:{line}:{column}"),
         (Some(line), None) => format!("@ {source}:{line}"),
         _ => format!("@ {source}"),
     };
-    match &located.value {
+    match located.value() {
         Value::Bool(value) => println!("{prefix}{value} {location}"),
         Value::Int(value) => println!("{prefix}{value} {location}"),
         Value::Float(value) => println!("{prefix}{value} {location}"),
@@ -98,6 +98,5 @@ fn print_located(located: &LocatedValue, indent: usize) {
             println!("{prefix}}}");
         }
         Value::Null => println!("{prefix}null {location}"),
-        Value::Comment(value) => println!("{prefix}{value} {location}"),
     }
 }
