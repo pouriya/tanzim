@@ -4,13 +4,16 @@
 //!
 //! # Behaviour
 //!
-//! - Splits the UTF-8 input into lines; blank lines and `#` comments are ignored, and an optional
-//!   leading `export ` is stripped.
+//! - Splits the UTF-8 input into lines; blank lines are ignored. Full-line `#` comments and
+//!   inline `#` comments after a value are preserved on each entry via [`tanzim_value::Comment`].
+//!   An optional leading `export ` is stripped.
 //! - Each remaining `KEY=VALUE` line becomes a string entry. Values may be double-quoted (with
 //!   `\n`, `\r`, `\t`, `\"`, `\\` escapes), single-quoted (taken literally), or unquoted (used
 //!   verbatim). The result is always a [`Value::Map`] of [`Value::String`]s.
 //! - When the source carries a `separator` option, keys are split on that separator and nested
 //!   into sub-maps (e.g. `BAR__BAZ=val` with `separator=__` becomes `{bar: {baz: "val"}}`).
+//!   For non-`env` sources (e.g. file-loaded `.env` payloads), the parser inherits `separator`
+//!   and `lowercase` from a sibling `env(...)` source in `other_source_list` when present.
 //! - Each key carries its line/column [`Location`]; for single-line input the line/column are
 //!   omitted. The root map has no line.
 //! - Non-UTF-8 input fails with [`Error::InvalidUtf8`]; there are
@@ -29,7 +32,7 @@
 //!     .build()
 //!     .unwrap();
 //! let value = Env::new()
-//!     .parse(&source, b"SERVER_HOST=\"127.0.0.1\"\n")
+//!     .parse(&source, b"SERVER_HOST=\"127.0.0.1\"\n", &[])
 //!     .unwrap();
 //! assert_eq!(
 //!     value.value().as_map().unwrap().get("server_host").unwrap().value().as_string().unwrap(),
@@ -40,11 +43,11 @@
 use crate::span::{is_single_line, line_column_from_line};
 use crate::{Parse, Source};
 use cfg_if::cfg_if;
-use tanzim_value::{Error, LocatedValue, Location, Map, Value};
+use tanzim_value::{Comment, Error, LocatedValue, Location, Map, Value};
 
 /// Parser for the `env` format: dotenv / env-file `KEY=VALUE` lines into a string map.
 ///
-/// Skips blank lines and `#` comments, supports quoted values, and records each key's line number
+/// Skips blank lines, preserves `#` comments on each entry, supports quoted values, and records each key's line number
 /// as a [`Location`]. When the source carries a `separator` option, keys are nested into
 /// sub-maps. Stateless — construct with [`Env::new`].
 ///
@@ -58,7 +61,7 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///     .build()
 ///     .unwrap();
 /// let value = Env::new()
-///     .parse(&source, b"# comment\nPORT=8080\n")
+///     .parse(&source, b"# comment\nPORT=8080\n", &[])
 ///     .unwrap();
 /// let port = value.value().as_map().unwrap().get("port").unwrap();
 /// assert_eq!(port.value().as_string().unwrap(), "8080");
@@ -73,6 +76,84 @@ impl Env {
     }
 }
 
+fn hash_comment_body(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('#') {
+        return None;
+    }
+    Some(trimmed[1..].trim_start().to_string())
+}
+
+fn parse_double_quoted_value(input: &str) -> Option<(String, &str)> {
+    let mut out = String::new();
+    let mut index = 1usize;
+    while index < input.len() {
+        let ch = input[index..].chars().next()?;
+        let ch_len = ch.len_utf8();
+        if ch == '"' {
+            return Some((out, &input[index + ch_len..]));
+        }
+        if ch == '\\' {
+            index += ch_len;
+            if index >= input.len() {
+                out.push('\\');
+                break;
+            }
+            let next = input[index..].chars().next()?;
+            let next_len = next.len_utf8();
+            match next {
+                'n' => out.push('\n'),
+                'r' => out.push('\r'),
+                't' => out.push('\t'),
+                '"' => out.push('"'),
+                '\\' => out.push('\\'),
+                other => {
+                    out.push('\\');
+                    out.push(other);
+                }
+            }
+            index += next_len;
+        } else {
+            out.push(ch);
+            index += ch_len;
+        }
+    }
+    None
+}
+
+fn parse_single_quoted_value(input: &str) -> Option<(String, &str)> {
+    let mut index = 1usize;
+    while index < input.len() {
+        let ch = input[index..].chars().next()?;
+        if ch == '\'' {
+            return Some((input[1..index].to_string(), &input[index + ch.len_utf8()..]));
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+fn parse_env_value_and_comment(value_part: &str) -> (String, Option<String>) {
+    let trimmed = value_part.trim_start();
+    if trimmed.starts_with('"')
+        && let Some((value, rest)) = parse_double_quoted_value(trimmed)
+    {
+        return (value, hash_comment_body(rest));
+    } else if trimmed.starts_with('\'')
+        && let Some((value, rest)) = parse_single_quoted_value(trimmed)
+    {
+        return (value, hash_comment_body(rest));
+    }
+    if let Some(space_index) = trimmed.find(" #") {
+        let value = trimmed[..space_index].trim_end();
+        let comment = trimmed[space_index + 1..].trim();
+        if comment.starts_with('#') {
+            return (value.to_string(), hash_comment_body(comment));
+        }
+    }
+    (trimmed.to_string(), None)
+}
+
 impl Parse for Env {
     fn name(&self) -> &str {
         "Environment-Variables"
@@ -82,7 +163,12 @@ impl Parse for Env {
         vec!["env".into()]
     }
 
-    fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(
+        &self,
+        source: &Source,
+        bytes: &[u8],
+        other_source_list: &[Source],
+    ) -> Result<LocatedValue, Error> {
         fn insert_nested(map: &mut Map, parts: &[String], value: LocatedValue) {
             if parts.is_empty() {
                 return;
@@ -126,14 +212,65 @@ impl Parse for Env {
             }
         }
 
-        let separator = match source.options().get("separator") {
-            None => None,
-            Some(value) => value.as_string().cloned(),
-        };
-
-        let lowercase = match source.options().get("lowercase") {
-            None => true,
-            Some(value) => value.as_bool().unwrap_or(true),
+        let (separator, lowercase) = if source.source() == "env" {
+            let separator = match source.options().get("separator") {
+                None => None,
+                Some(value) => value.as_string().cloned(),
+            };
+            let lowercase = match source.options().get("lowercase") {
+                None => true,
+                Some(value) => value.as_bool().unwrap_or(true),
+            };
+            (separator, lowercase)
+        } else {
+            let mut env_sources: Vec<&Source> = Vec::new();
+            for other in other_source_list {
+                if other.source() == "env" {
+                    env_sources.push(other);
+                }
+            }
+            if env_sources.is_empty() {
+                let separator = match source.options().get("separator") {
+                    None => None,
+                    Some(value) => value.as_string().cloned(),
+                };
+                let lowercase = match source.options().get("lowercase") {
+                    None => true,
+                    Some(value) => value.as_bool().unwrap_or(true),
+                };
+                (separator, lowercase)
+            } else {
+                let mut first_separator: Option<Option<String>> = None;
+                for env_source in &env_sources {
+                    let sep = match env_source.options().get("separator") {
+                        None => None,
+                        Some(value) => value.as_string().cloned(),
+                    };
+                    match &first_separator {
+                        None => first_separator = Some(sep),
+                        Some(expected) => {
+                            if *expected != sep {
+                                return Err(Error::Parse {
+                                    text: String::new(),
+                                    location: Some(Box::new(Location::in_source(
+                                        source.clone(),
+                                        None,
+                                        None,
+                                        None,
+                                    ))),
+                                    message: "cannot determine env separator: multiple env sources with different separator options".to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+                let separator = first_separator.unwrap_or(None);
+                let lowercase = match env_sources[0].options().get("lowercase") {
+                    None => true,
+                    Some(value) => value.as_bool().unwrap_or(true),
+                };
+                (separator, lowercase)
+            }
         };
 
         let text = match std::str::from_utf8(bytes) {
@@ -146,6 +283,7 @@ impl Parse for Env {
         };
         let single_line = is_single_line(bytes);
         let mut map = Map::new();
+        let mut pending_before: Vec<String> = Vec::new();
         let mut line_number = 0usize;
         let mut offset = 0usize;
         while offset < text.len() {
@@ -157,7 +295,16 @@ impl Parse for Env {
             let line = &rest[..line_end];
             line_number += 1;
             let trimmed = line.trim();
-            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            if trimmed.is_empty() {
+                offset += line_end;
+                if offset < text.len() {
+                    offset += 1;
+                }
+                continue;
+            }
+            if let Some(body) = hash_comment_body(trimmed) {
+                pending_before.push(body);
+            } else {
                 let mut line_body = trimmed;
                 if line_body.starts_with("export ") {
                     line_body = line_body["export ".len()..].trim_start();
@@ -168,51 +315,7 @@ impl Parse for Env {
                     if !key.is_empty() {
                         let key_start = line.find(key).unwrap_or(0);
                         let column = line_column_from_line(line, 1, key_start);
-                        let value = if value_part.starts_with('"')
-                            && value_part.ends_with('"')
-                            && value_part.len() >= 2
-                        {
-                            let inner = &value_part[1..value_part.len() - 1];
-                            let mut out = String::new();
-                            let mut index = 0usize;
-                            while index < inner.len() {
-                                let ch = inner[index..].chars().next().expect("valid utf-8");
-                                let ch_len = ch.len_utf8();
-                                if ch == '\\' {
-                                    index += ch_len;
-                                    if index < inner.len() {
-                                        let next =
-                                            inner[index..].chars().next().expect("valid utf-8");
-                                        let next_len = next.len_utf8();
-                                        match next {
-                                            'n' => out.push('\n'),
-                                            'r' => out.push('\r'),
-                                            't' => out.push('\t'),
-                                            '"' => out.push('"'),
-                                            '\\' => out.push('\\'),
-                                            other => {
-                                                out.push('\\');
-                                                out.push(other);
-                                            }
-                                        }
-                                        index += next_len;
-                                    } else {
-                                        out.push('\\');
-                                    }
-                                } else {
-                                    out.push(ch);
-                                    index += ch_len;
-                                }
-                            }
-                            out
-                        } else if value_part.starts_with('\'')
-                            && value_part.ends_with('\'')
-                            && value_part.len() >= 2
-                        {
-                            value_part[1..value_part.len() - 1].to_string()
-                        } else {
-                            value_part.to_string()
-                        };
+                        let (value, after_comment) = parse_env_value_and_comment(value_part);
                         let location = if single_line {
                             Location::in_source(source.clone(), None, None, None)
                         } else {
@@ -228,7 +331,18 @@ impl Parse for Env {
                         } else {
                             key.to_string()
                         };
-                        let located_value = LocatedValue::new(Value::String(value), location);
+                        let mut located_value = LocatedValue::new(Value::String(value), location);
+                        let mut comment = Comment::new();
+                        if !pending_before.is_empty() {
+                            comment.set_before(pending_before.clone());
+                            pending_before.clear();
+                        }
+                        if let Some(after) = after_comment {
+                            comment.set_after(Some(after));
+                        }
+                        if !comment.before().is_empty() || comment.after().is_some() {
+                            located_value = located_value.with_comment(comment);
+                        }
                         match &separator {
                             None => {
                                 map.insert(final_key, located_value);
@@ -361,6 +475,13 @@ fn write_env(
                 .into());
             }
             scalar => {
+                for before in item.comment().before() {
+                    out.push_str("# ");
+                    out.push_str(before);
+                    if !before.ends_with('\n') {
+                        out.push('\n');
+                    }
+                }
                 out.push_str(&full_key);
                 out.push('=');
                 match scalar {
@@ -393,6 +514,10 @@ fn write_env(
                     // Maps and lists are handled by the arms above.
                     Value::List(_) | Value::Map(_) => {}
                 }
+                if let Some(after) = item.comment().after() {
+                    out.push_str(" # ");
+                    out.push_str(after);
+                }
                 out.push('\n');
             }
         }
@@ -403,6 +528,7 @@ fn write_env(
 #[cfg(all(test, feature = "env"))]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tanzim_source::{OptionValue, SourceBuilder};
 
     fn file_source(resource: &str) -> Source {
@@ -450,7 +576,9 @@ mod tests {
     #[test]
     fn parses_dotenv_contents() {
         let source = file_source(".env");
-        let parsed = Env::new().parse(&source, b"FOO=bar\nBAZ=qux\n").unwrap();
+        let parsed = Env::new()
+            .parse(&source, b"FOO=bar\nBAZ=qux\n", &[])
+            .unwrap();
         let map = parsed.value().as_map().unwrap();
         assert_eq!(map.get("foo").unwrap().value().as_string().unwrap(), "bar");
         assert_eq!(map.get("baz").unwrap().value().as_string().unwrap(), "qux");
@@ -459,7 +587,9 @@ mod tests {
     #[test]
     fn parses_env_with_line_numbers() {
         let source = file_source(".env");
-        let root = Env::new().parse(&source, b"FOO=bar\nBAZ=qux\n").unwrap();
+        let root = Env::new()
+            .parse(&source, b"FOO=bar\nBAZ=qux\n", &[])
+            .unwrap();
         let map = root.value().as_map().unwrap();
         let foo = map.get("foo").unwrap();
         assert_eq!(foo.value().as_string().unwrap(), "bar");
@@ -475,7 +605,7 @@ mod tests {
             .with_option("separator", OptionValue::String("__".into()))
             .build()
             .unwrap();
-        let parsed = Env::new().parse(&source, b"BAR__BAZ=val\n").unwrap();
+        let parsed = Env::new().parse(&source, b"BAR__BAZ=val\n", &[]).unwrap();
         let map = parsed.value().as_map().unwrap();
         let bar = map.get("bar").unwrap();
         let nested = bar.value().as_map().unwrap();
@@ -483,5 +613,136 @@ mod tests {
             nested.get("baz").unwrap().value().as_string().unwrap(),
             "val"
         );
+    }
+
+    #[test]
+    fn parses_prefix_and_suffix_comments() {
+        let text = b"# top comment\n# second line\nPORT=8080 # listen port\n";
+        let parsed = Env::new().parse(&file_source(".env"), text, &[]).unwrap();
+        let port = parsed.value().as_map().unwrap().get("port").unwrap();
+        assert_eq!(port.comment().before(), &["top comment", "second line"]);
+        assert_eq!(port.comment().after(), Some("listen port"));
+        assert_eq!(port.value().as_string().unwrap(), "8080");
+    }
+
+    #[test]
+    fn parses_quoted_value_with_suffix_comment() {
+        let source = SourceBuilder::new()
+            .with_source("env")
+            .with_option("separator", OptionValue::String("__".into()))
+            .build()
+            .unwrap();
+        let parsed = Env::new()
+            .parse(&source, b"SERVER__PORT=\"8080\" # listen port\n", &[])
+            .unwrap();
+        let server = parsed.value().as_map().unwrap().get("server").unwrap();
+        let port = server.value().as_map().unwrap().get("port").unwrap();
+        assert_eq!(port.value().as_string().unwrap(), "8080");
+        assert_eq!(port.comment().after(), Some("listen port"));
+    }
+
+    #[test]
+    fn unparses_prefix_and_suffix_comments() {
+        let source = file_source(".env");
+        let mut map = Map::new();
+        map.insert(
+            "port".into(),
+            loc(Value::String("8080".into())).with_comment(
+                Comment::new()
+                    .with_before(["top comment"])
+                    .with_after(Some("listen port")),
+            ),
+        );
+        let text = unparse(&source, Value::Map(map)).unwrap();
+        assert_eq!(text, "# top comment\nport=8080 # listen port\n");
+    }
+
+    #[test]
+    fn parses_and_unparses_foo_env_comments() {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/full/etc/foo.env");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let source = SourceBuilder::new()
+            .with_source("env")
+            .with_option("separator", OptionValue::String(".".into()))
+            .build()
+            .unwrap();
+        let parsed = Env::new().parse(&source, text.as_bytes(), &[]).unwrap();
+        let port = parsed
+            .value()
+            .as_map()
+            .unwrap()
+            .get("server")
+            .unwrap()
+            .value()
+            .as_map()
+            .unwrap()
+            .get("port")
+            .unwrap();
+        assert_eq!(port.value().as_string().unwrap(), "8080");
+        assert_eq!(port.comment().after(), Some("listen port"));
+
+        let reparsed = unparse(&source, parsed.into_value()).unwrap();
+        assert_eq!(reparsed, "server.port=8080 # listen port\n");
+
+        let reparsed_again = Env::new().parse(&source, reparsed.as_bytes(), &[]).unwrap();
+        let port_again = reparsed_again
+            .value()
+            .as_map()
+            .unwrap()
+            .get("server")
+            .unwrap()
+            .value()
+            .as_map()
+            .unwrap()
+            .get("port")
+            .unwrap();
+        assert_eq!(port_again.value().as_string().unwrap(), "8080");
+        assert_eq!(port_again.comment().after(), Some("listen port"));
+    }
+
+    #[test]
+    fn parses_file_env_inheriting_separator() {
+        let env_source = SourceBuilder::new()
+            .with_source("env")
+            .with_option("separator", OptionValue::String(".".into()))
+            .build()
+            .unwrap();
+        let file_source = file_source("foo.env");
+        let other_sources = [env_source];
+        let parsed = Env::new()
+            .parse(
+                &file_source,
+                b"SERVER.PORT=8080\n",
+                other_sources.as_slice(),
+            )
+            .unwrap();
+        let server = parsed.value().as_map().unwrap().get("server").unwrap();
+        let port = server.value().as_map().unwrap().get("port").unwrap();
+        assert_eq!(port.value().as_string().unwrap(), "8080");
+    }
+
+    #[test]
+    fn rejects_conflicting_env_separators() {
+        let env_dot = SourceBuilder::new()
+            .with_source("env")
+            .with_option("separator", OptionValue::String(".".into()))
+            .build()
+            .unwrap();
+        let env_underscore = SourceBuilder::new()
+            .with_source("env")
+            .with_option("separator", OptionValue::String("__".into()))
+            .build()
+            .unwrap();
+        let other_sources = [env_dot, env_underscore];
+        let error = Env::new()
+            .parse(
+                &file_source("foo.env"),
+                b"SERVER.PORT=8080\n",
+                other_sources.as_slice(),
+            )
+            .unwrap_err();
+        assert!(matches!(error, Error::Parse { .. }));
+        assert!(error.to_string().contains("separator"));
     }
 }

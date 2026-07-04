@@ -488,7 +488,7 @@ pub mod single {
                         log::trace!("msg=\"Found parser for configuration payload\" parser={} source={}", parser.name(), payload.source);
                     }
                 }
-                let value = match parser.parse(&payload.source, &payload.content) {
+                let value = match parser.parse(&payload.source, &payload.content, &self.sources) {
                     Ok(v) => v,
                     Err(e) => {
                         if config_source.on_error(Stage::Parse) == OnError::Skip {
@@ -1158,7 +1158,7 @@ pub mod multi {
                         log::trace!("msg=\"Found parser for configuration payload\" parser={} source={}", parser.name(), payload.source);
                     }
                 }
-                let value = match parser.parse(&payload.source, &payload.content) {
+                let value = match parser.parse(&payload.source, &payload.content, &self.sources) {
                     Ok(v) => v,
                     Err(e) => {
                         if config_source.on_error(Stage::Parse) == OnError::Skip {

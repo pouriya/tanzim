@@ -15,7 +15,7 @@ fn txt_parser() -> ParserClosure {
     ParserClosure::new(
         "mock",
         "txt",
-        Box::new(|source, bytes| {
+        Box::new(|source, bytes, _other_source_list| {
             Ok(LocatedValue::new(
                 Value::String(String::from_utf8_lossy(bytes).to_string()),
                 Location::at(source.source(), source.resource(), None, None, None),
@@ -458,7 +458,7 @@ fn failing_parser() -> ParserClosure {
     ParserClosure::new(
         "bad",
         "txt",
-        Box::new(|source, _| {
+        Box::new(|source, _, _other_source_list| {
             Err(tanzim_value::Error::InvalidUtf8 {
                 location: Box::new(Location::in_source(source.clone(), None, None, None)),
             })

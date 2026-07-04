@@ -86,6 +86,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             s
         };
         println!("{display} [{source_list}]:\n{value:#}\n");
+        // let unparsed =
+        //     tanzim::parser::toml::unparse(&sources.first().unwrap().source, value).unwrap();
+        // println!("Unparsed: \n\n{unparsed}\n\n");
     }
 
     Ok(())

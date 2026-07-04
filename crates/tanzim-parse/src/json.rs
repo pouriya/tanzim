@@ -26,7 +26,7 @@
 //!     .build()
 //!     .unwrap();
 //! let value = Json::new()
-//!     .parse(&source, br#"{"host":"127.0.0.1"}"#)
+//!     .parse(&source, br#"{"host":"127.0.0.1"}"#, &[])
 //!     .unwrap();
 //! assert_eq!(
 //!     value.value().as_map().unwrap().get("host").unwrap().value().as_string().unwrap(),
@@ -55,7 +55,7 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///     .with_resource("config.json")
 ///     .build()
 ///     .unwrap();
-/// let value = Json::new().parse(&source, br#"{"port":8080}"#).unwrap();
+/// let value = Json::new().parse(&source, br#"{"port":8080}"#, &[]).unwrap();
 /// let port = value.value().as_map().unwrap().get("port").unwrap();
 /// assert_eq!(port.value().as_int().unwrap(), 8080);
 /// ```
@@ -78,7 +78,12 @@ impl Parse for Json {
         vec!["json".into()]
     }
 
-    fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(
+        &self,
+        src: &Source,
+        bytes: &[u8],
+        _other_source_list: &[Source],
+    ) -> Result<LocatedValue, Error> {
         #[cfg(any(feature = "tracing", feature = "logging"))]
         let source = src.source();
         #[cfg(any(feature = "tracing", feature = "logging"))]
@@ -376,7 +381,7 @@ mod tests {
     #[test]
     fn parses_json_object() {
         let parsed = Json::new()
-            .parse(&file_source("config.json"), br#"{"hello":"world"}"#)
+            .parse(&file_source("config.json"), br#"{"hello":"world"}"#, &[])
             .unwrap();
         assert_eq!(
             parsed
@@ -402,7 +407,7 @@ mod tests {
     #[test]
     fn single_line_json_omits_position() {
         let root = Json::new()
-            .parse(&file_source("a.json"), br#"{"a":1}"#)
+            .parse(&file_source("a.json"), br#"{"a":1}"#, &[])
             .unwrap();
         let map = root.value().as_map().unwrap();
         let entry = map.get("a").unwrap();
@@ -413,7 +418,7 @@ mod tests {
     #[test]
     fn parses_null() {
         let root = Json::new()
-            .parse(&file_source("a.json"), b"{\n  \"a\": null\n}")
+            .parse(&file_source("a.json"), b"{\n  \"a\": null\n}", &[])
             .unwrap();
         let map = root.value().as_map().unwrap();
         let entry = map.get("a").unwrap();
@@ -424,7 +429,7 @@ mod tests {
     #[test]
     fn syntax_error_has_location() {
         let error = Json::new()
-            .parse(&file_source("a.json"), b"{\n  \"a\":\n}\n")
+            .parse(&file_source("a.json"), b"{\n  \"a\":\n}\n", &[])
             .unwrap_err();
         if let Error::Parse { ref location, .. } = error {
             let location = location.as_ref().expect("syntax error location");

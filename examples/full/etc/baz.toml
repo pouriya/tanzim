@@ -8,6 +8,8 @@ output_serialize_format = "json" # json, yaml
 [metrics]
 histogram_buckets = [
     0.001, # 0.001s
+    # before second 1
+    # before second 2
     0.01, # 0.01s
     0.1, # 0.1s
     1, # 1s

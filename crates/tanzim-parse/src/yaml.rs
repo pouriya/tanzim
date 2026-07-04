@@ -25,7 +25,7 @@
 //!     .with_resource("config.yaml")
 //!     .build()
 //!     .unwrap();
-//! let value = Yaml::new().parse(&source, b"host: 127.0.0.1\n").unwrap();
+//! let value = Yaml::new().parse(&source, b"host: 127.0.0.1\n", &[]).unwrap();
 //! assert_eq!(
 //!     value.value().as_map().unwrap().get("host").unwrap().value().as_string().unwrap(),
 //!     "127.0.0.1"
@@ -53,7 +53,7 @@ use tanzim_value::{Error, LocatedValue, Location, Map, Value};
 ///     .with_resource("config.yaml")
 ///     .build()
 ///     .unwrap();
-/// let value = Yaml::new().parse(&source, b"port: 8080\n").unwrap();
+/// let value = Yaml::new().parse(&source, b"port: 8080\n", &[]).unwrap();
 /// let port = value.value().as_map().unwrap().get("port").unwrap();
 /// assert_eq!(port.value().as_int().unwrap(), 8080);
 /// ```
@@ -76,7 +76,12 @@ impl Parse for Yaml {
         vec!["yml".into(), "yaml".into()]
     }
 
-    fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(
+        &self,
+        src: &Source,
+        bytes: &[u8],
+        _other_source_list: &[Source],
+    ) -> Result<LocatedValue, Error> {
         #[cfg(any(feature = "tracing", feature = "logging"))]
         let source = src.source();
         #[cfg(any(feature = "tracing", feature = "logging"))]
@@ -450,7 +455,7 @@ mod tests {
     #[test]
     fn parses_yaml_map() {
         let parsed = Yaml::new()
-            .parse(&file_source("config.yaml"), b"hello: world\n")
+            .parse(&file_source("config.yaml"), b"hello: world\n", &[])
             .unwrap();
         assert_eq!(
             parsed
@@ -469,7 +474,7 @@ mod tests {
     #[test]
     fn parses_yaml_map_with_lines() {
         let root = Yaml::new()
-            .parse(&file_source("config.yaml"), b"foo: bar\nbaz: qux\n")
+            .parse(&file_source("config.yaml"), b"foo: bar\nbaz: qux\n", &[])
             .unwrap();
         let map = root.value().as_map().unwrap();
         let foo = map.get("foo").unwrap();
@@ -483,7 +488,7 @@ mod tests {
     fn parses_yaml_null_at_correct_column() {
         let text = "foo: bar\n\nbaz:\n\n  qux: ~\n";
         let root = Yaml::new()
-            .parse(&file_source("config.yaml"), text.as_bytes())
+            .parse(&file_source("config.yaml"), text.as_bytes(), &[])
             .unwrap();
         let map = root.value().as_map().unwrap();
         let baz = map.get("baz").unwrap();
@@ -498,7 +503,7 @@ mod tests {
     #[test]
     fn syntax_error_has_location() {
         let error = Yaml::new()
-            .parse(&file_source("config.yaml"), b"foo: [\n")
+            .parse(&file_source("config.yaml"), b"foo: [\n", &[])
             .unwrap_err();
         if let Error::Parse { location, .. } = &error {
             let location = location.as_ref().expect("syntax error location");

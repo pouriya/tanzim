@@ -19,7 +19,7 @@
 //! let parser = Closure::new(
 //!     "upper",
 //!     "txt",
-//!     Box::new(|source, bytes| {
+//!     Box::new(|source, bytes, _other_source_list| {
 //!         Ok(LocatedValue::new(
 //!             Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
 //!             Location::in_source(source.clone(), None, None, None),
@@ -31,7 +31,7 @@
 //!     .with_resource("test.txt")
 //!     .build()
 //!     .unwrap();
-//! let value = parser.parse(&source, b"hello").unwrap();
+//! let value = parser.parse(&source, b"hello", &[]).unwrap();
 //! assert_eq!(value.value().as_string().unwrap(), "HELLO");
 //! ```
 
@@ -44,7 +44,7 @@ use tanzim_value::{Error, LocatedValue};
 /// Called with the [`Source`] declaration and the raw `&[u8]` bytes. Return a [`LocatedValue`]
 /// tree (ideally with a [`Location`](tanzim_value::Location) on every node), or an [`Error`] on
 /// failure.
-pub type BoxedParseFn = Box<dyn Fn(&Source, &[u8]) -> Result<LocatedValue, Error>>;
+pub type BoxedParseFn = Box<dyn Fn(&Source, &[u8], &[Source]) -> Result<LocatedValue, Error>>;
 
 /// The optional auto-detection probe for a [`Closure`] parser — same contract as
 /// [`Parse::is_format_supported`].
@@ -114,8 +114,13 @@ impl Parse for Closure {
         self.supported_format_list.clone()
     }
 
-    fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
-        (self.parser)(source, bytes)
+    fn parse(
+        &self,
+        source: &Source,
+        bytes: &[u8],
+        other_source_list: &[Source],
+    ) -> Result<LocatedValue, Error> {
+        (self.parser)(source, bytes, other_source_list)
     }
 
     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool> {
@@ -134,7 +139,7 @@ mod tests {
         let parser = Closure::new(
             "upper",
             "txt",
-            Box::new(|source, bytes| {
+            Box::new(|source, bytes, _other_source_list| {
                 Ok(LocatedValue::new(
                     Value::String(String::from_utf8_lossy(bytes).to_uppercase()),
                     Location::in_source(source.clone(), None, None, None),
@@ -147,7 +152,7 @@ mod tests {
             .with_resource("test.txt")
             .build()
             .unwrap();
-        let parsed = parser.parse(&source, b"hello").unwrap();
+        let parsed = parser.parse(&source, b"hello", &[]).unwrap();
         assert_eq!(parsed.value().as_string().unwrap(), "HELLO");
         assert_eq!(parser.is_format_supported(b"x"), Some(true));
         assert_eq!(parser.is_format_supported(b""), Some(false));
@@ -158,7 +163,7 @@ mod tests {
         let parser = Closure::new(
             "yaml",
             "yml",
-            Box::new(|source, bytes| {
+            Box::new(|source, bytes, _other_source_list| {
                 Ok(LocatedValue::new(
                     Value::String(String::from_utf8_lossy(bytes).to_string()),
                     Location::at(source.source(), source.resource(), None, None, None),

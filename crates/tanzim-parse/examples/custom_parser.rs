@@ -40,7 +40,12 @@ impl Parse for KvParser {
         None
     }
 
-    fn parse(&self, src: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+    fn parse(
+        &self,
+        src: &Source,
+        bytes: &[u8],
+        _other_source_list: &[Source],
+    ) -> Result<LocatedValue, Error> {
         let source = src.source();
         let resource = src.resource();
         let text = match std::str::from_utf8(bytes) {
@@ -106,7 +111,7 @@ fn main() {
         .with_resource("db.kv")
         .build()
         .unwrap();
-    let value = match parser.parse(&src, input) {
+    let value = match parser.parse(&src, input, &[]) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("parse error: {e:#}");
@@ -129,7 +134,7 @@ fn main() {
         .with_resource("bad.kv")
         .build()
         .unwrap();
-    if let Err(e) = parser.parse(&bad_src, bad_input) {
+    if let Err(e) = parser.parse(&bad_src, bad_input, &[]) {
         println!();
         println!("parse error (single-line) : {e}");
         println!("parse error (with snippet):\n{e:#}");

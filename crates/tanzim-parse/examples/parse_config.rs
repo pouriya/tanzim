@@ -50,10 +50,10 @@ fn main() {
         }
     };
     let result = match format {
-        "json" => Json::new().parse(&src, &bytes),
-        "yaml" => Yaml::new().parse(&src, &bytes),
-        "toml" => Toml::new().parse(&src, &bytes),
-        "env" => Env::new().parse(&src, &bytes),
+        "json" => Json::new().parse(&src, &bytes, &[]),
+        "yaml" => Yaml::new().parse(&src, &bytes, &[]),
+        "toml" => Toml::new().parse(&src, &bytes, &[]),
+        "env" => Env::new().parse(&src, &bytes, &[]),
         _ => unreachable!(),
     };
     match result {

@@ -44,7 +44,7 @@ fn main() -> Result<(), tanzim_value::Error> {
         .with_resource("config.json")
         .build()
         .unwrap();
-    let value = Json::new().parse(&source, br#"{"port": 8080}"#)?;
+    let value = Json::new().parse(&source, br#"{"port": 8080}"#, &[])?;
     let map = value.value.as_map().unwrap();
     let port = map.get("port").unwrap();
     println!("port={port}  location={}", port.location);

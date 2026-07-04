@@ -71,7 +71,7 @@ pub mod yaml;
 ///     fn is_format_supported(&self, bytes: &[u8]) -> Option<bool> {
 ///         Some(bytes.contains(&b','))
 ///     }
-///     fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error> {
+///     fn parse(&self, source: &Source, bytes: &[u8], _other_source_list: &[Source]) -> Result<LocatedValue, Error> {
 ///         let source_name = source.source();
 ///         let resource = source.resource();
 ///         let text = match std::str::from_utf8(bytes) {
@@ -103,7 +103,7 @@ pub mod yaml;
 ///     .build()
 ///     .unwrap();
 /// let value = CsvParser
-///     .parse(&source, b"host,127.0.0.1\nport,8080\n")
+///     .parse(&source, b"host,127.0.0.1\nport,8080\n", &[])
 ///     .unwrap();
 ///
 /// let map = value.value().as_map().unwrap();
@@ -125,7 +125,14 @@ pub trait Parse {
     ///
     /// `source` carries the source kind (e.g. `"file"`), the resource path or
     /// identifier, and any loader options. Use [`Source::source`], [`Source::resource`],
-    /// and [`Source::options`] to access them. Every node in the returned tree should
-    /// carry a [`tanzim_value::Location`] built from those values.
-    fn parse(&self, source: &Source, bytes: &[u8]) -> Result<LocatedValue, Error>;
+    /// and [`Source::options`] to access them. `other_source_list` is the pipeline's
+    /// full configured source list; parsers may consult sibling sources when options on
+    /// `source` alone are insufficient. Every node in the returned tree should carry a
+    /// [`tanzim_value::Location`] built from those values.
+    fn parse(
+        &self,
+        source: &Source,
+        bytes: &[u8],
+        other_source_list: &[Source],
+    ) -> Result<LocatedValue, Error>;
 }
