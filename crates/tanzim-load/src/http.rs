@@ -131,15 +131,6 @@ impl Load for Http {
             });
         }
 
-        for key in options.keys() {
-            if !matches!(key, "headers" | "timeout" | "insecure" | "lowercase") {
-                return Err(Error::InvalidOption {
-                    loader: NAME.to_string(),
-                    key: key.to_string(),
-                    reason: "unknown option".into(),
-                });
-            }
-        }
         let headers = match options.get("headers") {
             None => HashMap::new(),
             Some(value) => {
@@ -344,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn load_rejects_unknown_option() {
+    fn load_ignores_unknown_option() {
         let loader = Http::new(Box::new(|_, _, _, _| Ok(Vec::new())));
         let source = SourceBuilder::new()
             .with_source("http")
@@ -352,8 +343,8 @@ mod tests {
             .with_option("bogus", true)
             .build()
             .unwrap();
-        let error = loader.load(source).unwrap_err();
-        assert!(matches!(error, Error::InvalidOption { .. }));
+        let loaded = loader.load(source).unwrap();
+        assert!(loaded.is_empty());
     }
 
     #[test]

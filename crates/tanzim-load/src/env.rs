@@ -40,8 +40,6 @@ use std::{collections::HashMap, env};
 pub const NAME: &str = "Environment-Variables";
 pub const SOURCE: &str = "env";
 
-const ALLOWED_OPTIONS: &[&str] = &["prefix", "strip_prefix", "separator", "lowercase"];
-
 /// Loader for the `env` source: reads process environment variables into configuration entries.
 ///
 /// See the [module docs](self) for the grouping behaviour and options. Construct with
@@ -145,16 +143,6 @@ impl Load for Env {
                 resource: resource.to_string(),
                 reason: "resource must be empty".into(),
             });
-        }
-
-        for key in options.keys() {
-            if !ALLOWED_OPTIONS.contains(&key) {
-                return Err(Error::InvalidOption {
-                    loader: NAME.to_string(),
-                    key: key.to_string(),
-                    reason: "unknown option".into(),
-                });
-            }
         }
 
         let maybe_prefix = if let Some(prefix_override) = &self.prefix_override {
@@ -405,13 +393,12 @@ mod tests {
     }
 
     #[test]
-    fn load_rejects_unknown_option() {
+    fn load_ignores_unknown_option() {
         let mut options = Options::new();
         options.insert("bogus", true);
-        let error = Env::new()
+        Env::new()
             .load(make_source_with_options(options))
-            .unwrap_err();
-        assert!(matches!(error, Error::InvalidOption { .. }));
+            .expect("unknown options are ignored");
     }
 
     #[test]

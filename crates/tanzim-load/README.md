@@ -14,9 +14,10 @@ bytes* — parsing happens in a later stage. The contract:
   with `Source::with_resource`) so diagnostics stay precise.
 - `Payload::maybe_name` is the entry name (`None` merges into the root); `Payload::maybe_format`
   is a parser hint (e.g. `json`).
-- Read options off the source with `Source::options()` and the typed `OptionValue` accessors, and
-  pick the [`Error`] variant that matches the failure (`InvalidResource`, `InvalidOption`,
-  `NotFound`, `NoAccess`, `Timeout`, `Duplicate`, `Load`).
+- Read options off the source with `Source::options()` and the typed `OptionValue` accessors.
+  Only validate options your loader reads; ignore unknown keys. Pick the [`Error`] variant that
+  matches the failure (`InvalidResource`, `InvalidOption`, `NotFound`, `NoAccess`, `Timeout`,
+  `Duplicate`, `Load`).
 
 Register a loader with `tanzim::Config::with_loader`; it's dispatched by the source strings its
 `supported_source_list()` returns. For a quick, stateless adapter, use `closure::Closure` instead

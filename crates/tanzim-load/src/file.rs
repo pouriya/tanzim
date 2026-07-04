@@ -168,16 +168,6 @@ impl Load for File {
         let options = source.options().clone();
         let resource = source.resource().to_string();
 
-        for key in options.keys() {
-            if key != "ignore" && key != "lowercase" {
-                return Err(Error::InvalidOption {
-                    loader: NAME.to_string(),
-                    key: key.to_string(),
-                    reason: "unknown option".into(),
-                });
-            }
-        }
-
         let ignore =
             match options.get("ignore") {
                 None => Vec::new(),
@@ -564,15 +554,17 @@ mod tests {
     }
 
     #[test]
-    fn load_rejects_unknown_option() {
+    fn load_ignores_unknown_option() {
+        let tmp = TempDir::new("tanzim-file-unknown-opt").unwrap();
+        fs::write(tmp.path().join("foo.json"), b"{}").unwrap();
         let source = SourceBuilder::new()
             .with_source("file")
-            .with_resource("/tmp")
+            .with_resource(tmp.path().display().to_string())
             .with_option("bogus", true)
             .build()
             .unwrap();
-        let error = File::new().load(source).unwrap_err();
-        assert!(matches!(error, Error::InvalidOption { .. }));
+        let loaded = File::new().load(source).unwrap();
+        assert_eq!(loaded.len(), 1);
     }
 
     #[test]

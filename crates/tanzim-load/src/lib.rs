@@ -75,8 +75,9 @@ pub enum Error {
         timeout_in_seconds: u64,
         source: Box<dyn StdError + Send + Sync>,
     },
-    /// An option is unknown, or has the wrong type or value. `key` is the option name; `reason`
-    /// explains the problem (commonly built from [`OptionValue::type_name`] on a type mismatch).
+    /// A known option has the wrong type or value. `key` is the option name; `reason` explains the
+    /// problem (commonly built from [`OptionValue::type_name`] on a type mismatch). Loaders only
+    /// validate options they read — unknown keys are ignored.
     #[error("{loader} configuration loader invalid option `{key}`: {reason}")]
     InvalidOption {
         loader: String,
@@ -141,14 +142,14 @@ pub enum Error {
 /// Options declared on the source (e.g. `file(ignore=[not-found])`) are available via
 /// [`Source::options`]. Look each up with [`Options::get`], convert with the typed accessors
 /// ([`OptionValue::as_bool`], [`OptionValue::as_string`], [`OptionValue::as_list`], …), and on a
-/// type mismatch build the `reason` from [`OptionValue::type_name`]. It is good practice to reject
-/// unknown keys by iterating [`Options::keys`] and returning [`Error::InvalidOption`] — see the
-/// `file` loader's `load` for a complete worked pattern.
+/// type mismatch build the `reason` from [`OptionValue::type_name`]. Only look up the options your
+/// loader understands; ignore any others. See the `file` loader's `load` for a complete worked
+/// pattern.
 ///
 /// # Choosing an error
 ///
 /// - [`Error::InvalidResource`] — the resource string is empty/malformed for this loader.
-/// - [`Error::InvalidOption`] — an option is unknown, or has the wrong type/value.
+/// - [`Error::InvalidOption`] — a known option has the wrong type or value.
 /// - [`Error::NotFound`] — the resource/entry doesn't exist (and isn't being ignored).
 /// - [`Error::NoAccess`] — permission denied by the backend.
 /// - [`Error::Timeout`] — a deadline was exceeded.
