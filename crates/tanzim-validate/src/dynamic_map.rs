@@ -43,6 +43,8 @@ impl DynamicMap {
     }
 }
 
+crate::impl_meta_methods!(DynamicMap);
+
 impl Validator for DynamicMap {
     fn meta(&self) -> &Meta {
         &self.meta

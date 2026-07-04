@@ -22,6 +22,8 @@ impl Cidr {
     }
 }
 
+crate::impl_meta_methods!(Cidr);
+
 impl Validator for Cidr {
     fn meta(&self) -> &Meta {
         &self.meta

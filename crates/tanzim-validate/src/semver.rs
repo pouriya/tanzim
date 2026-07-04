@@ -22,6 +22,8 @@ impl Semver {
     }
 }
 
+crate::impl_meta_methods!(Semver);
+
 impl Validator for Semver {
     fn meta(&self) -> &Meta {
         &self.meta

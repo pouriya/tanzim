@@ -34,6 +34,8 @@ impl Base64 {
     }
 }
 
+crate::impl_meta_methods!(Base64);
+
 impl Validator for Base64 {
     fn meta(&self) -> &Meta {
         &self.meta
@@ -71,6 +73,8 @@ impl Hex {
         self
     }
 }
+
+crate::impl_meta_methods!(Hex);
 
 impl Validator for Hex {
     fn meta(&self) -> &Meta {

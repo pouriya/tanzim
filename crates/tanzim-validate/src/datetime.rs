@@ -33,6 +33,8 @@ impl DateTime {
     }
 }
 
+crate::impl_meta_methods!(DateTime);
+
 impl Validator for DateTime {
     fn meta(&self) -> &Meta {
         &self.meta
@@ -72,6 +74,8 @@ impl Date {
         self
     }
 }
+
+crate::impl_meta_methods!(Date);
 
 impl Validator for Date {
     fn meta(&self) -> &Meta {

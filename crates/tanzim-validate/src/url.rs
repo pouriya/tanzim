@@ -36,6 +36,8 @@ impl Url {
     }
 }
 
+crate::impl_meta_methods!(Url);
+
 impl Validator for Url {
     fn meta(&self) -> &Meta {
         &self.meta

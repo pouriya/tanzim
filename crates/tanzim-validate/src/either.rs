@@ -33,6 +33,8 @@ impl Either {
     }
 }
 
+crate::impl_meta_methods!(Either);
+
 impl Validator for Either {
     fn meta(&self) -> &Meta {
         &self.meta

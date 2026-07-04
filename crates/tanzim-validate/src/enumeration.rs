@@ -38,6 +38,8 @@ impl Enum {
     }
 }
 
+crate::impl_meta_methods!(Enum);
+
 impl Validator for Enum {
     fn meta(&self) -> &Meta {
         &self.meta

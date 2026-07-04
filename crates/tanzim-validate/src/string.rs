@@ -51,6 +51,8 @@ impl Str {
     }
 }
 
+crate::impl_meta_methods!(Str);
+
 impl Validator for Str {
     fn meta(&self) -> &Meta {
         &self.meta

@@ -99,6 +99,8 @@ fn is_readable(_metadata: &std::fs::Metadata) -> bool {
     true
 }
 
+crate::impl_meta_methods!(Path);
+
 impl Validator for Path {
     fn meta(&self) -> &Meta {
         &self.meta

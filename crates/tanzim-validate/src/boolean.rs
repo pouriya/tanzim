@@ -20,6 +20,8 @@ impl Bool {
     }
 }
 
+crate::impl_meta_methods!(Bool);
+
 impl Validator for Bool {
     fn meta(&self) -> &Meta {
         &self.meta

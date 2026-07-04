@@ -109,7 +109,7 @@ pub use uuid::Uuid;
 
 /// Human-facing metadata a validator carries and attaches to its errors.
 ///
-/// Set through the [`WithMeta`] builder methods (`with_name`, `with_description`, `with_default`,
+/// Set through the builder methods (`with_name`, `with_description`, `with_default`,
 /// `to_int`, …) available on every validator. On a validation failure a validator attaches its own
 /// `Meta` to the [`Error`] (innermost wins), so messages can name the field and offer a description,
 /// examples, and a default. `convert` requests a post-validation output cast (see
@@ -147,7 +147,7 @@ pub trait Validator {
     /// This validator's human-facing metadata.
     fn meta(&self) -> &Meta;
 
-    /// Mutable access to this validator's metadata (backs the [`WithMeta`] builder setters).
+    /// Mutable access to this validator's metadata (backs the builder setters).
     fn meta_mut(&mut self) -> &mut Meta;
 
     /// The validation rule: check (and coerce) `value` in place.
@@ -179,94 +179,109 @@ impl<V: Validator + 'static> From<V> for Box<dyn Validator> {
 
 /// Getters and fluent setters for every validator's [`Meta`].
 ///
-/// Blanket-implemented for every [`Validator`], so `Integer::new().with_name("Port").to_int()`
-/// works without each validator repeating these. Getters read `meta()`; setters mutate `meta_mut()`
-/// and return `self` for chaining.
-#[allow(clippy::wrong_self_convention)]
-pub trait WithMeta: Validator + Sized {
-    /// The human-readable name.
-    fn name(&self) -> &str {
-        &self.meta().name
-    }
+/// Invoked via [`impl_meta_methods!`] on each concrete validator so
+/// `Integer::new().with_name("Port").to_int()` works without importing a trait.
+/// Getters read `meta()`; setters mutate `meta_mut()` and return `self` for chaining.
+#[macro_export]
+macro_rules! impl_meta_methods {
+    ($ty:ty) => {
+        #[allow(clippy::wrong_self_convention)]
+        impl $ty {
+            /// The human-readable name.
+            pub fn name(&self) -> &str {
+                &<$ty as $crate::Validator>::meta(self).name
+            }
 
-    /// The description, if any.
-    fn description(&self) -> Option<&str> {
-        self.meta().description.as_deref()
-    }
+            /// The description, if any.
+            pub fn description(&self) -> Option<&str> {
+                <$ty as $crate::Validator>::meta(self)
+                    .description
+                    .as_deref()
+            }
 
-    /// The example values (each with an optional note).
-    fn examples(&self) -> &[(Value, Option<String>)] {
-        &self.meta().examples
-    }
+            /// The example values (each with an optional note).
+            pub fn examples(&self) -> &[(tanzim_value::Value, Option<String>)] {
+                &<$ty as $crate::Validator>::meta(self).examples
+            }
 
-    /// The default value, if any.
-    fn default_value(&self) -> Option<&Value> {
-        self.meta().default.as_ref()
-    }
+            /// The default value, if any.
+            pub fn default_value(&self) -> Option<&tanzim_value::Value> {
+                <$ty as $crate::Validator>::meta(self).default.as_ref()
+            }
 
-    /// The output conversion target, if any.
-    fn convert(&self) -> Option<ValueType> {
-        self.meta().convert
-    }
+            /// The output conversion target, if any.
+            pub fn convert(&self) -> Option<tanzim_value::ValueType> {
+                <$ty as $crate::Validator>::meta(self).convert
+            }
 
-    /// Set the human-readable name (surfaced in error messages).
-    fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.meta_mut().name = name.into();
-        self
-    }
+            /// Set the human-readable name (surfaced in error messages).
+            pub fn with_name(mut self, name: impl Into<String>) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self).name = name.into();
+                self
+            }
 
-    /// Attach a human-readable description.
-    fn with_description(mut self, text: impl Into<String>) -> Self {
-        self.meta_mut().description = Some(text.into());
-        self
-    }
+            /// Attach a human-readable description.
+            pub fn with_description(mut self, text: impl Into<String>) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self).description = Some(text.into());
+                self
+            }
 
-    /// Add an example value.
-    fn with_example(mut self, value: impl Into<Value>) -> Self {
-        self.meta_mut().examples.push((value.into(), None));
-        self
-    }
+            /// Add an example value.
+            pub fn with_example(mut self, value: impl Into<tanzim_value::Value>) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self)
+                    .examples
+                    .push((value.into(), None));
+                self
+            }
 
-    /// Add an example value with an explanatory note.
-    fn with_example_noted(mut self, value: impl Into<Value>, note: impl Into<String>) -> Self {
-        self.meta_mut()
-            .examples
-            .push((value.into(), Some(note.into())));
-        self
-    }
+            /// Add an example value with an explanatory note.
+            pub fn with_example_noted(
+                mut self,
+                value: impl Into<tanzim_value::Value>,
+                note: impl Into<String>,
+            ) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self)
+                    .examples
+                    .push((value.into(), Some(note.into())));
+                self
+            }
 
-    /// Set the default value used as an on-error fallback (see the pipeline's validate stage).
-    fn with_default(mut self, value: impl Into<Value>) -> Self {
-        self.meta_mut().default = Some(value.into());
-        self
-    }
+            /// Set the default value used as an on-error fallback (see the pipeline's validate stage).
+            pub fn with_default(mut self, value: impl Into<tanzim_value::Value>) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self).default = Some(value.into());
+                self
+            }
 
-    /// After validation succeeds, cast the value to a string.
-    fn to_string(mut self) -> Self {
-        self.meta_mut().convert = Some(ValueType::String);
-        self
-    }
+            /// After validation succeeds, cast the value to a string.
+            pub fn to_string(mut self) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self).convert =
+                    Some(tanzim_value::ValueType::String);
+                self
+            }
 
-    /// After validation succeeds, cast the value to an integer.
-    fn to_int(mut self) -> Self {
-        self.meta_mut().convert = Some(ValueType::Int);
-        self
-    }
+            /// After validation succeeds, cast the value to an integer.
+            pub fn to_int(mut self) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self).convert =
+                    Some(tanzim_value::ValueType::Int);
+                self
+            }
 
-    /// After validation succeeds, cast the value to a float.
-    fn to_float(mut self) -> Self {
-        self.meta_mut().convert = Some(ValueType::Float);
-        self
-    }
+            /// After validation succeeds, cast the value to a float.
+            pub fn to_float(mut self) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self).convert =
+                    Some(tanzim_value::ValueType::Float);
+                self
+            }
 
-    /// After validation succeeds, cast the value to a boolean.
-    fn to_bool(mut self) -> Self {
-        self.meta_mut().convert = Some(ValueType::Bool);
-        self
-    }
+            /// After validation succeeds, cast the value to a boolean.
+            pub fn to_bool(mut self) -> Self {
+                <$ty as $crate::Validator>::meta_mut(&mut self).convert =
+                    Some(tanzim_value::ValueType::Bool);
+                self
+            }
+        }
+    };
 }
-
-impl<T: Validator> WithMeta for T {}
 
 /// Cast a validated [`Value`] to `target`, reusing the same lenient coercions the leaf validators
 /// use. An impossible cast is a [`ErrorKind::NotConvertible`] error.

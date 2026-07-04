@@ -69,6 +69,8 @@ impl Float {
     }
 }
 
+crate::impl_meta_methods!(Float);
+
 impl Validator for Float {
     fn meta(&self) -> &Meta {
         &self.meta

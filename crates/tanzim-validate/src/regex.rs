@@ -20,6 +20,8 @@ impl RegexPattern {
     }
 }
 
+crate::impl_meta_methods!(RegexPattern);
+
 impl Validator for RegexPattern {
     fn meta(&self) -> &Meta {
         &self.meta

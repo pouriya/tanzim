@@ -56,6 +56,8 @@ impl Host {
     }
 }
 
+crate::impl_meta_methods!(Host);
+
 impl Validator for Host {
     fn meta(&self) -> &Meta {
         &self.meta
@@ -100,6 +102,8 @@ impl Domain {
     }
 }
 
+crate::impl_meta_methods!(Domain);
+
 impl Validator for Domain {
     fn meta(&self) -> &Meta {
         &self.meta
@@ -138,6 +142,8 @@ impl Email {
         self
     }
 }
+
+crate::impl_meta_methods!(Email);
 
 impl Validator for Email {
     fn meta(&self) -> &Meta {
@@ -204,6 +210,8 @@ impl Port {
     }
 }
 
+crate::impl_meta_methods!(Port);
+
 impl Validator for Port {
     fn meta(&self) -> &Meta {
         &self.meta
@@ -261,6 +269,8 @@ impl IpAddr {
     }
 }
 
+crate::impl_meta_methods!(IpAddr);
+
 impl Validator for IpAddr {
     fn meta(&self) -> &Meta {
         &self.meta
@@ -313,6 +323,8 @@ impl SocketAddr {
         self
     }
 }
+
+crate::impl_meta_methods!(SocketAddr);
 
 impl Validator for SocketAddr {
     fn meta(&self) -> &Meta {

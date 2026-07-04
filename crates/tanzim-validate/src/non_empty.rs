@@ -20,6 +20,8 @@ impl NonEmpty {
     }
 }
 
+crate::impl_meta_methods!(NonEmpty);
+
 impl Validator for NonEmpty {
     fn meta(&self) -> &Meta {
         &self.meta

@@ -49,6 +49,8 @@ impl List {
     }
 }
 
+crate::impl_meta_methods!(List);
+
 impl Validator for List {
     fn meta(&self) -> &Meta {
         &self.meta

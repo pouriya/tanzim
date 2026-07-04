@@ -22,6 +22,8 @@ impl Uuid {
     }
 }
 
+crate::impl_meta_methods!(Uuid);
+
 impl Validator for Uuid {
     fn meta(&self) -> &Meta {
         &self.meta

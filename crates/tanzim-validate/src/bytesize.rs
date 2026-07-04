@@ -23,6 +23,8 @@ impl ByteSize {
     }
 }
 
+crate::impl_meta_methods!(ByteSize);
+
 impl Validator for ByteSize {
     fn meta(&self) -> &Meta {
         &self.meta

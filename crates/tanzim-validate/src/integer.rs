@@ -81,6 +81,8 @@ impl Integer {
     }
 }
 
+crate::impl_meta_methods!(Integer);
+
 impl Validator for Integer {
     fn meta(&self) -> &Meta {
         &self.meta

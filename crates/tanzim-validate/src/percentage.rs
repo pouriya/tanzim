@@ -20,6 +20,8 @@ impl Percentage {
     }
 }
 
+crate::impl_meta_methods!(Percentage);
+
 impl Validator for Percentage {
     fn meta(&self) -> &Meta {
         &self.meta

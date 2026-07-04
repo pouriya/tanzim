@@ -92,6 +92,8 @@ impl Number {
     }
 }
 
+crate::impl_meta_methods!(Number);
+
 impl Validator for Number {
     fn meta(&self) -> &Meta {
         &self.meta

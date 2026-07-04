@@ -28,6 +28,8 @@ impl Duration {
     }
 }
 
+crate::impl_meta_methods!(Duration);
+
 impl Validator for Duration {
     fn meta(&self) -> &Meta {
         &self.meta

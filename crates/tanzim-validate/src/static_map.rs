@@ -96,6 +96,8 @@ impl StaticMap {
     }
 }
 
+crate::impl_meta_methods!(StaticMap);
+
 impl Validator for StaticMap {
     fn meta(&self) -> &Meta {
         &self.meta
