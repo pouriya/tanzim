@@ -1,9 +1,19 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all build test clippy check-style docs open-docs examples example-full
+.PHONY: all build test clippy check-style docs open-docs examples example-full cli cli-docker
 
 all: build clippy test check-style
+
+cli:
+	cargo build --release --manifest-path tanzim/Cargo.toml
+	mkdir -p bin
+	cp tanzim/target/release/tanzim bin/tanzim
+
+# Optionally set PLATFORM to cross-build (e.g. PLATFORM=linux/arm64). Login and push are
+# intentionally NOT here -- the release workflow does the multi-arch build & push.
+cli-docker:
+	docker build $(if $(PLATFORM),--platform $(PLATFORM),) -t tanzim -f Dockerfile .
 
 build:
 	$(MAKE) -C crates/tanzim-value build

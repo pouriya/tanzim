@@ -1,5 +1,4 @@
 **/target
 /bin
-/Cargo.lock
-/.idea
+.git
 .claude

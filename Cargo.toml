@@ -9,6 +9,7 @@ members = [
     "crates/tanzim",
 ]
 default-members = ["crates/tanzim"]
+exclude = ["tanzim"]
 resolver = "2"
 
 [workspace.package]
