@@ -12,7 +12,7 @@ Configuration pipeline: **load → parse → merge → validate**.
 | `tanzim-parse` | Parsing bytes into `LocatedValue` trees (`Parse` trait) |
 | `tanzim-merge` | Merging parsed values by entry name (`Merge`, `LastWins`, `DeepMerge`, `Merged`) |
 | `tanzim-validate` | Validating/coercing values (`Validator` trait, concrete validators, `schema` feature for building validators from data) |
-| `tanzim` | Facade: `single::PipelineSingle` / `multi::PipelineMulti` that wire the full pipeline |
+| `tanzim` | Facade: `pipeline::single::Single` / `pipeline::multi::Multi` that wire the full pipeline; `opt_in::config::Config` is a config-rs-style opinionated layer over them |
 
 ## Versioning & publishing
 
@@ -27,7 +27,7 @@ Source strings
   → Merge::merge(parsed_list)  → HashMap<name, (Vec<Payload>, LocatedValue)>   (the `Merged` alias)
 ```
 
-`PipelineSingle::run()` and `PipelineMulti::run()` execute all stages. Each stage can also be called individually via `load()`, `parse()`, `merge()` (and `unify()` for single).
+`pipeline::single::Single::run()` and `pipeline::multi::Multi::run()` execute all stages. Each stage can also be called individually via `load()`, `parse()`, `merge()` (and `unify()` for single). Construct either pipeline with `default()` (all feature-enabled loaders + parsers, no merger) or `empty()` (nothing registered) — there is no `new()`, and `with_source`/`add_source` take a `Source`, not a string. `parse()` returns `Vec<Parsed>`, `merge()` returns `Merged` (a map of named `Entry` values); single `run()` returns one unified `Entry`, multi `run()` returns `Merged`. `Parsed`/`Entry`/`Merged` are structs with `payload()`/`payloads()`/`value()` accessors (no public fields). `opt_in` is a namespace for opinionated facades (currently `opt_in::config`); add sibling modules there for future profiles.
 
 ## Key conventions
 

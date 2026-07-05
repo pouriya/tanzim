@@ -2,7 +2,7 @@
 
 use clap::Args;
 use std::process::ExitCode;
-use tanzim::Source;
+use tanzim::source::Source;
 
 /// Settings for the `source` subcommand.
 #[derive(Args)]

@@ -2,11 +2,10 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tanzim::{
-    loader::{env::Env, file::File},
-    merge::DeepMerge,
-    multi::{PipelineMultiBuilder, Schemas},
-    parser::{env::Env as EnvParser, json::Json, toml::Toml, yaml::Yaml},
-    validate::SchemaValue,
+    merger::DeepMerge,
+    pipeline::multi::{Multi, Schemas},
+    source::Source,
+    validator::SchemaValue,
 };
 
 /// A named configuration entry, deserialized from the merged tree. Each source file under `etc/`
@@ -66,29 +65,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut builder = PipelineMultiBuilder::new()
-        .with_loader(Env::new())
-        .with_loader(File::new())
-        .with_parser(EnvParser::new())
-        .with_parser(Json::new())
-        .with_parser(Yaml::new())
-        .with_parser(Toml::new())
-        .with_merger(DeepMerge);
+    // `Multi::default()` pre-registers all feature-enabled loaders and parsers; pick a merger.
+    let mut pipeline = Multi::default().with_merger(DeepMerge);
 
     let schemas = load_schemas()?;
     println!(
         "Loaded {} validation schema(s) from schema.yml",
         schemas.len()
     );
-    builder = builder.with_schemas(schemas);
+    pipeline = pipeline.with_schemas(schemas);
 
     for source_str in &source_args {
-        builder = builder.with_source(source_str.as_str())?;
+        pipeline = pipeline.with_source(Source::parse(source_str)?);
     }
 
     // Run the whole pipeline and deserialize each named entry straight into `Entry`. On failure
     // the error points at the exact source `file:line:column`.
-    let configs: HashMap<Option<String>, Entry> = match builder.build()?.try_deserialize() {
+    let configs: HashMap<Option<String>, Entry> = match pipeline.try_deserialize() {
         Ok(configs) => configs,
         Err(error) => {
             eprintln!("Error: {error:#}");

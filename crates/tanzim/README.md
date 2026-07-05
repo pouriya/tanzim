@@ -22,11 +22,11 @@ the exact file, line, and column.
    merged configuration
 ```
 
-`PipelineMulti::run()` (or `PipelineSingle::run()` for a unified value) executes all stages and
-returns the dynamic `LocatedValue` tree; `try_deserialize::<T>()` runs the pipeline and deserializes
-the result straight into your own type (single: one `T`; multi: a map keyed by entry name). Each
-stage is also callable on its own via `load()`, `parse()`, and `merge()` — useful for inspecting
-intermediate results or building a custom pipeline.
+`pipeline::multi::Multi::run()` (or `pipeline::single::Single::run()` for a unified value) executes
+all stages and returns the merged configuration; `try_deserialize::<T>()` runs the pipeline and
+deserializes the result straight into your own type (single: one `T`; multi: a map keyed by entry
+name). Each stage is also callable on its own via `load()`, `parse()`, and `merge()` — useful for
+inspecting intermediate results or building a custom pipeline.
 
 ## Workspace crates
 
@@ -35,12 +35,12 @@ are independently usable:
 
 | Re-export | Crate | Responsibility |
 |-----------|-------|----------------|
-| `source` | [`tanzim-source`](https://docs.rs/tanzim-source/latest/tanzim_source/) | Parse the `SOURCE[(OPTIONS)][:RESOURCE]` source-string format into a validated [`Source`] |
+| `source` | [`tanzim-source`](https://docs.rs/tanzim-source/latest/tanzim_source/) | Parse the `SOURCE[(OPTIONS)][:RESOURCE]` source-string format into a validated [`source::Source`] |
 | `loader` | [`tanzim-load`](https://docs.rs/tanzim-load/latest/tanzim_load/) | `Load` trait + `env`/`file`/`http`/`closure` loaders → `Payload` |
 | `parser` | [`tanzim-parse`](https://docs.rs/tanzim-parse/latest/tanzim_parse/) | `Parse` trait + `env`/`json`/`yaml`/`toml` parsers → `LocatedValue` |
-| `merge` | [`tanzim-merge`](https://docs.rs/tanzim-merge/latest/tanzim_merge/) | `Merge` trait + `LastWins`/`DeepMerge` strategies → grouped map |
-| `validate` | [`tanzim-validate`](https://docs.rs/tanzim-validate/latest/tanzim_validate/) | `Validator` trait + built-in validators + optional schema machinery |
-| — | [`tanzim-value`](https://docs.rs/tanzim-value/latest/tanzim_value/) | Core `Value`, `LocatedValue`, `Map`, `Location`, `Error` types shared by every stage |
+| `merger` | [`tanzim-merge`](https://docs.rs/tanzim-merge/latest/tanzim_merge/) | `Merge` trait + `LastWins`/`DeepMerge` strategies → grouped map |
+| `validator` | [`tanzim-validate`](https://docs.rs/tanzim-validate/latest/tanzim_validate/) | `Validator` trait + built-in validators + optional schema machinery |
+| `value` | [`tanzim-value`](https://docs.rs/tanzim-value/latest/tanzim_value/) | Core `Value`, `LocatedValue`, `Map`, `Location`, `Error` types shared by every stage |
 
 ## Key concepts
 
@@ -55,8 +55,10 @@ are independently usable:
   aborting the pipeline. E.g. `file(on_error=(load=skip)):.env`.
 - **Located errors** — `Error` renders one line by default; use `{error:#}` for a
   source snippet with a caret underline.
-- **Result aliases** — `parse()` returns `Vec<Parsed>` and `merge()`/`run()` return
-  `Merged` (`HashMap<Option<String>, (Vec<Payload>, LocatedValue)>`).
+- **Result types** — `parse()` returns `Vec<Parsed>` (a struct pairing each `Payload` with its
+  parsed value, read via `payload()` / `value()`); `merge()` and multi `run()` return `Merged`, a
+  map of named `Entry` values (each with `payloads()` + `value()`); single `run()` returns one
+  unified `Entry`. All fields are private — use the accessors.
 - **Typed configuration** — `try_deserialize::<T>()` deserializes the result into any
   `serde::Deserialize` type; errors point at the offending source `file:line:column`.
 
@@ -80,11 +82,12 @@ Use individual workspace crates if you only need one stage — see [`tanzim-load
 
 ## Quick start
 
+Everything you need lives under `pipeline::multi` (or `pipeline::single`), so a single glob import
+is enough. `Multi::default()` pre-registers every feature-enabled loader and parser; pick a merger
+and add sources (as parsed [`source::Source`] values).
+
 ```rust,ignore
-use tanzim::multi::PipelineMultiBuilder;
-use tanzim::loader::{env::Env, file::File};
-use tanzim::parser::{env::Env as EnvParser, json::Json, yaml::Yaml, toml::Toml};
-use tanzim::merge::DeepMerge;
+use tanzim::pipeline::multi::*; // Multi, Source, DeepMerge, ...
 use serde::Deserialize;
 
 // One type per configuration section; each named entry is deserialized into `Entry`
@@ -114,17 +117,10 @@ struct Https {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let configs: std::collections::HashMap<Option<String>, Entry> = PipelineMultiBuilder::new()
-        .with_loader(Env::new())
-        .with_loader(File::new())
-        .with_parser(EnvParser::new())
-        .with_parser(Json::new())
-        .with_parser(Yaml::new())
-        .with_parser(Toml::new())
+    let configs: std::collections::HashMap<Option<String>, Entry> = Multi::default()
         .with_merger(DeepMerge)
-        .with_source("env(prefix=MY_APP_,separator=.)")?
-        .with_source("file:examples/full/etc")?
-        .build()?
+        .with_source(Source::parse("env(prefix=MY_APP_,separator=.)")?)
+        .with_source(Source::parse("file:examples/full/etc")?)
         .try_deserialize()?;
 
     for (name, entry) in &configs {
@@ -133,6 +129,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+```
+
+### Opinionated facade
+
+If you'd rather not wire the pipeline yourself, [`opt_in::config`] offers a
+[`config`](https://docs.rs/config)-style layer with sensible defaults (all loaders + parsers, deep
+merge):
+
+```rust,ignore
+use tanzim::opt_in::config::{Config, Environment, File};
+
+let config = Config::builder()
+    .add_source(File::with_name("config").required(false))
+    .add_source(Environment::with_prefix("APP").separator("."))
+    .build()?;
+
+let port: u16 = config.get("server.port")?;
+let name = config.get_string("server.name")?;
 ```
 
 ## Examples

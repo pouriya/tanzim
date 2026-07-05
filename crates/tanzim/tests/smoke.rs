@@ -1,9 +1,4 @@
-use tanzim::{
-    loader::{env::Env as EnvLoader, file::File as FileLoader},
-    merge::DeepMerge,
-    multi::PipelineMultiBuilder,
-    parser::{env::Env as EnvParser, json::Json, toml::Toml, yaml::Yaml},
-};
+use tanzim::{merger::DeepMerge, pipeline::multi::Multi, source::Source};
 
 #[test]
 fn smoke() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,17 +32,11 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         .join("tests")
         .join("etc");
 
-    let config = PipelineMultiBuilder::new()
-        .with_source("env(prefix=APP_NAME,separator=__)")?
-        .with_source(format!("file:{}", etc.display()))?
-        .with_loader(EnvLoader::new())
-        .with_loader(FileLoader::new())
-        .with_parser(EnvParser::new())
-        .with_parser(Json::new())
-        .with_parser(Yaml::new())
-        .with_parser(Toml::new())
+    // `Multi::default()` pre-registers all feature-enabled loaders and parsers.
+    let config = Multi::default()
         .with_merger(DeepMerge)
-        .build()?;
+        .with_source(Source::parse("env(prefix=APP_NAME,separator=__)")?)
+        .with_source(Source::parse(&format!("file:{}", etc.display()))?);
 
     let merged = config.run()?;
 
@@ -56,23 +45,23 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         "expected 'foo' entry in merged config"
     );
 
-    if let Some((sources, value)) = merged.get(&Some("foo".to_string())) {
-        assert!(!sources.is_empty());
+    if let Some(entry) = merged.get(&Some("foo".to_string())) {
+        assert!(!entry.payloads().is_empty());
         assert!(
-            value.value().as_map().is_some(),
+            entry.value().value().as_map().is_some(),
             "'foo' value should be a map"
         );
     }
 
-    for (name, (sources, value)) in &merged {
+    for (name, entry) in merged.iter() {
         let display = match name {
             None => "(unnamed)",
             Some(n) => n.as_str(),
         };
         println!(
             "{display} (from {} source(s)): {}",
-            sources.len(),
-            value.value()
+            entry.payloads().len(),
+            entry.value().value()
         );
     }
 
