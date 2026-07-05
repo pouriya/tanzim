@@ -1,7 +1,7 @@
 # tanzim-source
 [**Package**](https://crates.io/crates/tanzim-source)   |   [**Documentation**](https://docs.rs/tanzim-source)   |   [**Repository**](https://github.com/pouriya/tanzim/tree/master/crates/tanzim-source)
 
-Declarative configuration source: where to load from, loader options, and resource (address).
+Declarative configuration source: where to load from, loader options, parser options, and resource (address).
 
 ## Format
 
@@ -29,7 +29,7 @@ env
 env(prefix=APP_)
 file:/etc/app/config.json
 file(on_error=(load=skip)):.env
-http(headers=(Authorization="TOKEN"),timeout=3s,on_error=(load=skip,validate=skip)):https://example.com/config.yml
+http(headers=(Authorization="TOKEN"),timeout=3s,on_error=(load=skip)):https://example.com/config.yml
 custom(k=v,list=[1,2,3.14,""],inner-kv=(foo=bar,baz=qux)):oops
 ```
 

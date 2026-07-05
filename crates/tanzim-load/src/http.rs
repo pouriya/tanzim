@@ -4,8 +4,8 @@
 //! any HTTP client library. You supply the actual transport (via [`Http::new`]); the loader
 //! validates options, invokes your closure, and normalizes the returned entries.
 //!
-//! **Source:** `http` (the resource is the URL and is required; an empty resource is rejected
-//! with [`Error::InvalidResource`])
+//! **Source:** `http` (the resource is the URL and is required; an empty or unparseable resource
+//! is rejected with [`Error::InvalidResource`])
 //!
 //! # Behaviour
 //!
@@ -34,6 +34,8 @@ use crate::{Error, Load, Payload, Source};
 use cfg_if::cfg_if;
 use std::{collections::HashMap, time::Duration};
 
+pub use url::Url;
+
 pub const NAME: &str = "HTTP";
 pub const SOURCE: &str = "http";
 
@@ -41,7 +43,7 @@ pub const SOURCE: &str = "http";
 ///
 /// Called once per source with, in order:
 ///
-/// - `&str` — the resolved URL (the source resource).
+/// - [`&Url`](Url) — the parsed resource URL.
 /// - `&HashMap<String, String>` — the validated `headers` option.
 /// - [`Duration`] — the `timeout` option; enforcing it is up to this closure.
 /// - `bool` — the `insecure` option (allow invalid TLS); honoring it is up to this closure.
@@ -53,7 +55,7 @@ pub const SOURCE: &str = "http";
 ///
 /// Must be `Send + Sync + 'static` so the loader can be shared across threads.
 pub type HttpFetchFn = Box<
-    dyn Fn(&str, &HashMap<String, String>, Duration, bool) -> Result<Vec<Payload>, String>
+    dyn Fn(&Url, &HashMap<String, String>, Duration, bool) -> Result<Vec<Payload>, String>
         + Send
         + Sync
         + 'static,
@@ -71,16 +73,16 @@ pub type HttpFetchFn = Box<
 /// ```
 /// use std::collections::HashMap;
 /// use std::time::Duration;
-/// use tanzim_load::{http::Http, Load, Payload};
+/// use tanzim_load::{http::{Http, Url}, Load, Payload};
 /// use tanzim_source::SourceBuilder;
 ///
 /// // A real fetch would call an HTTP client here; this canned closure needs no network.
 /// let http = Http::new(Box::new(
-///     |url: &str, _headers: &HashMap<String, String>, _timeout: Duration, _insecure: bool| {
+///     |url: &Url, _headers: &HashMap<String, String>, _timeout: Duration, _insecure: bool| {
 ///         Ok(vec![Payload {
 ///             source: SourceBuilder::new()
 ///                 .with_source("http")
-///                 .with_resource(url)
+///                 .with_resource(url.as_str())
 ///                 .build()
 ///                 .unwrap(),
 ///             maybe_name: Some("app".into()),
@@ -130,6 +132,11 @@ impl Load for Http {
                 reason: "resource URL is required".into(),
             });
         }
+        let url = url::Url::parse(&resource).map_err(|error| Error::InvalidResource {
+            loader: NAME.to_string(),
+            resource: resource.clone(),
+            reason: error.to_string(),
+        })?;
 
         let headers = match options.get("headers") {
             None => HashMap::new(),
@@ -204,7 +211,7 @@ impl Load for Http {
         }
 
         let fetched =
-            (self.fetch)(&resource, &headers, timeout, insecure).map_err(|error| Error::Load {
+            (self.fetch)(&url, &headers, timeout, insecure).map_err(|error| Error::Load {
                 loader: NAME.to_string(),
                 resource: resource.to_string(),
                 description: "fetch configuration".into(),
@@ -284,7 +291,7 @@ mod tests {
     #[test]
     fn load_delegates_to_fetch_closure() {
         let loader = Http::new(Box::new(|url, headers, timeout, insecure| {
-            assert_eq!(url, "https://example.com/config.json");
+            assert_eq!(url.as_str(), "https://example.com/config.json");
             assert_eq!(
                 headers.get("Authorization").map(String::as_str),
                 Some("TOKEN")
@@ -310,6 +317,18 @@ mod tests {
         let loaded = loader.load(source).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].maybe_name, Some("demo".to_string()));
+    }
+
+    #[test]
+    fn load_rejects_invalid_url() {
+        let loader = Http::new(Box::new(|_, _, _, _| Ok(Vec::new())));
+        let source = SourceBuilder::new()
+            .with_source("http")
+            .with_resource("not a url")
+            .build()
+            .unwrap();
+        let error = loader.load(source).unwrap_err();
+        assert!(matches!(error, Error::InvalidResource { .. }));
     }
 
     #[test]

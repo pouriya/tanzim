@@ -18,12 +18,13 @@ thiserror = "1.0.56"
 cfg-if = "1.0.0"
 log = { version = "0.4.20", optional = true }
 tracing = { version = "0.1.40", optional = true }
+url = { version = "2.5.8", optional = true, default-features = false }
 
 [features]
 default = ["env", "file", "http"]
 env = []
 file = []
-http = []
+http = ["dep:url"]
 logging = ["dep:log"]
 tracing = ["dep:tracing"]
 full = ["env", "file", "http"]
