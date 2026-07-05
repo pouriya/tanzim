@@ -21,47 +21,52 @@ way they do. Each stage's own README covers the details of *how*.
 
 ## Using in Rust
 
-Describe your sources as strings, hand the pipeline a schema, and read back validated, merged configuration:
+Describe your sources as strings and deserialize the merged configuration straight into your own type:
 
 ```rust,no_run
 use tanzim::single::PipelineSingleBuilder;
 use tanzim::merge::DeepMerge;
-use tanzim::validate::{Either, Enum, IpAddr, Path, Port, StaticMap, Url, Value};
 
-// Built here with the validator methods. The very same schema can instead be authored
-// as data — YAML, JSON, TOML, anything serde reads — and deserialized into a `SchemaValue`.
-let schema = StaticMap::new()
-    .required("listen", StaticMap::new()               // { ip, port }
-        .required("ip", IpAddr::new())
-        .required("port", Port::new()))
-    .required("remote", Url::new())                    // a URL
-    .required("log", StaticMap::new()                  // { level: one of these }
-        .required("level", Enum::new([
-            Value::String("trace".into()),
-            Value::String("debug".into()),
-            Value::String("info".into()),
-            Value::String("warn".into()),
-            Value::String("error".into()),
-        ])))
-    .required("output", Either::new(                   // stdout / stderr, …
-        Enum::new([Value::String("stdout".into()), Value::String("stderr".into())]),
-        Path::new().writable(),                        // … or a writable file path
-    ));
+// Your own configuration type — deserialized directly from the merged tree.
+#[derive(serde::Deserialize)]
+struct Config {
+    listen: Listen,
+    remote: String,               // a URL
+    log: Log,
+    output: String,               // "stdout" / "stderr" / a file path
+}
+#[derive(serde::Deserialize)]
+struct Listen {
+    ip: std::net::IpAddr,
+    port: u16,
+}
+#[derive(serde::Deserialize)]
+struct Log {
+    level: Level,
+}
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Level { Trace, Debug, Info, Warn, Error }
 
-// `single` collapses every source into ONE unified configuration validated against a single
-// schema. Prefer `tanzim::multi::PipelineMultiBuilder` when your sources describe SEVERAL named
-// configurations: it keeps them separate, returning a map keyed by entry name, each validated
-// against its own schema (`.with_schema(name, ...)`).
-let config = PipelineSingleBuilder::new()
+// `single` collapses every source into ONE unified configuration. Prefer
+// `tanzim::multi::PipelineMultiBuilder` when your sources describe SEVERAL named configurations:
+// it keeps them separate, and `try_deserialize::<T>()` returns a map keyed by entry name.
+let config: Config = PipelineSingleBuilder::new()
     .with_included_loaders()             // env · file · http
     .with_included_parsers()             // env · yaml · toml · json
     .with_merger(DeepMerge)
-    .with_schema(schema)
     .with_source("env(prefix=APP_)")?
-    .with_source("file:/etc/app.toml")?
-    .with_source("http(insecure=true):https://cfg.tld/path/to/app.yaml")?
+    .with_source("/etc/app.toml")?
+    .with_source("https://cfg.tld/path/to/app.yaml")?
     .build()?
-    .run()?;
+    .try_deserialize()?;
+// A type mismatch yields an ergonomic, located error. Formatted with `{error:#}` it names what was
+// expected and points a caret at the offending value — e.g. if `listen.port` held a string:
+//
+//   failed to deserialize configuration: invalid type: string "eighty", expected u16 at file:/etc/app.toml:2:8
+//     1 | [listen]
+//     2 | port = "eighty"
+//       |        ^^^^^^^^
 ```
 
 Full walkthrough, features, and per-stage recipes → [crates.io](https://crates.io/crates/tanzim) · [docs.rs](https://docs.rs/tanzim).

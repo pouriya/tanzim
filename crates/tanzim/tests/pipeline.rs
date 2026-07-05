@@ -890,3 +890,168 @@ fn single_schema_mut_and_sources_mut() {
         .replace(schema_from_json(r#"{"type": "string"}"#));
     assert!(pipeline.schema().is_some());
 }
+
+#[derive(serde::Deserialize, Debug, PartialEq)]
+struct App {
+    name: String,
+    port: u16,
+}
+
+/// Parses the payload into a map `{ name: <content>, port: 8080 }`.
+fn map_parser() -> ParserClosure {
+    ParserClosure::new(
+        "mock",
+        "txt",
+        Box::new(|source, bytes, _other_source_list| {
+            let location = || Location::at(source.source(), source.resource(), None, None, None);
+            let mut map = tanzim_value::Map::new();
+            map.insert(
+                "name".into(),
+                LocatedValue::new(
+                    Value::String(String::from_utf8_lossy(bytes).to_string()),
+                    location(),
+                ),
+            );
+            map.insert(
+                "port".into(),
+                LocatedValue::new(Value::Int(8080), location()),
+            );
+            Ok(LocatedValue::new(Value::Map(map), location()))
+        }),
+    )
+}
+
+/// Parses the payload into a map whose `port` is a (non-numeric) string, at line 3 column 5.
+fn bad_port_parser() -> ParserClosure {
+    ParserClosure::new(
+        "mock",
+        "txt",
+        Box::new(|source, _bytes, _other_source_list| {
+            let location =
+                || Location::at(source.source(), source.resource(), Some(3), Some(5), None);
+            let mut map = tanzim_value::Map::new();
+            map.insert(
+                "name".into(),
+                LocatedValue::new(Value::String("x".into()), location()),
+            );
+            map.insert(
+                "port".into(),
+                LocatedValue::new(Value::String("not-a-number".into()), location()),
+            );
+            Ok(LocatedValue::new(Value::Map(map), location()))
+        }),
+    )
+}
+
+#[test]
+fn single_try_deserialize_produces_typed_config() {
+    let pipeline = PipelineSingleBuilder::new()
+        .with_source("mock:one")
+        .unwrap()
+        .with_loader(mock_loader(b"hello", Some("app")))
+        .with_parser(map_parser())
+        .with_merger(LastWins)
+        .build()
+        .unwrap();
+    let app: App = pipeline.try_deserialize().unwrap();
+    assert_eq!(
+        app,
+        App {
+            name: "hello".into(),
+            port: 8080
+        }
+    );
+}
+
+#[test]
+fn single_try_deserialize_reports_located_error() {
+    let pipeline = PipelineSingleBuilder::new()
+        .with_source("mock:one")
+        .unwrap()
+        .with_loader(mock_loader(b"hello", Some("app")))
+        .with_parser(bad_port_parser())
+        .with_merger(LastWins)
+        .build()
+        .unwrap();
+    let error = pipeline.try_deserialize::<App>().unwrap_err();
+    assert!(
+        matches!(error, SingleError::Deserialize(_)),
+        "expected a deserialize error, got {error:?}"
+    );
+    let message = error.to_string();
+    assert!(
+        message.contains("mock:one:3:5"),
+        "error should point at the offending node: {message}"
+    );
+}
+
+#[test]
+fn single_try_deserialize_error_renders_caret() {
+    use tanzim::parser::toml::Toml;
+
+    #[derive(serde::Deserialize, Debug)]
+    struct Cfg {
+        #[allow(dead_code)]
+        listen: Listen,
+    }
+    #[derive(serde::Deserialize, Debug)]
+    struct Listen {
+        #[allow(dead_code)]
+        port: u16,
+    }
+
+    let toml = b"[listen]\nport = \"eighty\"\n";
+    let pipeline = PipelineSingleBuilder::new()
+        .with_source("file:app.toml")
+        .unwrap()
+        .with_loader(LoaderClosure::new(
+            "file",
+            move |source| {
+                Ok(vec![Payload {
+                    source: source.clone(),
+                    maybe_name: None,
+                    maybe_format: Some("toml".into()),
+                    content: toml.to_vec(),
+                }])
+            },
+            "file",
+        ))
+        .with_parser(Toml::new())
+        .with_merger(LastWins)
+        .build()
+        .unwrap();
+
+    let error = pipeline.try_deserialize::<Cfg>().unwrap_err();
+    assert!(matches!(error, SingleError::Deserialize(_)));
+
+    // Default: one line, naming the expected type and the source location.
+    let single_line = error.to_string();
+    assert!(single_line.contains("expected u16"), "{single_line}");
+    assert!(single_line.contains("file:app.toml:2:8"), "{single_line}");
+
+    // Alternate `{:#}`: a source snippet with a caret under the offending value.
+    let alternate = format!("{error:#}");
+    assert!(alternate.contains("port = \"eighty\""), "{alternate}");
+    assert!(alternate.contains("^^^^^^^^"), "{alternate}");
+}
+
+#[test]
+fn multi_try_deserialize_returns_map_per_entry() {
+    let pipeline = PipelineMultiBuilder::new()
+        .with_source("mock:one")
+        .unwrap()
+        .with_loader(mock_loader(b"hello", Some("app")))
+        .with_parser(map_parser())
+        .with_merger(LastWins)
+        .build()
+        .unwrap();
+    let deserialized: std::collections::HashMap<Option<String>, App> =
+        pipeline.try_deserialize().unwrap();
+    assert_eq!(
+        deserialized.get(&Some("app".to_string())),
+        Some(&App {
+            name: "hello".into(),
+            port: 8080
+        })
+    );
+}

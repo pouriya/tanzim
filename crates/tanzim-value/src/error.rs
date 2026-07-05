@@ -23,6 +23,58 @@ pub enum Error {
         location: Option<Box<Location>>,
         message: String,
     },
+    /// A value could not be deserialized into the requested type (`serde` Cargo feature).
+    ///
+    /// `text` holds the raw source of the offending value's origin (empty until supplied via
+    /// [`Error::with_source_text`]); when present, `{error:#}` renders a caret underline.
+    #[cfg(feature = "serde")]
+    Deserialize {
+        text: String,
+        message: String,
+        location: Option<Box<Location>>,
+    },
+}
+
+impl Error {
+    /// Stamp `location` onto a [`Error::Deserialize`] that has none yet, so errors bubbling up from
+    /// a leaf get the nearest enclosing node's position. Errors that already carry a location (or
+    /// are not deserialize errors) are returned unchanged.
+    #[cfg(feature = "serde")]
+    pub(crate) fn or_location(mut self, location: &Location) -> Self {
+        if let Self::Deserialize {
+            location: slot @ None,
+            ..
+        } = &mut self
+        {
+            *slot = Some(Box::new(location.clone()));
+        }
+        self
+    }
+
+    /// The [`Location`] of a located [`Error::Deserialize`], if any. Lets a caller (e.g. the
+    /// pipeline) look up the originating source and fill in [`Error::with_source_text`].
+    #[cfg(feature = "serde")]
+    pub fn deserialize_location(&self) -> Option<&Location> {
+        match self {
+            Self::Deserialize {
+                location: Some(location),
+                ..
+            } => Some(location),
+            _ => None,
+        }
+    }
+
+    /// Attach the raw source `text` of the offending value's origin to a [`Error::Deserialize`]
+    /// (only if it has none yet), so `{error:#}` can render a source snippet with a caret.
+    #[cfg(feature = "serde")]
+    pub fn with_source_text(mut self, text: impl Into<String>) -> Self {
+        if let Self::Deserialize { text: slot, .. } = &mut self
+            && slot.is_empty()
+        {
+            *slot = text.into();
+        }
+        self
+    }
 }
 
 fn located_message(location: &Location, message: &str) -> String {
@@ -53,6 +105,23 @@ impl Display for Error {
                 ..
             } => write!(f, "{}", located_message(location, message))?,
             Self::Parse { message, .. } => write!(f, "{message}")?,
+            #[cfg(feature = "serde")]
+            Self::Deserialize {
+                message,
+                location: Some(location),
+                ..
+            } => write!(
+                f,
+                "{}",
+                located_message(
+                    location,
+                    &format!("failed to deserialize configuration: {message}"),
+                )
+            )?,
+            #[cfg(feature = "serde")]
+            Self::Deserialize { message, .. } => {
+                write!(f, "failed to deserialize configuration: {message}")?
+            }
         }
 
         if !f.alternate() {
@@ -66,6 +135,12 @@ impl Display for Error {
                 location: Some(location),
                 ..
             } => (text.as_str(), location),
+            #[cfg(feature = "serde")]
+            Self::Deserialize {
+                text,
+                location: Some(location),
+                ..
+            } if !text.is_empty() => (text.as_str(), location),
             _ => return Ok(()),
         };
 

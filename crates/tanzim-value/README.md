@@ -5,10 +5,10 @@ Foundational value types for the tanzim pipeline.
 
 ## Types
 
-- [`Value`] — `Bool`, `Int`, `Float`, `String`, `List`, `Map` (no null)
+- [`Value`] — `Bool`, `Int`, `Float`, `String`, `List`, `Map`, `Null`
 - [`LocatedValue`] — `Value` + [`Location`] (full originating [`tanzim_source::Source`], optional 1-based line/column)
 - [`Map`] — ordered `Vec`-backed map; last inserted key wins on lookup
-- [`Error`] — parse-time errors; use `{error:#}` for source snippet with caret underline
+- [`Error`] — parse-time and (with the `serde` feature) deserialize errors; use `{error:#}` for a source snippet with caret underline
 
 ## Location
 
@@ -39,9 +39,34 @@ assert!(map.contains_key("port"));
 assert_eq!(map.len(), 2);
 ```
 
+## Deserializing into your own types (`serde` feature)
+
+With the optional `serde` feature, [`Value`] and [`LocatedValue`] implement [`serde::Deserializer`],
+so a config tree turns straight into your own structs. A [`LocatedValue`] runs the same [`Value`]
+deserializer but, on failure, stamps the offending node's [`Location`] onto the error:
+
+```rust,ignore
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Server {
+    host: String,
+    port: u16,
+}
+
+// `tree` is a `LocatedValue` (e.g. produced by a parser).
+let server: Server = tree.try_deserialize()?;
+// On a type mismatch: `Err(Error::Deserialize { .. })` whose `Display` points at
+// `source:resource:line:column`.
+```
+
 ## Features
 
-No optional features. This crate is always included as-is.
+| Feature | Enables |
+|---------|---------|
+| `serde` | [`serde::Deserializer`] for [`Value`]/[`LocatedValue`] + `try_deserialize::<T>()`, and [`serde::de::Error`] for [`Error`] |
+
+Off by default.
 
 ## Relations
 

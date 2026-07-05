@@ -33,6 +33,26 @@ pub mod ext {
 
 mod logging;
 
+/// Fill a located deserialize error's source snippet from the payload it originated in, so
+/// `{error:#}` can render a caret under the offending value. Matches the error's location to a
+/// payload by source name + resource; returns the error unchanged when there is nothing to attach.
+fn attach_source_text(
+    error: tanzim_value::Error,
+    payloads: &[loader::Payload],
+) -> tanzim_value::Error {
+    let Some(location) = error.deserialize_location() else {
+        return error;
+    };
+    let matching = payloads.iter().find(|payload| {
+        payload.source.source() == location.source_name()
+            && payload.source.resource() == location.resource()
+    });
+    match matching {
+        Some(payload) => error.with_source_text(String::from_utf8_lossy(&payload.content)),
+        None => error,
+    }
+}
+
 /// Single-configuration pipeline: load, parse, merge, unify, validate.
 pub mod single {
     #[cfg(feature = "validate-schema")]
@@ -73,6 +93,8 @@ pub mod single {
         Parse(tanzim_value::Error),
         #[error(transparent)]
         Merge(merge::Error),
+        #[error(transparent)]
+        Deserialize(tanzim_value::Error),
         #[error("no loader found for `{at}`")]
         NoLoader { at: String },
         #[error("no parser found for format `{format}` in `{at}`")]
@@ -666,6 +688,16 @@ pub mod single {
             self.validate(&mut value)?;
             Ok((payloads, value))
         }
+
+        /// Run the pipeline and deserialize the unified configuration into `T`. A type mismatch
+        /// yields [`Error::Deserialize`] pointing at the offending value's source location; format
+        /// it with `{error:#}` for a source snippet with a caret underline.
+        pub fn try_deserialize<T: serde::de::DeserializeOwned>(&self) -> Result<T, Error> {
+            let (payloads, value) = self.run()?;
+            value
+                .try_deserialize::<T>()
+                .map_err(|error| Error::Deserialize(crate::attach_source_text(error, &payloads)))
+        }
     }
 }
 
@@ -713,6 +745,8 @@ pub mod multi {
         Parse(tanzim_value::Error),
         #[error(transparent)]
         Merge(merge::Error),
+        #[error(transparent)]
+        Deserialize(tanzim_value::Error),
         #[error("no loader found for `{at}`")]
         NoLoader { at: String },
         #[error("no parser found for format `{format}` in `{at}`")]
@@ -1275,6 +1309,22 @@ pub mod multi {
             let mut merged = self.merge(&parsed)?;
             self.validate(&mut merged)?;
             Ok(merged)
+        }
+
+        /// Run the pipeline and deserialize each named entry's configuration into `T`, keyed by
+        /// entry name (the first failure aborts).
+        pub fn try_deserialize<T: serde::de::DeserializeOwned>(
+            &self,
+        ) -> Result<std::collections::HashMap<Option<String>, T>, Error> {
+            let merged = self.run()?;
+            let mut out = std::collections::HashMap::with_capacity(merged.len());
+            for (name, (payloads, value)) in &merged {
+                let deserialized = value.try_deserialize::<T>().map_err(|error| {
+                    Error::Deserialize(crate::attach_source_text(error, payloads))
+                })?;
+                out.insert(name.clone(), deserialized);
+            }
+            Ok(out)
         }
     }
 }

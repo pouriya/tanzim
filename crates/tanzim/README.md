@@ -22,9 +22,11 @@ the exact file, line, and column.
    merged configuration
 ```
 
-`PipelineMulti::run()` (or `PipelineSingle::run()` for a unified value) executes all stages. Each stage is also callable on its
-own via `load()`, `parse()`, and `merge()` — useful for
-inspecting intermediate results or building a custom pipeline.
+`PipelineMulti::run()` (or `PipelineSingle::run()` for a unified value) executes all stages and
+returns the dynamic `LocatedValue` tree; `try_deserialize::<T>()` runs the pipeline and deserializes
+the result straight into your own type (single: one `T`; multi: a map keyed by entry name). Each
+stage is also callable on its own via `load()`, `parse()`, and `merge()` — useful for inspecting
+intermediate results or building a custom pipeline.
 
 ## Workspace crates
 
@@ -55,6 +57,8 @@ are independently usable:
   source snippet with a caret underline.
 - **Result aliases** — `parse()` returns `Vec<Parsed>` and `merge()`/`run()` return
   `Merged` (`HashMap<Option<String>, (Vec<Payload>, LocatedValue)>`).
+- **Typed configuration** — `try_deserialize::<T>()` deserializes the result into any
+  `serde::Deserialize` type; errors point at the offending source `file:line:column`.
 
 ## Features
 
@@ -81,9 +85,36 @@ use tanzim::multi::PipelineMultiBuilder;
 use tanzim::loader::{env::Env, file::File};
 use tanzim::parser::{env::Env as EnvParser, json::Json, yaml::Yaml, toml::Toml};
 use tanzim::merge::DeepMerge;
+use serde::Deserialize;
+
+// One type per configuration section; each named entry is deserialized into `Entry`
+// (absent sections stay `None`, unknown keys are ignored).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct Entry {
+    sqlite: Option<Sqlite>,
+    logging: Option<Logging>,
+    https: Option<Https>,
+}
+#[derive(Debug, Deserialize)]
+struct Sqlite {
+    file: String,
+    #[serde(default)]
+    recreate: bool,
+}
+#[derive(Debug, Deserialize)]
+struct Logging {
+    level: String,
+}
+#[derive(Debug, Deserialize)]
+struct Https {
+    insecure: bool,
+    #[serde(default)]
+    follow_redirects: bool,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let merged = PipelineMultiBuilder::new()
+    let configs: std::collections::HashMap<Option<String>, Entry> = PipelineMultiBuilder::new()
         .with_loader(Env::new())
         .with_loader(File::new())
         .with_parser(EnvParser::new())
@@ -94,14 +125,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_source("env(prefix=MY_APP_,separator=.)")?
         .with_source("file:examples/full/etc")?
         .build()?
-        .run()?;
+        .try_deserialize()?;
 
-    for (name, (_sources, value)) in &merged {
-        let display = match name {
-            None => "(unnamed)",
-            Some(n) => n.as_str(),
-        };
-        println!("{display}: {value}");
+    for (name, entry) in &configs {
+        let display = name.as_deref().unwrap_or("(unnamed)");
+        println!("{display}: {entry:?}");
     }
     Ok(())
 }

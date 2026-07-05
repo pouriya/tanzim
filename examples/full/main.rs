@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tanzim::{
@@ -7,6 +8,40 @@ use tanzim::{
     parser::{env::Env as EnvParser, json::Json, toml::Toml, yaml::Yaml},
     validate::SchemaValue,
 };
+
+/// A named configuration entry, deserialized from the merged tree. Each source file under `etc/`
+/// contributes a differently-shaped entry, so every section is optional and unknown keys are
+/// ignored; `try_deserialize::<Entry>()` yields one `Entry` per entry name.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct Entry {
+    sqlite: Option<Sqlite>,
+    logging: Option<Logging>,
+    https: Option<Https>,
+}
+
+#[derive(Deserialize)]
+struct Sqlite {
+    file: String,
+    #[serde(default)]
+    recreate: bool,
+}
+
+#[derive(Deserialize)]
+struct Logging {
+    level: String,
+    #[serde(default)]
+    output_serialize_format: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Https {
+    insecure: bool,
+    #[serde(default)]
+    follow_redirects: bool,
+    #[serde(default)]
+    retries: Option<i64>,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (trace, source_args) = parse_args()?;
@@ -51,16 +86,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder = builder.with_source(source_str.as_str())?;
     }
 
-    let merged = match builder.build()?.run() {
-        Ok(merged) => merged,
+    // Run the whole pipeline and deserialize each named entry straight into `Entry`. On failure
+    // the error points at the exact source `file:line:column`.
+    let configs: HashMap<Option<String>, Entry> = match builder.build()?.try_deserialize() {
+        Ok(configs) => configs,
         Err(error) => {
             eprintln!("Error: {error:#}");
             std::process::exit(1);
         }
     };
 
-    println!("Merged configuration ({} entries):", merged.len());
-    let mut keys: Vec<&Option<String>> = merged.keys().collect();
+    println!("Deserialized configuration ({} entries):", configs.len());
+    let mut keys: Vec<&Option<String>> = configs.keys().collect();
     keys.sort_by(|a, b| match (a, b) {
         (None, None) => std::cmp::Ordering::Equal,
         (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -68,27 +105,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (Some(a), Some(b)) => a.cmp(b),
     });
     for key in keys {
-        let (sources, value) = &merged[key];
         let display = match key {
             None => "(unnamed)",
             Some(name) => name.as_str(),
         };
-        let source_list = {
-            let mut s = String::new();
-            let mut first = true;
-            for payload in sources {
-                if !first {
-                    s.push_str(", ");
-                }
-                s.push_str(&payload.source.to_string());
-                first = false;
-            }
-            s
-        };
-        println!("{display} [{source_list}]:\n{value:#}\n");
-        // let unparsed =
-        //     tanzim::parser::toml::unparse(&sources.first().unwrap().source, value).unwrap();
-        // println!("Unparsed: \n\n{unparsed}\n\n");
+        let entry = &configs[key];
+        println!("{display}:");
+        if let Some(sqlite) = &entry.sqlite {
+            println!(
+                "  sqlite: file={} recreate={}",
+                sqlite.file, sqlite.recreate
+            );
+        }
+        if let Some(logging) = &entry.logging {
+            println!(
+                "  logging: level={} output_serialize_format={:?}",
+                logging.level, logging.output_serialize_format
+            );
+        }
+        if let Some(https) = &entry.https {
+            println!(
+                "  https: insecure={} follow_redirects={} retries={:?}",
+                https.insecure, https.follow_redirects, https.retries
+            );
+        }
+        println!();
     }
 
     Ok(())

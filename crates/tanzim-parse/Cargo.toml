@@ -1,6 +1,6 @@
 [package]
 name = "tanzim-parse"
-version = "0.15.0"
+version = "0.16.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -13,8 +13,8 @@ keywords = ["config", "parser", "json", "yaml", "toml"]
 include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
-tanzim-value = { path = "../tanzim-value", version = "0.7.0" }
-tanzim-source = { path = "../tanzim-source", version = "0.5.0" }
+tanzim-value = { path = "../tanzim-value", version = "0.8.0" }
+tanzim-source = { path = "../tanzim-source", version = "0.6.0" }
 toml_edit = { version = "0.22", optional = true }
 spanned_json_parser = { version = "0.2", optional = true }
 saphyr = { version = "0.0.6", optional = true }
