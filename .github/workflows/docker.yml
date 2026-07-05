@@ -3,7 +3,7 @@ name: Publish Docker image
 on:
   push:
     tags:
-      - "v*"
+      - "cli*.*.*"
 
 jobs:
   docker:
@@ -34,7 +34,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
+            type=match,pattern=cli(\d+\.\d+\.\d+),group=1
             type=raw,value=latest
 
       - name: Build and push
