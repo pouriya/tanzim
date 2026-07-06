@@ -63,9 +63,24 @@ fn http_loader() -> Box<dyn Load> {
     // Tanzim loader does not have HTTP client
     // The user must provide a closure that implements the HTTP transport
     Box::new(tanzim_load::http::Http::new(Box::new(
-        |source, url, _headers, duration, insecure| -> Result<Vec<Payload>, String> {
+        |source, url, headers, duration, insecure| -> Result<Vec<Payload>, String> {
             let mut client = attohttpc::get(url);
-            // We could set the headers here, but we don't need to for this example
+            // Add headers to the client
+            for (key, value) in headers {
+                let header_name = match attohttpc::header::HeaderName::try_from(key.as_str()) {
+                    Ok(header_name) => header_name,
+                    Err(e) => {
+                        return Err(format!("invalid HTTP header name {key:?}: {e}"));
+                    }
+                };
+                client = match client.try_header(header_name, value.as_str()) {
+                    Ok(client) => client,
+                    Err(e) => {
+                        return Err(format!("invalid HTTP header value for {key:?}: {e}"));
+                    }
+                };
+            }
+            // Apply timeout and insecure flags
             client = client
                 .timeout(duration)
                 .danger_accept_invalid_certs(insecure);
