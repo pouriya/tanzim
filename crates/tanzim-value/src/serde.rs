@@ -17,7 +17,6 @@ use std::fmt::Display;
 /// Build an unlocated deserialize error; the nearest [`LocatedValue`] fills in the location.
 fn custom(message: impl Display) -> Error {
     Error::Deserialize {
-        text: String::new(),
         message: message.to_string(),
         location: None,
     }

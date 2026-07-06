@@ -16,6 +16,11 @@ pub struct Location {
     pub column: Option<NonZeroU32>,
     /// UTF-8 character span length for error underlines; defaults to one caret.
     pub length: Option<NonZeroU32>,
+    /// Pre-rendered `{error:#}` snippet: the ±3-line source window with gutter line numbers and a
+    /// `^^^` caret line under the offending span, already formatted at construction. Empty for
+    /// synthetic locations (no source text) or when there is no line to point at. Display just
+    /// prints this — it never re-computes it. Build it with [`Location::in_text`].
+    pub snippet: String,
 }
 
 /// Convert a 1-based `usize` position into the compact [`NonZeroU32`] storage.
@@ -27,7 +32,10 @@ fn position(value: usize) -> Option<NonZeroU32> {
 }
 
 impl Location {
-    /// Build a location from the full originating [`Source`].
+    /// Build a location from the full originating [`Source`], with no source snippet.
+    ///
+    /// Use [`Location::in_text`] instead when the source text is on hand, so `{error:#}` can render
+    /// a caret window; this constructor leaves [`snippet`](Self::snippet) empty.
     pub fn in_source(
         source: Source,
         line: Option<usize>,
@@ -39,11 +47,73 @@ impl Location {
             line: line.and_then(position),
             column: column.and_then(position),
             length: length.and_then(position),
+            snippet: String::new(),
+        }
+    }
+
+    /// Build a location from the originating [`Source`] and its raw `text`, pre-rendering the
+    /// `{error:#}` [`snippet`](Self::snippet): the offending line plus three lines of context on
+    /// either side, each with a gutter line number, and a `^` caret line under the `column`/`length`
+    /// span. When `line` is `None` (e.g. single-line input with no position) the snippet is left
+    /// empty. The window is clamped to the file's bounds.
+    pub fn in_text(
+        source: Source,
+        text: &str,
+        line: Option<usize>,
+        column: Option<usize>,
+        length: Option<usize>,
+    ) -> Self {
+        let mut snippet = String::new();
+        if let Some(line_number) = line {
+            let highlight = length.unwrap_or(1).max(1);
+            let lines: Vec<&str> = text.split('\n').collect();
+            let offending = line_number.saturating_sub(1);
+            let start = offending.saturating_sub(3);
+            let end = (offending + 4).min(lines.len());
+            let gutter_width = end.to_string().len();
+            let mut rows: Vec<String> = Vec::new();
+            for (offset, line_text) in lines[start..end].iter().enumerate() {
+                let display_line = start + offset + 1;
+                let number = display_line.to_string();
+                let pad = gutter_width.saturating_sub(number.len());
+                let mut row = String::from("  ");
+                for _ in 0..pad {
+                    row.push(' ');
+                }
+                row.push_str(&number);
+                row.push_str(" | ");
+                row.push_str(line_text);
+                rows.push(row);
+                if display_line == line_number {
+                    let mut caret = String::from("  ");
+                    for _ in 0..pad + number.len() + 1 {
+                        caret.push(' ');
+                    }
+                    caret.push_str("| ");
+                    if let Some(column_number) = column {
+                        for _ in 1..column_number {
+                            caret.push(' ');
+                        }
+                    }
+                    for _ in 0..highlight {
+                        caret.push('^');
+                    }
+                    rows.push(caret);
+                }
+            }
+            snippet = rows.join("\n");
+        }
+        Self {
+            source,
+            line: line.and_then(position),
+            column: column.and_then(position),
+            length: length.and_then(position),
+            snippet,
         }
     }
 
     /// Build a location from a bare source name and resource (a synthetic [`Source`] with no
-    /// options), for origins that do not come from parsing a real source string.
+    /// options), for origins that do not come from parsing a real source string. No snippet.
     pub fn at(
         source_name: &str,
         resource: &str,
@@ -712,6 +782,68 @@ mod tests {
         assert_eq!(location.to_string(), "file:1:2");
         let resourceful = Location::at("file", "cfg.yml", Some(4), None, None);
         assert_eq!(resourceful.to_string(), "file:cfg.yml:4");
+    }
+
+    #[test]
+    fn in_text_renders_gutter_and_caret_window() {
+        let text = "a\nb\nc\ntarget\ne\nf\ng\n";
+        // Offending token on line 4, column 1, three characters wide.
+        let location = Location::in_source(Source::named("file"), None, None, None);
+        let with_snippet =
+            Location::in_text(location.source.clone(), text, Some(4), Some(1), Some(3));
+        let snippet = &with_snippet.snippet;
+        // Three lines of context on each side are included (lines 1..=7).
+        for number in 1..=7 {
+            assert!(
+                snippet.contains(&format!("{number} | ")),
+                "expected gutter for line {number} in:\n{snippet}"
+            );
+        }
+        // The caret line underlines the offending span with `length` carets.
+        assert!(snippet.contains("^^^"), "expected caret in:\n{snippet}");
+        let target_line = snippet
+            .lines()
+            .find(|line| line.contains("target"))
+            .expect("target line");
+        let caret_line = snippet
+            .lines()
+            .find(|line| line.contains('^'))
+            .expect("caret line");
+        assert_eq!(
+            target_line.find('|'),
+            caret_line.find('|'),
+            "gutter pipes should align:\n{snippet}"
+        );
+    }
+
+    #[test]
+    fn in_text_clamps_window_near_bounds() {
+        let text = "only\nline\nhere\n";
+        let location = Location::in_text(Source::named("file"), text, Some(1), Some(1), None);
+        // The window cannot extend before the first line; single caret when no length.
+        assert!(location.snippet.contains("1 | only"));
+        assert!(location.snippet.contains('^'));
+        assert!(!location.snippet.contains("0 | "));
+    }
+
+    #[test]
+    fn in_text_without_line_leaves_snippet_empty() {
+        let location = Location::in_text(Source::named("file"), "a\nb\n", None, None, None);
+        assert!(location.snippet.is_empty());
+    }
+
+    #[test]
+    fn in_source_and_at_leave_snippet_empty() {
+        assert!(
+            Location::in_source(Source::named("file"), Some(2), Some(1), None)
+                .snippet
+                .is_empty()
+        );
+        assert!(
+            Location::at("file", "cfg", Some(2), Some(1), None)
+                .snippet
+                .is_empty()
+        );
     }
 
     #[test]

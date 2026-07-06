@@ -25,10 +25,33 @@ pub trait Merge {
 }
 
 /// Merge error type.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error(transparent)]
-    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+    Other(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // Transparent: forward Display (and its alternate form) to the wrapped error.
+            Self::Other(error) => std::fmt::Display::fmt(&**error, f),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            // Delegate past this transparent wrapper so the cause chain continues.
+            Self::Other(error) => error.source(),
+        }
+    }
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
+    fn from(error: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        Self::Other(error)
+    }
 }
 
 /// Last-write-wins merger: each name keeps only its last-seen value.

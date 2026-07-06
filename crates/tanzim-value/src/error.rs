@@ -14,22 +14,21 @@ pub enum Error {
         location: Box<Location>,
     },
     UnsupportedType {
-        text: String,
         location: Box<Location>,
         found: &'static str,
     },
     Parse {
-        text: String,
         location: Option<Box<Location>>,
         message: String,
     },
     /// A value could not be deserialized into the requested type (`serde` Cargo feature).
     ///
-    /// `text` holds the raw source of the offending value's origin (empty until supplied via
-    /// [`Error::with_source_text`]); when present, `{error:#}` renders a caret underline.
+    /// The offending node's [`Location`] is stamped on by the deserializer (see
+    /// [`Error::or_location`]); because every parsed node's `Location` already carries its
+    /// pre-rendered source [`snippet`](Location::snippet), `{error:#}` renders a caret underline
+    /// without any post-hoc source lookup.
     #[cfg(feature = "serde")]
     Deserialize {
-        text: String,
         message: String,
         location: Option<Box<Location>>,
     },
@@ -37,8 +36,8 @@ pub enum Error {
 
 impl Error {
     /// Stamp `location` onto a [`Error::Deserialize`] that has none yet, so errors bubbling up from
-    /// a leaf get the nearest enclosing node's position. Errors that already carry a location (or
-    /// are not deserialize errors) are returned unchanged.
+    /// a leaf get the nearest enclosing node's position (and its pre-rendered snippet). Errors that
+    /// already carry a location (or are not deserialize errors) are returned unchanged.
     #[cfg(feature = "serde")]
     pub(crate) fn or_location(mut self, location: &Location) -> Self {
         if let Self::Deserialize {
@@ -47,31 +46,6 @@ impl Error {
         } = &mut self
         {
             *slot = Some(Box::new(location.clone()));
-        }
-        self
-    }
-
-    /// The [`Location`] of a located [`Error::Deserialize`], if any. Lets a caller (e.g. the
-    /// pipeline) look up the originating source and fill in [`Error::with_source_text`].
-    #[cfg(feature = "serde")]
-    pub fn deserialize_location(&self) -> Option<&Location> {
-        match self {
-            Self::Deserialize {
-                location: Some(location),
-                ..
-            } => Some(location),
-            _ => None,
-        }
-    }
-
-    /// Attach the raw source `text` of the offending value's origin to a [`Error::Deserialize`]
-    /// (only if it has none yet), so `{error:#}` can render a source snippet with a caret.
-    #[cfg(feature = "serde")]
-    pub fn with_source_text(mut self, text: impl Into<String>) -> Self {
-        if let Self::Deserialize { text: slot, .. } = &mut self
-            && slot.is_empty()
-        {
-            *slot = text.into();
         }
         self
     }
@@ -87,9 +61,7 @@ impl Display for Error {
             Self::InvalidUtf8 { location } => {
                 write!(f, "invalid utf-8 in configuration input from {location}")?;
             }
-            Self::UnsupportedType {
-                location, found, ..
-            } => {
+            Self::UnsupportedType { location, found } => {
                 write!(
                     f,
                     "{}",
@@ -102,14 +74,12 @@ impl Display for Error {
             Self::Parse {
                 location: Some(location),
                 message,
-                ..
             } => write!(f, "{}", located_message(location, message))?,
             Self::Parse { message, .. } => write!(f, "{message}")?,
             #[cfg(feature = "serde")]
             Self::Deserialize {
                 message,
                 location: Some(location),
-                ..
             } => write!(
                 f,
                 "{}",
@@ -124,82 +94,28 @@ impl Display for Error {
             }
         }
 
-        if !f.alternate() {
-            return Ok(());
-        }
-
-        let (text, location) = match self {
-            Self::UnsupportedType { text, location, .. } => (text.as_str(), location),
-            Self::Parse {
-                text,
-                location: Some(location),
-                ..
-            } => (text.as_str(), location),
-            #[cfg(feature = "serde")]
-            Self::Deserialize {
-                text,
-                location: Some(location),
-                ..
-            } if !text.is_empty() => (text.as_str(), location),
-            _ => return Ok(()),
-        };
-
-        let line_number = location.line.map(|line| line.get() as usize);
-        let column = location.column.map(|column| column.get() as usize);
-        let highlight = location
-            .length
-            .map_or(1, |length| length.get() as usize)
-            .max(1);
-
-        if let Some(line_number) = line_number {
-            let lines: Vec<&str> = text.split('\n').collect();
-            let start = if line_number > 1 { line_number - 2 } else { 0 };
-            let end = if line_number + 1 < lines.len() {
-                line_number + 1
-            } else {
-                lines.len()
+        // Alternate form appends the offending value's pre-rendered source snippet (gutter + caret),
+        // computed once at parse time and stored on the `Location` — nothing is recomputed here.
+        if f.alternate() {
+            let location = match self {
+                Self::InvalidUtf8 { location } | Self::UnsupportedType { location, .. } => {
+                    Some(location.as_ref())
+                }
+                Self::Parse {
+                    location: Some(location),
+                    ..
+                } => Some(location.as_ref()),
+                #[cfg(feature = "serde")]
+                Self::Deserialize {
+                    location: Some(location),
+                    ..
+                } => Some(location.as_ref()),
+                _ => None,
             };
-            let gutter_width = end.to_string().len();
-            let mut line_index = start;
-            while line_index < end {
-                let display_line = line_index + 1;
-                let line_text = display_line.to_string();
-                write!(f, "\n  ")?;
-                for _ in 0..gutter_width.saturating_sub(line_text.len()) {
-                    write!(f, " ")?;
-                }
-                write!(f, "{line_text} | ")?;
-                write!(f, "{}", lines[line_index])?;
-                if display_line == line_number {
-                    write!(f, "\n  ")?;
-                    for _ in 0..gutter_width.saturating_sub(line_text.len()) {
-                        write!(f, " ")?;
-                    }
-                    for _ in 0..line_text.len() + 1 {
-                        write!(f, " ")?;
-                    }
-                    write!(f, "| ")?;
-                    if let Some(column_number) = column {
-                        for _ in 1..column_number {
-                            write!(f, " ")?;
-                        }
-                    }
-                    for _ in 0..highlight {
-                        write!(f, "^")?;
-                    }
-                }
-                line_index += 1;
-            }
-        } else {
-            write!(f, "\n  {text}")?;
-            if let Some(column_number) = column {
-                write!(f, "\n  ")?;
-                for _ in 1..column_number {
-                    write!(f, " ")?;
-                }
-                for _ in 0..highlight {
-                    write!(f, "^")?;
-                }
+            if let Some(location) = location
+                && !location.snippet.is_empty()
+            {
+                write!(f, "\n{}", location.snippet)?;
             }
         }
 
@@ -213,11 +129,15 @@ impl std::error::Error for Error {}
 mod tests {
     use super::*;
     use crate::Location;
+    use tanzim_source::Source;
+
+    fn source() -> Source {
+        Source::named("file").with_resource("config.toml")
+    }
 
     #[test]
     fn default_display_is_single_line() {
         let error = Error::UnsupportedType {
-            text: "foo: bar\nbaz: datetime\n".to_string(),
             location: Box::new(Location::at("file", "config.toml", Some(2), Some(7), None)),
             found: "datetime",
         };
@@ -229,15 +149,9 @@ mod tests {
 
     #[test]
     fn alternate_display_underlines_token() {
+        let text = "foo: bar\nbaz: datetime\n";
         let error = Error::UnsupportedType {
-            text: "foo: bar\nbaz: datetime\n".to_string(),
-            location: Box::new(Location::at(
-                "file",
-                "config.toml",
-                Some(2),
-                Some(6),
-                Some(8),
-            )),
+            location: Box::new(Location::in_text(source(), text, Some(2), Some(6), Some(8))),
             found: "datetime",
         };
         let message = format!("{error:#}");
@@ -247,9 +161,9 @@ mod tests {
 
     #[test]
     fn alternate_display_aligns_gutter_pipe() {
+        let text = "foo: bar\n\nbaz:\n\n  qux: datetime\n";
         let error = Error::UnsupportedType {
-            text: "foo: bar\n\nbaz:\n\n  qux: datetime\n".to_string(),
-            location: Box::new(Location::at("file", "config.toml", Some(5), Some(8), None)),
+            location: Box::new(Location::in_text(source(), text, Some(5), Some(8), None)),
             found: "datetime",
         };
         let message = format!("{error:#}");
@@ -264,5 +178,25 @@ mod tests {
         let source_pipe = source_line.find('|').expect("source pipe");
         let underline_pipe = underline_line.find('|').expect("underline pipe");
         assert_eq!(source_pipe, underline_pipe);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn deserialize_error_renders_caret_without_attach_step() {
+        // A Deserialize error stamped with a node Location that already carries a snippet renders a
+        // caret in alternate mode with no post-hoc source attachment.
+        let text = "name: app\nport: nope\n";
+        let location = Location::in_text(source(), text, Some(2), Some(7), Some(4));
+        let error = Error::Deserialize {
+            message: "invalid type: string, expected u16".to_string(),
+            location: None,
+        }
+        .or_location(&location);
+        let plain = error.to_string();
+        assert!(!plain.contains('\n'));
+        assert!(!plain.contains('^'));
+        let alternate = format!("{error:#}");
+        assert!(alternate.contains("port: nope"));
+        assert!(alternate.contains("^^^^"));
     }
 }

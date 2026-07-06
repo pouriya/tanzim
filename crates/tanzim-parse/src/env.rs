@@ -251,7 +251,6 @@ impl Parse for Env {
                         Some(expected) => {
                             if *expected != sep {
                                 return Err(Error::Parse {
-                                    text: String::new(),
                                     location: Some(Box::new(Location::in_source(
                                         source.clone(),
                                         None,
@@ -319,8 +318,9 @@ impl Parse for Env {
                         let location = if single_line {
                             Location::in_source(source.clone(), None, None, None)
                         } else {
-                            Location::in_source(
+                            Location::in_text(
                                 source.clone(),
+                                text,
                                 Some(line_number),
                                 Some(column),
                                 None,

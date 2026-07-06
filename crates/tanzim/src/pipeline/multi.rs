@@ -28,41 +28,85 @@ fn source_display(cs: &Source) -> String {
 }
 
 /// Errors produced by the multi-configuration pipeline.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("no loaders registered")]
     NoLoaders,
-    #[error("no parsers registered")]
     NoParsers,
-    #[error("no merger registered")]
     NoMerger,
-    #[error(transparent)]
     Source(source::ParseError),
-    #[error(transparent)]
     Load(loader::Error),
-    #[error(transparent)]
     Parse(tanzim_value::Error),
-    #[error(transparent)]
     Merge(merger::Error),
-    #[error(transparent)]
     Deserialize(tanzim_value::Error),
-    #[error("no loader found for `{at}`")]
-    NoLoader { at: String },
-    #[error("no parser found for format `{format}` in `{at}`")]
-    NoParser { format: String, at: String },
+    NoLoader {
+        at: String,
+    },
+    NoParser {
+        format: String,
+        at: String,
+    },
 
     #[cfg(feature = "validate-schema")]
-    #[error("schema for `{name:?}` is invalid: {inner}")]
     Schema {
         name: Option<String>,
         inner: validator::SchemaError,
     },
     #[cfg(feature = "validate-schema")]
-    #[error("configuration `{name:?}` failed validation: {inner}")]
     Validate {
         name: Option<String>,
         inner: validator::Error,
     },
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoLoaders => write!(f, "no loaders registered"),
+            Self::NoParsers => write!(f, "no parsers registered"),
+            Self::NoMerger => write!(f, "no merger registered"),
+            // Transparent: forward Display (and its alternate form, so `{error:#}` reaches the
+            // wrapped error's source snippet / caret) to the wrapped error.
+            Self::Source(error) => std::fmt::Display::fmt(error, f),
+            Self::Load(error) => std::fmt::Display::fmt(error, f),
+            Self::Parse(error) => std::fmt::Display::fmt(error, f),
+            Self::Merge(error) => std::fmt::Display::fmt(error, f),
+            Self::Deserialize(error) => std::fmt::Display::fmt(error, f),
+            Self::NoLoader { at } => write!(f, "no loader found for `{at}`"),
+            Self::NoParser { format, at } => {
+                write!(f, "no parser found for format `{format}` in `{at}`")
+            }
+            #[cfg(feature = "validate-schema")]
+            Self::Schema { name, inner } => {
+                write!(f, "schema for `{name:?}` is invalid: ")?;
+                std::fmt::Display::fmt(inner, f)
+            }
+            #[cfg(feature = "validate-schema")]
+            Self::Validate { name, inner } => {
+                write!(f, "configuration `{name:?}` failed validation: ")?;
+                std::fmt::Display::fmt(inner, f)
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Source(error) => Some(error),
+            Self::Load(error) => Some(error),
+            Self::Parse(error) | Self::Deserialize(error) => Some(error),
+            Self::Merge(error) => Some(error),
+            #[cfg(feature = "validate-schema")]
+            Self::Schema { inner, .. } => Some(inner),
+            #[cfg(feature = "validate-schema")]
+            Self::Validate { inner, .. } => Some(inner),
+            Self::NoLoaders
+            | Self::NoParsers
+            | Self::NoMerger
+            | Self::NoLoader { .. }
+            | Self::NoParser { .. } => None,
+        }
+    }
 }
 
 /// Runs the load → parse → merge → validate pipeline for multiple named configuration entries.
@@ -515,10 +559,7 @@ impl Multi {
             let deserialized = match entry.value().try_deserialize::<T>() {
                 Ok(value) => value,
                 Err(error) => {
-                    return Err(Error::Deserialize(crate::attach_source_text(
-                        error,
-                        entry.payloads(),
-                    )));
+                    return Err(Error::Deserialize(error));
                 }
             };
             out.insert(name.clone(), deserialized);

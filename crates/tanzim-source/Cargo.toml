@@ -1,6 +1,6 @@
 [package]
 name = "tanzim-source"
-version = "0.6.0"
+version = "0.7.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -13,7 +13,6 @@ keywords = ["config", "configuration", "source", "settings", "env"]
 include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
-thiserror = "1.0.56"
 serde = { version = "1.0.195", optional = true, features = ["derive"] }
 
 [features]

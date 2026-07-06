@@ -36,25 +36,5 @@ pub mod ext {
 
 mod logging;
 
-/// Fill a located deserialize error's source snippet from the payload it originated in, so
-/// `{error:#}` can render a caret under the offending value. Matches the error's location to a
-/// payload by source name + resource; returns the error unchanged when there is nothing to attach.
-pub(crate) fn attach_source_text(
-    error: tanzim_value::Error,
-    payloads: &[loader::Payload],
-) -> tanzim_value::Error {
-    let Some(location) = error.deserialize_location() else {
-        return error;
-    };
-    let matching = payloads.iter().find(|payload| {
-        payload.source.source() == location.source_name()
-            && payload.source.resource() == location.resource()
-    });
-    match matching {
-        Some(payload) => error.with_source_text(String::from_utf8_lossy(&payload.content)),
-        None => error,
-    }
-}
-
 pub mod opt_in;
 pub mod pipeline;

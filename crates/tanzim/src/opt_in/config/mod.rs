@@ -35,24 +35,49 @@ use crate::source::Source;
 use tanzim_value::{LocatedValue, ValueType};
 
 /// Errors produced by [`Config`].
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum ConfigError {
     /// A pipeline stage failed while building the configuration.
-    #[error(transparent)]
     Pipeline(Box<PipelineError>),
     /// A value could not be deserialized into the requested type.
-    #[error(transparent)]
     Deserialize(tanzim_value::Error),
     /// No value exists at the requested dotted key.
-    #[error("configuration key `{key}` not found")]
     NotFound { key: String },
     /// The value at the requested key is not of the expected primitive type.
-    #[error("configuration key `{key}` is `{actual}`, expected `{expected}`")]
     TypeMismatch {
         key: String,
         expected: ValueType,
         actual: ValueType,
     },
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // Transparent: forward Display (and its alternate form) to the wrapped error.
+            Self::Pipeline(error) => std::fmt::Display::fmt(error, f),
+            Self::Deserialize(error) => std::fmt::Display::fmt(error, f),
+            Self::NotFound { key } => write!(f, "configuration key `{key}` not found"),
+            Self::TypeMismatch {
+                key,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "configuration key `{key}` is `{actual}`, expected `{expected}`"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Pipeline(error) => Some(&**error),
+            Self::Deserialize(error) => Some(error),
+            Self::NotFound { .. } | Self::TypeMismatch { .. } => None,
+        }
+    }
 }
 
 /// Builds a [`Config`] from one or more sources.
@@ -112,10 +137,7 @@ impl Config {
     pub fn try_deserialize<T: serde::de::DeserializeOwned>(&self) -> Result<T, ConfigError> {
         match self.entry.value().try_deserialize::<T>() {
             Ok(value) => Ok(value),
-            Err(error) => Err(ConfigError::Deserialize(crate::attach_source_text(
-                error,
-                self.entry.payloads(),
-            ))),
+            Err(error) => Err(ConfigError::Deserialize(error)),
         }
     }
 
@@ -124,10 +146,7 @@ impl Config {
         let located = self.lookup(key)?;
         match located.try_deserialize::<T>() {
             Ok(value) => Ok(value),
-            Err(error) => Err(ConfigError::Deserialize(crate::attach_source_text(
-                error,
-                self.entry.payloads(),
-            ))),
+            Err(error) => Err(ConfigError::Deserialize(error)),
         }
     }
 

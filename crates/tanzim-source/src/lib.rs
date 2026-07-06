@@ -11,14 +11,37 @@ mod serde;
 use std::fmt::{Debug, Display, Formatter};
 
 /// Error from building or parsing a [`Source`].
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
     /// Builder has no source identifier (missing or empty).
-    #[error("configuration source is required")]
     MissingSource,
     /// Invalid configuration source string.
-    #[error(transparent)]
-    Parse(#[from] ParseError),
+    Parse(ParseError),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingSource => write!(f, "configuration source is required"),
+            // Transparent: forward Display (and its alternate form) to the wrapped error.
+            Self::Parse(error) => Display::fmt(error, f),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Parse(error) => Some(error),
+            Self::MissingSource => None,
+        }
+    }
+}
+
+impl From<ParseError> for Error {
+    fn from(error: ParseError) -> Self {
+        Self::Parse(error)
+    }
 }
 
 /// A pipeline stage whose errors a [`Source`] can choose to tolerate.

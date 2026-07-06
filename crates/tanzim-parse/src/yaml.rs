@@ -107,9 +107,9 @@ impl Parse for Yaml {
             Err(error) => {
                 let marker = error.marker();
                 return Err(Error::Parse {
-                    text: text.to_string(),
-                    location: Some(Box::new(Location::in_source(
+                    location: Some(Box::new(Location::in_text(
                         src.clone(),
+                        text,
                         Some(marker.line()),
                         Some(marker.col() + 1),
                         None,
@@ -345,8 +345,9 @@ fn convert_node(
         } else {
             None
         };
-        Location::in_source(
+        Location::in_text(
             source.clone(),
+            text,
             Some(marker.line()),
             Some(marker.col() + 1),
             length,
@@ -381,7 +382,6 @@ fn convert_node(
                     YamlData::Representation(value, _, _) => value.to_string(),
                     _ => {
                         return Err(Error::Parse {
-                            text: String::new(),
                             location: None,
                             message: "yaml map key must be a string".to_string(),
                         });
@@ -403,7 +403,6 @@ fn convert_node(
             ))
         }
         YamlData::Alias(_) | YamlData::BadValue => Err(Error::Parse {
-            text: text.to_string(),
             location: Some(Box::new(location)),
             message: "unsupported yaml node".to_string(),
         }),

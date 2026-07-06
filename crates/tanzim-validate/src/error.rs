@@ -146,21 +146,6 @@ impl Error {
         self.path.insert(0, Segment::Index(index));
         self.with_location(location)
     }
-
-    fn write_path(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for (position, segment) in self.path.iter().enumerate() {
-            match segment {
-                Segment::Key(key) => {
-                    if position > 0 {
-                        write!(f, ".")?;
-                    }
-                    write!(f, "{key}")?;
-                }
-                Segment::Index(index) => write!(f, "[{index}]")?,
-            }
-        }
-        Ok(())
-    }
 }
 
 impl Display for Error {
@@ -171,24 +156,42 @@ impl Display for Error {
             write!(f, "{}: ", meta.name)?;
         }
         if !self.path.is_empty() {
-            self.write_path(f)?;
+            // Root-first breadcrumb: dotted map keys, `[index]` for list items.
+            for (position, segment) in self.path.iter().enumerate() {
+                match segment {
+                    Segment::Key(key) => {
+                        if position > 0 {
+                            write!(f, ".")?;
+                        }
+                        write!(f, "{key}")?;
+                    }
+                    Segment::Index(index) => write!(f, "[{index}]")?,
+                }
+            }
             write!(f, ": ")?;
         }
         write!(f, "{}", self.kind)?;
         if let Some(location) = &self.location {
             write!(f, " at {location}")?;
         }
-        if f.alternate()
-            && let Some(meta) = &self.meta
-        {
-            if let Some(description) = &meta.description {
-                write!(f, "\n  {description}")?;
-            }
-            for (value, note) in &meta.examples {
-                match note {
-                    Some(note) => write!(f, "\n  example: {value} ({note})")?,
-                    None => write!(f, "\n  example: {value}")?,
+        if f.alternate() {
+            if let Some(meta) = &self.meta {
+                if let Some(description) = &meta.description {
+                    write!(f, "\n  {description}")?;
                 }
+                for (value, note) in &meta.examples {
+                    match note {
+                        Some(note) => write!(f, "\n  example: {value} ({note})")?,
+                        None => write!(f, "\n  example: {value}")?,
+                    }
+                }
+            }
+            // Echo the offending value's pre-rendered source snippet (gutter + caret), computed at
+            // parse time and stored on the `Location`.
+            if let Some(location) = &self.location
+                && !location.snippet.is_empty()
+            {
+                write!(f, "\n{}", location.snippet)?;
             }
         }
         Ok(())
@@ -218,5 +221,32 @@ mod tests {
         assert!(message.starts_with("servers[0].port: expected integer, found string"));
         // innermost (leaf) location wins
         assert!(message.contains("config.yaml:3:9"));
+    }
+
+    #[test]
+    fn alternate_display_shows_caret_snippet() {
+        let text = "name: app\nport: nope\n";
+        let location = tanzim_value::Location::in_text(
+            tanzim_source::Source::named("file").with_resource("config.yaml"),
+            text,
+            Some(2),
+            Some(7),
+            Some(4),
+        );
+        let error = Error::new(ErrorKind::Type {
+            expected: ValueType::Int,
+            found: ValueType::String,
+        })
+        .with_location(&location);
+
+        // Default display stays a single located line, no caret.
+        let plain = error.to_string();
+        assert!(!plain.contains('\n'));
+        assert!(!plain.contains('^'));
+
+        // Alternate display echoes the pre-rendered source window with a caret.
+        let alternate = format!("{error:#}");
+        assert!(alternate.contains("port: nope"), "{alternate}");
+        assert!(alternate.contains("^^^^"), "{alternate}");
     }
 }

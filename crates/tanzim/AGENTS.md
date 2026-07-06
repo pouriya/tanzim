@@ -35,5 +35,8 @@ Facade crate that wires the full load → parse → merge pipeline behind two mo
 
 ## Error notes
 
-- Field names in `Error` variants must not be `source` (thiserror reserves that for the error chain).
+- Errors are hand-written (no `thiserror`): each enum implements `Display`, `std::error::Error`
+  (with `source()` returning the wrapped inner for transparent variants), and any needed `From`.
+  Transparent variants forward the formatter with `std::fmt::Display::fmt(inner, f)` so `{error:#}`
+  reaches the wrapped error's alternate form (source snippet / caret).
 - `NoLoader` and `NoParser` include the source string without options via `source_display()`.

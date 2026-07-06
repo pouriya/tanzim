@@ -111,8 +111,9 @@ impl Parse for Toml {
                     Some(span) => {
                         let (line, column) = line_column(text, span.start);
                         let length = char_count(text, span.start, span.end).max(1);
-                        Some(Box::new(Location::in_source(
+                        Some(Box::new(Location::in_text(
                             src.clone(),
+                            text,
                             Some(line),
                             Some(column),
                             Some(length),
@@ -121,7 +122,6 @@ impl Parse for Toml {
                     None => None,
                 };
                 return Err(Error::Parse {
-                    text: text.to_string(),
                     location,
                     message: error.message().to_string(),
                 });
@@ -410,7 +410,6 @@ fn convert_table(
             }
             Item::None => {
                 return Err(Error::Parse {
-                    text: text.to_string(),
                     location: Some(Box::new(location_from_span(
                         source,
                         text,
@@ -551,7 +550,6 @@ fn convert_toml_value(
             Ok(LocatedValue::new(Value::Map(map), location))
         }
         TomlValue::Datetime(_) => Err(Error::UnsupportedType {
-            text: text.to_string(),
             location: Box::new(location),
             found: "datetime",
         }),
@@ -581,8 +579,9 @@ fn location_from_span(
     }
     let offset = span_start(span, fallback_offset);
     let (line, column) = line_column(text, offset);
-    Location::in_source(
+    Location::in_text(
         source.clone(),
+        text,
         Some(line),
         Some(column),
         if length > 0 { Some(length) } else { None },
