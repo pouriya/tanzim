@@ -1,3 +1,6 @@
+// Example of how to parse a source using the tanzim-source crate.
+// Use this example to test the source parsing capabilities of the tanzim-source crate.
+
 use tanzim_source::Source;
 
 fn main() {
@@ -6,47 +9,44 @@ fn main() {
         eprintln!("Usage: parse_sources <SOURCE> [<SOURCE> ...]");
         eprintln!();
         eprintln!("Examples:");
-        eprintln!("  parse_sources env");
-        eprintln!("  parse_sources 'env(prefix=APP_)'");
-        eprintln!("  parse_sources 'file:/etc/app/config.json'");
-        eprintln!("  parse_sources 'file(on_error=(load=skip)):.env'");
+        eprintln!("\tparse_sources env");
+        eprintln!("\tparse_sources 'env(prefix=APP_)'");
+        eprintln!("\tparse_sources 'file:/etc/app/config.json'");
+        eprintln!("\tparse_sources 'file(on_error=(load=skip)):.env'");
         eprintln!(
-            "  parse_sources 'http(headers=(Authorization=\"TOKEN\"),timeout=3s,on_error=(load=skip)):https://example.com/config.yml'"
+            "\tparse_sources 'http(headers=(Authorization=\"TOKEN\"),timeout=3s,on_error=(load=skip)):https://example.com/config.yml'"
         );
         std::process::exit(1);
     }
 
     let mut failed = false;
 
-    for (index, input) in inputs.iter().enumerate() {
-        if index > 0 {
-            println!();
-        }
-        println!("{input}");
-        match Source::parse(input) {
+    for input in inputs {
+        println!("Input: {input}");
+        match Source::parse(&input) {
             Ok(source) => {
-                println!("  source: {}", source.source());
+                println!("\tsource: {}", source.source());
                 for stage in [
                     tanzim_source::Stage::Load,
                     tanzim_source::Stage::Parse,
                     tanzim_source::Stage::Validate,
                 ] {
-                    println!("  on_error[{stage}]: {:?}", source.on_error(stage));
+                    println!("\t\ton_error[{stage}]: {:?}", source.on_error(stage));
                 }
                 if source.resource().is_empty() {
-                    println!("  resource: (none)");
+                    println!("\tresource: (none)");
                 } else {
-                    println!("  resource: {}", source.resource());
+                    println!("\tresource: {}", source.resource());
                 }
                 if source.options().is_empty() {
-                    println!("  options: (none)");
+                    println!("\toptions: (none)");
                 } else {
-                    println!("  options: {}", source.options());
+                    println!("\toptions: {}", source.options());
                 }
             }
             Err(error) => {
                 failed = true;
-                eprintln!("error:{error:#}");
+                eprintln!("Could not parse source: {error:#}");
             }
         }
     }

@@ -1,109 +1,121 @@
-//! Basic CLI loader example.
-//!
-//! Accepts a source kind and optional resource as command-line arguments and loads
-//! using the built-in loaders enabled by crate features.
-//!
-//! Run with (requires `env` and/or `file` features):
-//!   cargo run -p tanzim-load --example load_config --features env -- env
-//!   cargo run -p tanzim-load --example load_config --features file -- file /etc/myapp
-//!   cargo run -p tanzim-load --example load_config --features env,file -- env '' file /etc/myapp
+//! Example of how to load configuration from a source using the tanzim-load crate.
 
-use tanzim_load::{Load, Source};
-use tanzim_source::SourceBuilder;
+use tanzim_load::{Load, Payload, Source};
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.is_empty() {
-        eprintln!("Usage: load_config <SOURCE> [<RESOURCE>] [<SOURCE> [<RESOURCE>]] ...");
+    let mut source_list = Vec::new();
+    for arg in std::env::args().skip(1) {
+        match Source::parse(&arg) {
+            Ok(source) => source_list.push(source),
+            Err(e) => {
+                eprintln!("invalid source {arg}: {e:#}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if source_list.is_empty() {
+        eprintln!("Usage: load_config <SOURCE> | [<SOURCE>] ...");
         eprintln!("Examples:");
-        eprintln!("  load_config env");
-        eprintln!("  load_config file /etc/myapp");
+        eprintln!("\tload_config env");
+        eprintln!("\tload_config file:/etc/myapp");
         std::process::exit(1);
     }
 
-    // Build the list of available loaders depending on enabled features.
-    let mut loaders: Vec<Box<dyn Load>> = Vec::new();
-    #[cfg(feature = "env")]
-    loaders.extend([Box::new(tanzim_load::env::Env::new()) as Box<dyn Load>]);
-    #[cfg(feature = "file")]
-    loaders.extend([Box::new(tanzim_load::file::File::new()) as Box<dyn Load>]);
-
-    if loaders.is_empty() {
-        eprintln!("No loaders compiled in. Build with --features env,file");
-        std::process::exit(1);
-    }
-
-    // Walk args in (source [resource]) pairs.
-    let mut index = 0;
-    while index < args.len() {
-        let source_kind = &args[index];
-        index += 1;
-        let resource = if index < args.len()
-            && !args[index].starts_with(|c: char| c.is_alphabetic() && args[index].len() < 10)
-        {
-            let r = args[index].clone();
-            index += 1;
-            r
-        } else {
-            String::new()
-        };
-
-        let mut found: Option<&dyn Load> = None;
-        for loader in &loaders {
-            let supported = loader.supported_source_list();
-            let mut matches = false;
-            for s in &supported {
-                if s.as_str() == source_kind.as_str() {
-                    matches = true;
-                    break;
+    let loader_list: Vec<Box<dyn Load>> = vec![
+        Box::new(tanzim_load::env::Env::new()),
+        Box::new(tanzim_load::file::File::new()),
+        http_loader(),
+    ];
+    for source in source_list {
+        let mut loaded = false;
+        for loader in &loader_list {
+            let source_name = source.source().to_string();
+            if loader.supported_source_list().contains(&source_name) {
+                let loader_name = loader.name();
+                let payload_list = match loader.load(source.clone()) {
+                    Ok(payload_list) => payload_list,
+                    Err(e) => {
+                        eprintln!("{e:#}");
+                        std::process::exit(1);
+                    }
+                };
+                println!("loaded {source} with {loader_name}");
+                for (i, payload) in payload_list.iter().enumerate() {
+                    println!(
+                        "\t[{i}] source_resource={:?} name={:?} format={:?} bytes={}",
+                        payload.source.resource(),
+                        payload.maybe_name.as_ref().unwrap_or(&"<none>".into()),
+                        payload.maybe_format.as_ref().unwrap_or(&"<none>".into()),
+                        payload.content.len()
+                    );
                 }
-            }
-            if matches {
-                found = Some(loader.as_ref());
-                break;
+                loaded = true;
             }
         }
-
-        let loader = match found {
-            Some(l) => l,
-            None => {
-                eprintln!("no loader for {source_kind:?} (check enabled features)");
-                continue;
-            }
-        };
-
-        let source: Source = match SourceBuilder::new()
-            .with_source(source_kind.as_str())
-            .with_resource(resource.as_str())
-            .build()
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("invalid source {source_kind:?}: {e}");
-                std::process::exit(1);
-            }
-        };
-
-        let payloads = match loader.load(source) {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("source {source_kind:?} resource {resource:?}: load error: {e}");
-                std::process::exit(1);
-            }
-        };
-
-        println!(
-            "source={source_kind:?} resource={resource:?}: {} payload(s)",
-            payloads.len()
-        );
-        for (i, payload) in payloads.iter().enumerate() {
-            println!(
-                "  [{i}] source_resource={:?} name={:?} format={:?} bytes={}",
-                payload.source.resource(),
-                payload.maybe_name,
-                payload.maybe_format,
-                payload.content.len()
-            );
+        if !loaded {
+            eprintln!("no loader for {source}");
+            std::process::exit(1);
         }
     }
+}
+
+fn http_loader() -> Box<dyn Load> {
+    // Tanzim loader does not have HTTP client
+    // The user must provide a closure that implements the HTTP transport
+    Box::new(tanzim_load::http::Http::new(Box::new(
+        |source, url, _headers, duration, insecure| -> Result<Vec<Payload>, String> {
+            let mut client = attohttpc::get(url);
+            // We could set the headers here, but we don't need to for this example
+            client = client
+                .timeout(duration)
+                .danger_accept_invalid_certs(insecure);
+
+            // Send the request
+            let response = match client.send() {
+                Ok(response) if response.status().is_success() => response,
+                Ok(response) => {
+                    return Err(format!("HTTP {}", response.status()));
+                }
+                Err(error) => {
+                    return Err(format!("HTTP request failed: {error}"));
+                }
+            };
+
+            // Extract the name from the last path segment of the URL
+            let maybe_name = url.path().split('/').next_back().map(|s| s.to_string());
+
+            // Extract the format from the content-type header (e.g. "application/json; charset=utf-8" -> "json")
+            let maybe_format = if let Some(content_type) = response.headers().get("content-type") {
+                if let Some((format, _)) = content_type.to_str().unwrap_or_default().split_once(';')
+                {
+                    if let Some((format, _)) = format.split_once('/') {
+                        Some(format.trim().to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Read the response body
+            let content = match response.bytes() {
+                Ok(content) => content,
+                Err(e) => {
+                    return Err(format!("HTTP response body read failed: {e}"));
+                }
+            };
+
+            let payload = Payload {
+                source,
+                maybe_name,
+                maybe_format,
+                content,
+            };
+
+            Ok(vec![payload])
+        },
+    )))
 }

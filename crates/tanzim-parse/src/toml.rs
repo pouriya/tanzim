@@ -467,20 +467,30 @@ fn convert_toml_value(
                     if let Some(raw_prefix) = value.decor().prefix()
                         && let Some(prefix_str) = raw_decor_text(raw_prefix, text)
                     {
+                        let mut prefix_comment_lines: Vec<(String, String)> = Vec::new();
                         for line in prefix_str.lines() {
-                            let trimmed = line.trim();
-                            if trimmed.is_empty() {
+                            if line.trim().is_empty() {
                                 continue;
                             }
-                            if previous_after.is_none()
-                                && before.is_empty()
-                                && index > 0
-                                && line.starts_with(" #")
-                                && let Some(body) = hash_comment_body(line)
+                            if let Some(body) = hash_comment_body(line) {
+                                prefix_comment_lines.push((line.to_string(), body));
+                            }
+                        }
+                        if prefix_comment_lines.len() == 1 && index > 0 {
+                            previous_after = Some(prefix_comment_lines.pop().unwrap().1);
+                        } else {
+                            for (line_idx, (line, body)) in prefix_comment_lines.iter().enumerate()
                             {
-                                previous_after = Some(body);
-                            } else if let Some(body) = hash_comment_body(line) {
-                                before.push(body);
+                                if line_idx == 0
+                                    && index > 0
+                                    && before.is_empty()
+                                    && previous_after.is_none()
+                                    && line.starts_with(" #")
+                                {
+                                    previous_after = Some(body.clone());
+                                } else {
+                                    before.push(body.clone());
+                                }
                             }
                         }
                     }

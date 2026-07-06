@@ -14,7 +14,6 @@ include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
 tanzim-source = { path = "../tanzim-source", version = "0.6.0" }
-thiserror = "1.0.56"
 cfg-if = "1.0.0"
 log = { version = "0.4.20", optional = true }
 tracing = { version = "0.1.40", optional = true }
@@ -31,10 +30,12 @@ full = ["env", "file", "http"]
 
 [dev-dependencies]
 tempdir = "0.3.7"
+attohttpc = {version = "0.31.0", default-features = false, features = ["tls-native"]}
 
 [[example]]
 name = "load_config"
 path = "examples/load_config.rs"
+required-features = ["full"]
 
 [package.metadata.docs.rs]
 all-features = true

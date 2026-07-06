@@ -33,13 +33,9 @@ tracing = ["dep:tracing"]
 full = ["env", "json", "yaml", "toml"]
 
 [[example]]
-name = "parse_config"
-path = "examples/parse_config.rs"
+name = "parse_config_file"
+path = "examples/parse_config_file.rs"
 required-features = ["full"]
-
-[[example]]
-name = "custom_parser"
-path = "examples/custom_parser.rs"
 
 [package.metadata.docs.rs]
 all-features = true

@@ -46,11 +46,15 @@ pub struct Payload {
 ///
 /// Each variant carries a `loader` field (set to your [`Load::name`]) so messages identify the
 /// source. See [`Load`]'s "Choosing an error" section for guidance on which to pick.
-#[derive(Debug, thiserror::Error)]
+///
+/// [`Display`](std::fmt::Display) is one line by default. Use the alternate form (`{error:#}`) to
+/// append the underlying cause chain — every wrapped `source` (and its sources, recursively) is
+/// tacked on as `: <cause>`, so backend failures surface their real reason instead of just the
+/// loader's summary.
+#[derive(Debug)]
 pub enum Error {
     /// The requested resource or entry does not exist and was not configured to be ignored.
     /// `item` names what was missing (e.g. `` `file "app.json"` ``).
-    #[error("{loader} configuration loader could not find {item} at `{resource}`")]
     NotFound {
         loader: String,
         resource: String,
@@ -58,7 +62,6 @@ pub enum Error {
     },
     /// Access was denied (e.g. filesystem permissions, HTTP 401/403). `source` carries the
     /// underlying backend error.
-    #[error("{loader} configuration loader has no access to `{resource}`")]
     NoAccess {
         loader: String,
         resource: String,
@@ -66,9 +69,6 @@ pub enum Error {
     },
     /// The operation exceeded its deadline. `timeout_in_seconds` is the limit that was hit;
     /// `source` carries the underlying backend error.
-    #[error(
-        "{loader} configuration loader reached timeout `{timeout_in_seconds}s` for `{resource}`"
-    )]
     Timeout {
         loader: String,
         resource: String,
@@ -78,7 +78,6 @@ pub enum Error {
     /// A known option has the wrong type or value. `key` is the option name; `reason` explains the
     /// problem (commonly built from [`OptionValue::type_name`] on a type mismatch). Loaders only
     /// validate options they read — unknown keys are ignored.
-    #[error("{loader} configuration loader invalid option `{key}`: {reason}")]
     InvalidOption {
         loader: String,
         key: String,
@@ -86,7 +85,6 @@ pub enum Error {
     },
     /// The resource string is empty or malformed for this loader (e.g. a required path is
     /// missing). `reason` explains what was expected.
-    #[error("{loader} configuration loader invalid resource `{resource}`: {reason}")]
     InvalidResource {
         loader: String,
         resource: String,
@@ -94,9 +92,6 @@ pub enum Error {
     },
     /// Two entries resolve to the same `name` with differing formats (`format_1` vs `format_2`),
     /// so the loader cannot pick one unambiguously.
-    #[error(
-        "{loader} configuration loader found duplicate configurations `{resource}/{name}.({format_1}|{format_2})`"
-    )]
     Duplicate {
         loader: String,
         resource: String,
@@ -107,7 +102,6 @@ pub enum Error {
     /// Catch-all backend failure that doesn't fit the variants above. `description` completes the
     /// phrase "could not {description}" (e.g. `"read contents of file"`); `source` carries the
     /// underlying error.
-    #[error("{loader} configuration loader could not {description} `{resource}`")]
     Load {
         loader: String,
         resource: String,
@@ -115,8 +109,105 @@ pub enum Error {
         source: Box<dyn StdError + Send + Sync>,
     },
     /// Bridge for opaque errors via `?`/`From`, when none of the structured variants apply.
-    #[error(transparent)]
-    Other(#[from] Box<dyn StdError + Send + Sync>),
+    Other(Box<dyn StdError + Send + Sync>),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::NotFound {
+                loader,
+                resource,
+                item,
+            } => write!(
+                f,
+                "{loader} configuration loader could not find {item} at `{resource}`"
+            )?,
+            Error::NoAccess {
+                loader, resource, ..
+            } => write!(
+                f,
+                "{loader} configuration loader has no access to `{resource}`"
+            )?,
+            Error::Timeout {
+                loader,
+                resource,
+                timeout_in_seconds,
+                ..
+            } => write!(
+                f,
+                "{loader} configuration loader reached timeout `{timeout_in_seconds}s` for `{resource}`"
+            )?,
+            Error::InvalidOption {
+                loader,
+                key,
+                reason,
+            } => write!(
+                f,
+                "{loader} configuration loader invalid option `{key}`: {reason}"
+            )?,
+            Error::InvalidResource {
+                loader,
+                resource,
+                reason,
+            } => write!(
+                f,
+                "{loader} configuration loader invalid resource `{resource}`: {reason}"
+            )?,
+            Error::Duplicate {
+                loader,
+                resource,
+                name,
+                format_1,
+                format_2,
+            } => write!(
+                f,
+                "{loader} configuration loader found duplicate configurations `{resource}/{name}.({format_1}|{format_2})`"
+            )?,
+            Error::Load {
+                loader,
+                resource,
+                description,
+                ..
+            } => write!(
+                f,
+                "{loader} configuration loader could not {description} `{resource}`"
+            )?,
+            // Transparent: forward to the wrapped error's own message.
+            Error::Other(source) => write!(f, "{source}")?,
+        }
+        // Alternate form appends the full underlying cause chain.
+        if f.alternate() {
+            let mut cause = StdError::source(self);
+            while let Some(error) = cause {
+                write!(f, ": {error}")?;
+                cause = error.source();
+            }
+        }
+        Ok(())
+    }
+}
+
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            Error::NoAccess { source, .. }
+            | Error::Timeout { source, .. }
+            | Error::Load { source, .. } => Some(&**source),
+            // Transparent: delegate to the wrapped error so the chain continues past it.
+            Error::Other(source) => source.source(),
+            Error::NotFound { .. }
+            | Error::InvalidOption { .. }
+            | Error::InvalidResource { .. }
+            | Error::Duplicate { .. } => None,
+        }
+    }
+}
+
+impl From<Box<dyn StdError + Send + Sync>> for Error {
+    fn from(source: Box<dyn StdError + Send + Sync>) -> Self {
+        Error::Other(source)
+    }
 }
 
 /// Loads raw configuration bytes from a declared source.
