@@ -16,7 +16,7 @@ Configuration pipeline: **load → parse → merge → validate**.
 
 ## Versioning & publishing
 
-All crates are `0.x`, where a minor bump is **breaking** in Cargo semver, and internal deps pin `version = "X.Y.Z"` as a real crates.io requirement. So bumping a crate forces bumping every crate that depends on it (transitively) and updating their `version` specs to match — otherwise CI's publish build pulls two versions of the crate and fails with "multiple different versions of crate" type mismatches (local path-dep builds hide this). E.g. editing `tanzim-value` means also bumping `tanzim-parse`, `tanzim-merge`, `tanzim-validate`, and `tanzim`.
+All crates are `0.x` (minor bump = breaking). Internal `tanzim-*` deps must use exact `version = "X.Y.Z"` — no ranges. Bumping a crate requires bumping every dependent transitively. Run `make version-check` after any bump to verify.
 
 ## Pipeline
 

@@ -1,7 +1,7 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all build test clippy check-style docs open-docs examples example-full cli cli-docker
+.PHONY: all build test clippy check-style version-check docs open-docs examples example-full cli cli-docker
 
 all: build clippy test check-style
 
@@ -39,14 +39,34 @@ clippy:
 check-style:
 	cargo fmt --check --verbose
 
+version-check:
+	./crates/versioning.sh --check
+
 docs:
 	cargo doc --workspace --all-features
 
 open-docs:
 	cargo doc --workspace --all-features --open
 
-examples: example-full
+# Build every workspace example in release mode and copy each resulting binary
+# into bin/ under a sanitised snake-case name (hyphens become underscores; the
+# words "example" and "tanzim" are stripped out). This covers the root
+# examples/<name>/main.rs as well as every crates/*/examples/*.rs.
+examples:
+	mkdir -p bin
+	cargo build $(TARGET_OPTION) --release --workspace --all-features --examples
+	@for src in examples/*/ crates/*/examples/*.rs; do \
+		[ -e "$$src" ] || continue; \
+		if [ -d "$$src" ]; then name=$$(basename $$src); \
+		else name=$$(basename $$src .rs); fi; \
+		out=$$(echo $$name | tr 'A-Z-' 'a-z_' \
+			| sed -e 's/example//g' -e 's/tanzim//g' \
+			      -e 's/__*/_/g' -e 's/^_//' -e 's/_$$//'); \
+		echo ">>> $$name -> bin/$$out"; \
+		cp target/release/examples/$$name bin/$$out; \
+	done
 
+# Demo run of the "full" example against sample sources under examples/full/etc.
 example-full:
 	env \
 	'APP_NAME.FOO.SERVER.ADDRESS=127.0.0.1' \
