@@ -24,43 +24,35 @@ way they do. Each stage's own README covers the details of *how*.
 Describe your sources as strings and deserialize the merged configuration straight into your own type:
 
 ```rust,no_run
-use tanzim::single::PipelineSingleBuilder;
-use tanzim::merge::DeepMerge;
+use tanzim::pipeline::single::{Single, DeepMerge};
 
 // Your own configuration type — deserialized directly from the merged tree.
 #[derive(serde::Deserialize)]
 struct Config {
     listen: Listen,
-    remote: String,               // a URL
-    log: Log,
-    output: String,               // "stdout" / "stderr" / a file path
+    remote: String,
+    log_level: Log,
+    output: String,
 }
+
 #[derive(serde::Deserialize)]
 struct Listen {
     ip: std::net::IpAddr,
     port: u16,
 }
-#[derive(serde::Deserialize)]
-struct Log {
-    level: Level,
-}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Level { Trace, Debug, Info, Warn, Error }
 
-// `single` collapses every source into ONE unified configuration. Prefer
-// `tanzim::multi::PipelineMultiBuilder` when your sources describe SEVERAL named configurations:
-// it keeps them separate, and `try_deserialize::<T>()` returns a map keyed by entry name.
-let config: Config = PipelineSingleBuilder::new()
-    .with_included_loaders()             // env · file · http
-    .with_included_parsers()             // env · yaml · toml · json
-    .with_merger(DeepMerge)
+// `Single` collapses every source into ONE unified configuration. Prefer
+// Use `tanzim::pipeline::multi::Multi` when your sources describe SEVERAL named configurations.
+let config: Config = Single::default()   // env · file loaders + env · yaml · toml · json parsers
+    .with_merger(DeepMerge::new())?      // optional — defaults to `LastWins` when unset
     .with_source("env(prefix=APP_)")?
     .with_source("/etc/app.toml")?
-    .with_source("https://cfg.tld/path/to/app.yaml")?
-    .build()?
     .try_deserialize()?;
-// A type mismatch yields an ergonomic, located error. Formatted with `{error:#}` it names what was
+// Any failure yields an ergonomic, located error. Formatted with `{error:#}` it names what was
 // expected and points a caret at the offending value — e.g. if `listen.port` held a string:
 //
 //   failed to deserialize configuration: invalid type: string "eighty", expected u16 at file:/etc/app.toml:2:8

@@ -21,7 +21,17 @@ value.
 | Type | Behaviour |
 |------|-----------|
 | `LastWins` | Last value for each name fully replaces any previous value |
-| `DeepMerge` | Maps are merged recursively; the overlay value wins at each non-map leaf |
+| `DeepMerge` | Maps are merged recursively; lists follow a configurable `ArrayStrategy` (default `Replace`; also `Concat`, `Prepend`, `Union`, `Index`, `Keyed`); the overlay value wins at each other leaf |
+
+Build a `DeepMerge` with `DeepMerge::new()` and pick a list strategy via
+`.with_array_strategy(ArrayStrategy::Concat)`.
+
+## Composing strategies: the `plan` module
+
+`plan::MergePlan` is a merge tree: a source leaf (`plan::src`) or a merge of children under a
+strategy (`plan::deep`, `plan::last_wins`, `plan::merge_with`). `plan::evaluate` folds it against
+source-grouped payloads, letting callers express arbitrary folds such as
+`last_wins(vec![deep(vec![a, b]), c])`.
 
 ## Example
 

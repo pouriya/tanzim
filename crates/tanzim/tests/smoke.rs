@@ -1,4 +1,4 @@
-use tanzim::{merger::DeepMerge, pipeline::multi::Multi, source::Source};
+use tanzim::{merger::DeepMerge, pipeline::multi::Multi};
 
 #[test]
 fn smoke() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,9 +34,9 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
 
     // `Multi::default()` pre-registers all feature-enabled loaders and parsers.
     let config = Multi::default()
-        .with_merger(DeepMerge)
-        .with_source(Source::parse("env(prefix=APP_NAME,separator=__)")?)
-        .with_source(Source::parse(&format!("file:{}", etc.display()))?);
+        .with_merger(DeepMerge::new())?
+        .with_source("env(prefix=APP_NAME,separator=__)")?
+        .with_source(format!("file:{}", etc.display()))?;
 
     let merged = config.run()?;
 

@@ -3,11 +3,12 @@
 //! [`Single`] collapses every source into one unified configuration value. Everything needed to
 //! build a pipeline is re-exported here, so `use tanzim::pipeline::single::*;` is enough on its own.
 
-use super::{Entry, Merged, Parsed};
+use super::{Entry, Merged, Parsed, Plan};
 use crate::source;
 use cfg_if::cfg_if;
 use tanzim_source::{OnError, Stage};
 
+pub use crate::merger::plan::{self, MergePlan, deep, last_wins, merge_with, src};
 pub use crate::merger::{self, DeepMerge, LastWins, Merge};
 pub use crate::source::Source;
 #[cfg(feature = "validate-schema")]
@@ -28,8 +29,9 @@ fn source_display(cs: &Source) -> String {
 pub enum Error {
     NoLoaders,
     NoParsers,
-    NoMerger,
     Source(source::ParseError),
+    /// The simple source builders were mixed with an explicit [`with_merge_plan`](Single::with_merge_plan).
+    PlanConflict,
     Load(loader::Error),
     Parse(tanzim_value::Error),
     Merge(merger::Error),
@@ -57,7 +59,11 @@ impl std::fmt::Display for Error {
         match self {
             Self::NoLoaders => write!(f, "no loaders registered"),
             Self::NoParsers => write!(f, "no parsers registered"),
-            Self::NoMerger => write!(f, "no merger registered"),
+            Self::PlanConflict => write!(
+                f,
+                "cannot mix the simple source builders with an explicit merge plan: use \
+                 `add_source`/`with_merger`, or build the plan yourself with `with_merge_plan`"
+            ),
             // Transparent: forward Display (and its alternate form, so `{error:#}` reaches the
             // wrapped error's source snippet / caret) to the wrapped error.
             Self::Source(error) => std::fmt::Display::fmt(error, f),
@@ -96,31 +102,43 @@ impl std::error::Error for Error {
             Self::Validate { inner } => Some(inner),
             Self::NoLoaders
             | Self::NoParsers
-            | Self::NoMerger
+            | Self::PlanConflict
             | Self::NoLoader { .. }
             | Self::NoParser { .. } => None,
         }
     }
 }
 
+impl From<source::ParseError> for Error {
+    fn from(error: source::ParseError) -> Self {
+        Error::Source(error)
+    }
+}
+
+impl From<std::convert::Infallible> for Error {
+    fn from(error: std::convert::Infallible) -> Self {
+        match error {}
+    }
+}
+
 /// Runs the load → parse → merge → unify → validate pipeline for a single configuration value.
 ///
-/// Construct with [`Single::default`] (all feature-enabled loaders + parsers, no merger) or
-/// [`Single::empty`] (nothing registered). There is no `new()`. Add a merger with
-/// [`with_merger`](Self::with_merger) and sources with [`with_source`](Self::with_source) /
-/// [`add_source`](Self::add_source), then call [`run`](Self::run) or
+/// Construct with [`Single::default`] (all feature-enabled loaders + parsers) or [`Single::empty`]
+/// (nothing registered). There is no `new()`. Add sources with [`with_source`](Self::with_source) /
+/// [`add_source`](Self::add_source) (or [`with_source_merged`](Self::with_source_merged) to bind a
+/// per-source merger), optionally set a global merger with [`with_merger`](Self::with_merger)
+/// (defaults to [`LastWins`] when unset), then call [`run`](Self::run) or
 /// [`try_deserialize`](Self::try_deserialize).
 pub struct Single {
-    sources: Vec<Source>,
+    plan: Plan,
     loaders: Vec<Box<dyn loader::Load>>,
     parsers: Vec<Box<dyn parser::Parse>>,
-    merger: Option<Box<dyn merger::Merge>>,
     #[cfg(feature = "validate-schema")]
     schema: Option<validator::Value>,
 }
 
 impl Default for Single {
-    /// All feature-enabled loaders and parsers, but no merger and no sources.
+    /// All feature-enabled loaders and parsers, but no sources.
     fn default() -> Self {
         Self::empty()
             .with_included_loaders()
@@ -132,21 +150,17 @@ impl Single {
     /// An empty pipeline: no loaders, parsers, merger, or sources.
     pub fn empty() -> Self {
         Self {
-            sources: Vec::new(),
+            plan: Plan::simple(),
             loaders: Vec::new(),
             parsers: Vec::new(),
-            merger: None,
             #[cfg(feature = "validate-schema")]
             schema: None,
         }
     }
 
-    pub fn sources(&self) -> &[Source] {
-        &self.sources
-    }
-
-    pub fn sources_mut(&mut self) -> &mut Vec<Source> {
-        &mut self.sources
+    /// The configured configuration sources, in declared order.
+    pub fn sources(&self) -> impl Iterator<Item = &Source> {
+        self.plan.leaves().into_iter()
     }
 
     pub fn loaders(&self) -> &[Box<dyn loader::Load>] {
@@ -165,12 +179,11 @@ impl Single {
         &mut self.parsers
     }
 
+    /// The global merger chosen via [`with_merger`](Self::with_merger), if any. `None` when merging
+    /// falls back to [`LastWins`], or when an explicit [`with_merge_plan`](Self::with_merge_plan)
+    /// tree is in effect (which has no single global merger).
     pub fn merger(&self) -> Option<&dyn merger::Merge> {
-        self.merger.as_deref()
-    }
-
-    pub fn merger_mut(&mut self) -> &mut Option<Box<dyn merger::Merge>> {
-        &mut self.merger
+        self.plan.configured_merger()
     }
 
     #[cfg(feature = "validate-schema")]
@@ -183,16 +196,67 @@ impl Single {
         &mut self.schema
     }
 
-    /// Append a configuration source (in-place).
-    pub fn add_source(&mut self, source: Source) -> &mut Self {
-        self.sources.push(source);
-        self
+    /// Append a configuration source (in-place). `source` may be a [`Source`] or any string form
+    /// (e.g. `"file:app.toml"`), parsed now — an invalid source yields [`Error::Source`]. Errors
+    /// with [`Error::PlanConflict`] if an explicit [`with_merge_plan`](Self::with_merge_plan) is set.
+    pub fn add_source<S>(&mut self, source: S) -> Result<&mut Self, Error>
+    where
+        S: TryInto<Source>,
+        Error: From<S::Error>,
+    {
+        let source = source.try_into()?;
+        if self.plan.is_explicit() {
+            return Err(Error::PlanConflict);
+        }
+        self.plan.push_child(MergePlan::Source(source));
+        Ok(self)
     }
 
-    /// Append a configuration source (builder-style).
-    pub fn with_source(mut self, source: Source) -> Self {
-        self.sources.push(source);
-        self
+    /// Append a configuration source (builder-style). See [`add_source`](Self::add_source).
+    pub fn with_source<S>(mut self, source: S) -> Result<Self, Error>
+    where
+        S: TryInto<Source>,
+        Error: From<S::Error>,
+    {
+        self.add_source(source)?;
+        Ok(self)
+    }
+
+    /// Append a source bound to its own `merger`, applied to that source's payloads before the
+    /// global merger folds everything (in-place).
+    pub fn add_source_merged<S>(
+        &mut self,
+        source: S,
+        merger: impl merger::Merge + 'static,
+    ) -> Result<&mut Self, Error>
+    where
+        S: TryInto<Source>,
+        Error: From<S::Error>,
+    {
+        let source = source.try_into()?;
+        if self.plan.is_explicit() {
+            return Err(Error::PlanConflict);
+        }
+        self.plan.push_child(MergePlan::Merge {
+            merger: Box::new(merger),
+            children: vec![MergePlan::Source(source)],
+        });
+        Ok(self)
+    }
+
+    /// Append a source bound to its own `merger` (builder-style).
+    /// See [`add_source_merged`](Self::add_source_merged).
+    pub fn with_source_merged<S>(
+        mut self,
+        source: S,
+        merger: impl merger::Merge + 'static,
+    ) -> Result<Self, Error>
+    where
+        S: TryInto<Source>,
+        Error: From<S::Error>,
+    {
+        self.add_source_merged(source, merger)?;
+        Ok(self)
     }
 
     pub fn with_loader(mut self, loader: impl loader::Load + 'static) -> Self {
@@ -205,9 +269,42 @@ impl Single {
         self
     }
 
-    pub fn with_merger(mut self, merger: impl merger::Merge + 'static) -> Self {
-        self.merger = Some(Box::new(merger));
-        self
+    /// Set the global merger that folds all sources together (builder-style). Defaults to
+    /// [`LastWins`] when never set. Errors with [`Error::PlanConflict`] if an explicit
+    /// [`with_merge_plan`](Self::with_merge_plan) is set.
+    pub fn with_merger(mut self, merger: impl merger::Merge + 'static) -> Result<Self, Error> {
+        self.add_merger(merger)?;
+        Ok(self)
+    }
+
+    /// Set the global merger (in-place). See [`with_merger`](Self::with_merger).
+    pub fn add_merger(&mut self, merger: impl merger::Merge + 'static) -> Result<&mut Self, Error> {
+        if self.plan.is_explicit() {
+            return Err(Error::PlanConflict);
+        }
+        self.plan.set_merger(Box::new(merger));
+        Ok(self)
+    }
+
+    /// Supply an explicit [`MergePlan`] merge tree instead of the simple per-source builders. Use
+    /// the [`plan`] constructors ([`src`], [`deep`], [`last_wins`], [`merge_with`]) to build
+    /// arbitrary folds such as `last_wins(vec![deep(vec![a, b]), c])` (builder-style).
+    ///
+    /// Errors with [`Error::PlanConflict`] if any source or merger was already configured through
+    /// the simple builders — the two styles are mutually exclusive.
+    pub fn with_merge_plan(mut self, plan: MergePlan) -> Result<Self, Error> {
+        self.add_merge_plan(plan)?;
+        Ok(self)
+    }
+
+    /// Supply an explicit [`MergePlan`] merge tree (in-place). See
+    /// [`with_merge_plan`](Self::with_merge_plan).
+    pub fn add_merge_plan(&mut self, plan: MergePlan) -> Result<&mut Self, Error> {
+        if !self.plan.is_pristine() {
+            return Err(Error::PlanConflict);
+        }
+        self.plan.set_explicit(plan);
+        Ok(self)
     }
 
     #[allow(unused_mut)]
@@ -272,7 +369,7 @@ impl Single {
             return Err(Error::NoLoaders);
         }
         let mut result = Vec::new();
-        for config_source in &self.sources {
+        for config_source in self.plan.leaves() {
             let source_name = config_source.source();
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
@@ -346,6 +443,7 @@ impl Single {
         if self.parsers.is_empty() {
             return Err(Error::NoParsers);
         }
+        let all_sources: Vec<Source> = self.plan.leaves().into_iter().cloned().collect();
         let mut result = Vec::new();
         for payload in loaded {
             let config_source = &payload.source;
@@ -402,7 +500,7 @@ impl Single {
                     log::trace!("msg=\"Found parser for configuration payload\" parser={} source={}", parser.name(), payload.source);
                 }
             }
-            let value = match parser.parse(&payload.source, &payload.content, &self.sources) {
+            let value = match parser.parse(&payload.source, &payload.content, &all_sources) {
                 Ok(v) => v,
                 Err(e) => {
                     if config_source.on_error(Stage::Parse) == OnError::Skip {
@@ -430,11 +528,13 @@ impl Single {
         Ok(result)
     }
 
+    /// Merge the parsed payloads into named groups.
+    ///
+    /// Evaluates the configured [`MergePlan`]: the simple builders fold every source (in declared
+    /// order) with the global merger, defaulting to [`LastWins`], each per-source merger pre-merging
+    /// its own payloads first; an explicit [`with_merge_plan`](Self::with_merge_plan) evaluates that
+    /// tree directly.
     pub fn merge(&self, parsed: &[Parsed]) -> Result<Merged, Error> {
-        let merger = match &self.merger {
-            Some(merger) => merger,
-            None => return Err(Error::NoMerger),
-        };
         cfg_if! {
             if #[cfg(feature = "tracing")] {
                 tracing::debug!(msg = "Starting configuration merge stage", entry_count = parsed.len());
@@ -442,12 +542,8 @@ impl Single {
                 log::debug!("msg=\"Starting configuration merge stage\" entry_count={}", parsed.len());
             }
         }
-        let mut tuples: Vec<(loader::Payload, parser::LocatedValue)> =
-            Vec::with_capacity(parsed.len());
-        for item in parsed {
-            tuples.push((item.payload().clone(), item.value().clone()));
-        }
-        match merger.merge(&tuples) {
+        let groups = super::group_by_source(&self.plan.leaves(), parsed);
+        match merger::plan::evaluate(self.plan.tree(), &groups) {
             Ok(raw) => {
                 let merged = Merged::from_raw(raw);
                 cfg_if! {
@@ -481,10 +577,8 @@ impl Single {
     /// keeps only the last group's value. Groups are ordered named-alphabetical then unnamed,
     /// so the unnamed bucket wins when present.
     pub fn unify(&self, merged: &Merged) -> Result<Entry, Error> {
-        let merger = match &self.merger {
-            Some(merger) => merger,
-            None => return Err(Error::NoMerger),
-        };
+        let fallback = LastWins;
+        let merger: &dyn merger::Merge = self.plan.configured_merger().unwrap_or(&fallback);
         let mut named_keys: Vec<String> = Vec::new();
         for name in merged.keys().flatten() {
             named_keys.push(name.clone());
@@ -579,9 +673,9 @@ impl Single {
     pub fn run(&self) -> Result<Entry, Error> {
         cfg_if! {
             if #[cfg(feature = "tracing")] {
-                tracing::debug!(msg = "Running single configuration pipeline", source_count = self.sources.len(), loader_count = self.loaders.len(), parser_count = self.parsers.len());
+                tracing::debug!(msg = "Running single configuration pipeline", source_count = self.plan.leaves().len(), loader_count = self.loaders.len(), parser_count = self.parsers.len());
             } else if #[cfg(feature = "logging")] {
-                log::debug!("msg=\"Running single configuration pipeline\" source_count={} loader_count={} parser_count={}", self.sources.len(), self.loaders.len(), self.parsers.len());
+                log::debug!("msg=\"Running single configuration pipeline\" source_count={} loader_count={} parser_count={}", self.plan.leaves().len(), self.loaders.len(), self.parsers.len());
             }
         }
         let loaded = self.load()?;

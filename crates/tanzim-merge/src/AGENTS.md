@@ -1,7 +1,9 @@
 # tanzim-merge/src
 
-Single file: `lib.rs`.
+Two files: `lib.rs` and `plan.rs` (`pub mod plan`).
 
-Contains the `Merge` trait, both built-in implementations (`LastWins`, `DeepMerge`), the private `deep_merge_value` recursive helper, and the `Error` type.
+`lib.rs` contains the `Merge` trait, both built-in implementations (`LastWins`, `DeepMerge`), the private `deep_merge_value` recursive helper, and the `Error` type. `DeepMerge` carries an `ArrayStrategy` (`Replace` default, plus `Concat`/`Prepend`/`Union`/`Index`/`Keyed`) selecting how two same-key lists combine; build it with `DeepMerge::new().with_array_strategy(..)`.
 
 When adding a new merger, implement `Merge` and add it to `lib.rs`. The merge output type is the `Merged` alias (`HashMap<Option<String>, (Vec<Payload>, LocatedValue)>`) — the `Vec` tracks which payloads contributed to each merged value. Return `Merged`, not the spelled-out type, so signatures stay readable and clippy's `type_complexity` lint stays quiet without `#[allow]`.
+
+`plan.rs` is the composable merge tree: `MergePlan` is a `Source` leaf or a `Merge { merger: Box<dyn Merge>, children }` (the merger is owned by `Box`, not shared — the `tanzim` pipeline holds one tree as its single source of truth and mutates it in place). Build with `src` / `deep` / `last_wins` / `merge_with`; `src` returns `Result` (wraps a source `ParseError` in `Error::Other`). `evaluate(plan, groups)` folds post-order against `SourceGroup`s — `(configured Source, its attributed (Payload, LocatedValue) pairs)` — so leaves resolve by configured source while inner nodes flatten each child `Merged` back to one carrier pair per name-group before the parent merges. Keep the module doctest at the top of `plan.rs` compiling.

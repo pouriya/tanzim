@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use tanzim::{
     merger::DeepMerge,
     pipeline::multi::{Multi, Schemas},
-    source::Source,
     validator::SchemaValue,
 };
 
@@ -66,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // `Multi::default()` pre-registers all feature-enabled loaders and parsers; pick a merger.
-    let mut pipeline = Multi::default().with_merger(DeepMerge);
+    let mut pipeline = Multi::default().with_merger(DeepMerge::new())?;
 
     let schemas = load_schemas()?;
     println!(
@@ -76,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     pipeline = pipeline.with_schemas(schemas);
 
     for source_str in &source_args {
-        pipeline = pipeline.with_source(Source::parse(source_str)?);
+        pipeline = pipeline.with_source(source_str)?;
     }
 
     // Run the whole pipeline and deserialize each named entry straight into `Entry`. On failure

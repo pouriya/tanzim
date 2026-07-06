@@ -6,7 +6,7 @@
 //! Load, parse, and merge configuration from declarative configuration sources.
 //!
 //! The pipeline lives under [`pipeline`] ([`pipeline::single::Single`] /
-//! [`pipeline::multi::Multi`]); [`opt_in`] holds opinionated facades built on top of it.
+//! [`pipeline::multi::Multi`]).
 //!
 //! Workspace crates:
 //!
@@ -36,5 +36,4 @@ pub mod ext {
 
 mod logging;
 
-pub mod opt_in;
 pub mod pipeline;

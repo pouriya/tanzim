@@ -83,8 +83,10 @@ Use individual workspace crates if you only need one stage — see [`tanzim-load
 ## Quick start
 
 Everything you need lives under `pipeline::multi` (or `pipeline::single`), so a single glob import
-is enough. `Multi::default()` pre-registers every feature-enabled loader and parser; pick a merger
-and add sources (as parsed [`source::Source`] values).
+is enough. `Multi::default()` pre-registers every feature-enabled loader and parser; add sources as
+strings (or [`source::Source`] values) and, optionally, pick a global merger — it defaults to
+`LastWins` when unset. Bind a per-source merger with `with_source_merged`, or supply an explicit
+`MergePlan` tree with `with_merge_plan` for arbitrary folds.
 
 ```rust,ignore
 use tanzim::pipeline::multi::*; // Multi, Source, DeepMerge, ...
@@ -118,9 +120,9 @@ struct Https {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let configs: std::collections::HashMap<Option<String>, Entry> = Multi::default()
-        .with_merger(DeepMerge)
-        .with_source(Source::parse("env(prefix=MY_APP_,separator=.)")?)
-        .with_source(Source::parse("file:examples/full/etc")?)
+        .with_merger(DeepMerge::new())?
+        .with_source("env(prefix=MY_APP_,separator=.)")?
+        .with_source("file:examples/full/etc")?
         .try_deserialize()?;
 
     for (name, entry) in &configs {
@@ -131,23 +133,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Opinionated facade
+### Advanced: explicit merge trees
 
-If you'd rather not wire the pipeline yourself, [`opt_in::config`] offers a
-[`config`](https://docs.rs/config)-style layer with sensible defaults (all loaders + parsers, deep
-merge):
+The simple builders (`with_source`, `with_source_merged`, `with_merger`) cover the common cases by
+folding sources in declared order. For an arbitrary fold, build a `MergePlan` yourself and pass it to
+`with_merge_plan` — the plan's `src(..)` leaves become the pipeline's sources:
 
 ```rust,ignore
-use tanzim::opt_in::config::{Config, Environment, File};
+use tanzim::pipeline::multi::*; // Multi, deep, last_wins, src, ...
 
-let config = Config::builder()
-    .add_source(File::with_name("config").required(false))
-    .add_source(Environment::with_prefix("APP").separator("."))
-    .build()?;
-
-let port: u16 = config.get("server.port")?;
-let name = config.get_string("server.name")?;
+// deep-merge base + overrides, then last-wins that result with secrets.
+let pipeline = Multi::default().with_merge_plan(last_wins(vec![
+    deep(vec![src("file:base.toml")?, src("file:overrides.toml")?]),
+    src("env(prefix=SECRET_)")?,
+]))?;
 ```
+
+The two styles are mutually exclusive: mixing `with_merge_plan` with the simple builders is an
+`Error::PlanConflict`. Either let the pipeline build the plan, or build it yourself.
 
 ## Examples
 

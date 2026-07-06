@@ -6,15 +6,15 @@ Facade crate that wires the full load → parse → merge pipeline behind two mo
 
 ### `single` module
 
-- `PipelineSingleBuilder` — fluent builder. `with_source(s)` parses the source string (returns `Result`); `with_loader`, `with_parser`, `with_merger` register pipeline components. `build()` returns `Result<PipelineSingle, Error>` and errors when loaders, parsers, or merger are missing.
-- `PipelineSingle` — owns the pipeline components. Exposes `load()`, `parse()`, `merge()`, `unify()`, `validate()`, and `run()`. Also provides `with_*` setters and `with_included_loaders` / `set_included_loaders` / `with_included_parsers` / `set_included_parsers`.
-- `Parsed` — type alias `(loader::Payload, parser::LocatedValue)`.
-- `Merged` — type alias for `merge::Merged` (`HashMap<Option<String>, (Vec<Payload>, LocatedValue)>`).
-- `Error` — covers source parse errors, load errors, parse errors, merge errors, missing components, and missing-loader / missing-parser diagnostics.
+- `Single` — the pipeline. Construct with `Single::default()` (feature-enabled loaders + parsers) or `Single::empty()`; there is no `new()`. `with_source(s)` / `add_source(s)` accept a string or `Source` and return `Result` (parse errors surface as `Error::Source`); `with_source_merged(s, merger)` binds a per-source merger. `with_merger` / `add_merger` set the global merger, returning `Result` (defaults to `LastWins` when unset — there is no `NoMerger` error). The pipeline holds a single `merger::plan::MergePlan` (see `pipeline::Plan`): the simple builders append to a root `Merge` node, while `with_merge_plan` / `add_merge_plan` replace it with an explicit tree you build yourself — the two styles are mutually exclusive (`Error::PlanConflict`). Also `with_loader`, `with_parser`, `with_included_loaders` / `set_included_loaders` / `with_included_parsers` / `set_included_parsers`.
+- Stages: `load()`, `parse()`, `merge()`, `unify()`, `validate()`, `run()`, and `try_deserialize::<T>()`. `merge()` evaluates the configured `MergePlan` over the parsed payloads; the plan's `Source` leaves are the pipeline's sources (`sources()` walks them). Payloads are attributed back to their configured source by `pipeline::group_by_source` (loaders narrow a source's resource, so this is by containment, not equality).
+- `Parsed` — a `(payload, value)` pair (private fields; `payload()` / `value()` accessors).
+- `Merged` — grouped result keyed by entry name (`None` = unnamed bucket).
+- `Error` — covers source parse errors, load errors, parse errors, merge errors, and missing-loader / missing-parser diagnostics.
 
 ### `multi` module
 
-- `PipelineMultiBuilder` / `PipelineMulti` — same builder pattern as single; `run()` returns `Merged` instead of a unified value.
+- `Multi` — same shape as `Single` (same source/merger/plan builders and stages); `run()` returns `Merged` (a map of named entries) instead of a single unified value.
 - `Schemas` — `HashMap<Option<String>, validate::Value>` (feature `validate-schema`).
 - `with_schema(Option<String>, schema)` and `with_schemas(Schemas)` register validation schemas per merged entry name.
 
