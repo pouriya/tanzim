@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use tanzim::{
     merger::DeepMerge,
-    pipeline::multi::{Multi, Schemas},
+    pipeline::{self, Schemas},
     validator::SchemaValue,
 };
 
@@ -64,8 +64,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // `Multi::default()` pre-registers all feature-enabled loaders and parsers; pick a merger.
-    let mut pipeline = Multi::default().with_merger(DeepMerge::new())?;
+    // `pipeline::default()` pre-registers all feature-enabled loaders and parsers; pick a merger.
+    let mut pipeline = pipeline::default().with_merger(DeepMerge::new())?;
 
     let schemas = load_schemas()?;
     println!(

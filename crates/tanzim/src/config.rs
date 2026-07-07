@@ -1,23 +1,21 @@
-//! Multi-configuration pipeline: load, parse, merge, validate.
+//! The single-configuration pipeline: load, parse, merge, unify, validate.
 //!
-//! [`Multi`] keeps a map of named entries (`None` = the unnamed bucket). Everything needed to
-//! build a pipeline is re-exported here, so `use tanzim::pipeline::multi::*;` is enough on its own.
+//! [`Config`] collapses every source into one unified configuration value. Construct it with
+//! [`Config::default`] (all feature-enabled loaders + parsers) or [`Config::empty`] (nothing
+//! registered), add sources with [`with_source`](Config::with_source), optionally pick a merger,
+//! then call [`run`](Config::run) or [`try_deserialize`](Config::try_deserialize).
 
-use super::{Merged, Parsed, Plan};
-use crate::source;
+use crate::entry::Entry;
+use crate::loader;
+use crate::merger::plan::MergePlan;
+use crate::merger::{self, Merged, Plan};
+use crate::parser::{self, Parsed};
+use crate::source::{self, Source};
 use cfg_if::cfg_if;
 use tanzim_source::{OnError, Stage};
 
-pub use crate::merger::plan::{self, MergePlan, deep, last_wins, merge_with, src};
-pub use crate::merger::{self, DeepMerge, LastWins, Merge};
-pub use crate::source::Source;
 #[cfg(feature = "validate-schema")]
-pub use crate::validator;
-pub use crate::{loader, parser};
-
-/// Validation schemas keyed by merged entry name.
-#[cfg(feature = "validate-schema")]
-pub type Schemas = std::collections::HashMap<Option<String>, validator::Value>;
+use crate::validator;
 
 fn source_display(cs: &Source) -> String {
     let mut s = cs.source().to_string();
@@ -28,13 +26,13 @@ fn source_display(cs: &Source) -> String {
     s
 }
 
-/// Errors produced by the multi-configuration pipeline.
+/// Errors produced by the single-configuration pipeline.
 #[derive(Debug)]
 pub enum Error {
     NoLoaders,
     NoParsers,
     Source(source::ParseError),
-    /// The simple source builders were mixed with an explicit [`with_merge_plan`](Multi::with_merge_plan).
+    /// The simple source builders were mixed with an explicit [`with_merge_plan`](Config::with_merge_plan).
     PlanConflict,
     Load(loader::Error),
     Parse(tanzim_value::Error),
@@ -50,12 +48,10 @@ pub enum Error {
 
     #[cfg(feature = "validate-schema")]
     Schema {
-        name: Option<String>,
         inner: validator::SchemaError,
     },
     #[cfg(feature = "validate-schema")]
     Validate {
-        name: Option<String>,
         inner: validator::Error,
     },
 }
@@ -82,13 +78,13 @@ impl std::fmt::Display for Error {
                 write!(f, "no parser found for format `{format}` in `{at}`")
             }
             #[cfg(feature = "validate-schema")]
-            Self::Schema { name, inner } => {
-                write!(f, "schema for `{name:?}` is invalid: ")?;
+            Self::Schema { inner } => {
+                write!(f, "schema is invalid: ")?;
                 std::fmt::Display::fmt(inner, f)
             }
             #[cfg(feature = "validate-schema")]
-            Self::Validate { name, inner } => {
-                write!(f, "configuration `{name:?}` failed validation: ")?;
+            Self::Validate { inner } => {
+                write!(f, "configuration failed validation: ")?;
                 std::fmt::Display::fmt(inner, f)
             }
         }
@@ -103,9 +99,9 @@ impl std::error::Error for Error {
             Self::Parse(error) | Self::Deserialize(error) => Some(error),
             Self::Merge(error) => Some(error),
             #[cfg(feature = "validate-schema")]
-            Self::Schema { inner, .. } => Some(inner),
+            Self::Schema { inner } => Some(inner),
             #[cfg(feature = "validate-schema")]
-            Self::Validate { inner, .. } => Some(inner),
+            Self::Validate { inner } => Some(inner),
             Self::NoLoaders
             | Self::NoParsers
             | Self::PlanConflict
@@ -127,23 +123,23 @@ impl From<std::convert::Infallible> for Error {
     }
 }
 
-/// Runs the load → parse → merge → validate pipeline for multiple named configuration entries.
+/// Runs the load → parse → merge → unify → validate pipeline for a single configuration value.
 ///
-/// Construct with [`Multi::default`] (all feature-enabled loaders + parsers) or [`Multi::empty`]
+/// Construct with [`Config::default`] (all feature-enabled loaders + parsers) or [`Config::empty`]
 /// (nothing registered). There is no `new()`. Add sources with [`with_source`](Self::with_source) /
 /// [`add_source`](Self::add_source) (or [`with_source_merged`](Self::with_source_merged) to bind a
 /// per-source merger), optionally set a global merger with [`with_merger`](Self::with_merger)
-/// (defaults to [`LastWins`] when unset), then call [`run`](Self::run) or
+/// (defaults to [`LastWins`](merger::LastWins) when unset), then call [`run`](Self::run) or
 /// [`try_deserialize`](Self::try_deserialize).
-pub struct Multi {
+pub struct Config {
     plan: Plan,
     loaders: Vec<Box<dyn loader::Load>>,
     parsers: Vec<Box<dyn parser::Parse>>,
     #[cfg(feature = "validate-schema")]
-    schemas: Schemas,
+    schema: Option<validator::Value>,
 }
 
-impl Default for Multi {
+impl Default for Config {
     /// All feature-enabled loaders and parsers, but no sources.
     fn default() -> Self {
         Self::empty()
@@ -152,7 +148,7 @@ impl Default for Multi {
     }
 }
 
-impl Multi {
+impl Config {
     /// An empty pipeline: no loaders, parsers, merger, or sources.
     pub fn empty() -> Self {
         Self {
@@ -160,7 +156,7 @@ impl Multi {
             loaders: Vec::new(),
             parsers: Vec::new(),
             #[cfg(feature = "validate-schema")]
-            schemas: Schemas::new(),
+            schema: None,
         }
     }
 
@@ -186,20 +182,20 @@ impl Multi {
     }
 
     /// The global merger chosen via [`with_merger`](Self::with_merger), if any. `None` when merging
-    /// falls back to [`LastWins`], or when an explicit [`with_merge_plan`](Self::with_merge_plan)
-    /// tree is in effect (which has no single global merger).
+    /// falls back to [`LastWins`](merger::LastWins), or when an explicit
+    /// [`with_merge_plan`](Self::with_merge_plan) tree is in effect (which has no single global merger).
     pub fn merger(&self) -> Option<&dyn merger::Merge> {
         self.plan.configured_merger()
     }
 
     #[cfg(feature = "validate-schema")]
-    pub fn schemas(&self) -> &Schemas {
-        &self.schemas
+    pub fn schema(&self) -> Option<&validator::Value> {
+        self.schema.as_ref()
     }
 
     #[cfg(feature = "validate-schema")]
-    pub fn schemas_mut(&mut self) -> &mut Schemas {
-        &mut self.schemas
+    pub fn schema_mut(&mut self) -> &mut Option<validator::Value> {
+        &mut self.schema
     }
 
     /// Append a configuration source (in-place). `source` may be a [`Source`] or any string form
@@ -276,8 +272,8 @@ impl Multi {
     }
 
     /// Set the global merger that folds all sources together (builder-style). Defaults to
-    /// [`LastWins`] when never set. Errors with [`Error::PlanConflict`] if an explicit
-    /// [`with_merge_plan`](Self::with_merge_plan) is set.
+    /// [`LastWins`](merger::LastWins) when never set. Errors with [`Error::PlanConflict`] if an
+    /// explicit [`with_merge_plan`](Self::with_merge_plan) is set.
     pub fn with_merger(mut self, merger: impl merger::Merge + 'static) -> Result<Self, Error> {
         self.add_merger(merger)?;
         Ok(self)
@@ -293,7 +289,8 @@ impl Multi {
     }
 
     /// Supply an explicit [`MergePlan`] merge tree instead of the simple per-source builders. Use
-    /// the [`plan`] constructors ([`src`], [`deep`], [`last_wins`], [`merge_with`]) to build
+    /// the [`plan`](merger::plan) constructors ([`src`](merger::plan::src), [`deep`](merger::plan::deep),
+    /// [`last_wins`](merger::plan::last_wins), [`merge_with`](merger::plan::merge_with)) to build
     /// arbitrary folds such as `last_wins(vec![deep(vec![a, b]), c])` (builder-style).
     ///
     /// Errors with [`Error::PlanConflict`] if any source or merger was already configured through
@@ -365,20 +362,8 @@ impl Multi {
     }
 
     #[cfg(feature = "validate-schema")]
-    pub fn with_schema(
-        mut self,
-        name: Option<String>,
-        schema: impl Into<validator::Value>,
-    ) -> Self {
-        self.schemas.insert(name, schema.into());
-        self
-    }
-
-    #[cfg(feature = "validate-schema")]
-    pub fn with_schemas(mut self, schemas: Schemas) -> Self {
-        for (name, schema) in schemas {
-            self.schemas.insert(name, schema);
-        }
+    pub fn with_schema(mut self, schema: impl Into<validator::Value>) -> Self {
+        self.schema = Some(schema.into());
         self
     }
 
@@ -549,9 +534,9 @@ impl Multi {
     /// Merge the parsed payloads into named groups.
     ///
     /// Evaluates the configured [`MergePlan`]: the simple builders fold every source (in declared
-    /// order) with the global merger, defaulting to [`LastWins`], each per-source merger pre-merging
-    /// its own payloads first; an explicit [`with_merge_plan`](Self::with_merge_plan) evaluates that
-    /// tree directly.
+    /// order) with the global merger, defaulting to [`LastWins`](merger::LastWins), each per-source
+    /// merger pre-merging its own payloads first; an explicit
+    /// [`with_merge_plan`](Self::with_merge_plan) evaluates that tree directly.
     pub fn merge(&self, parsed: &[Parsed]) -> Result<Merged, Error> {
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -560,7 +545,7 @@ impl Multi {
                 log::debug!("msg=\"Starting configuration merge stage\" entry_count={}", parsed.len());
             }
         }
-        let groups = super::group_by_source(&self.plan.leaves(), parsed);
+        let groups = merger::group_by_source(&self.plan.leaves(), parsed);
         match merger::plan::evaluate(self.plan.tree(), &groups) {
             Ok(raw) => {
                 let merged = Merged::from_raw(raw);
@@ -577,89 +562,141 @@ impl Multi {
         }
     }
 
-    /// Validate (and coerce) the merged configuration against the registered schemas.
-    pub fn validate(&self, _merged: &mut Merged) -> Result<(), Error> {
+    /// Collapse all merge groups into one [`Entry`].
+    ///
+    /// Collects named groups (sorted alphabetically by name), then the unnamed group (key
+    /// `None`), in that order. For each group, synthesises one `(Payload, LocatedValue)` pair
+    /// — using the group's first payload with `maybe_name` set to `None` — so the configured
+    /// merger sees all pairs as belonging to the same unnamed group and collapses them into a
+    /// single entry. This reuses the user's merger for cross-group unification without adding
+    /// a new abstraction.
+    ///
+    /// **Provenance note:** the returned [`Entry`]'s payloads contain one synthetic carrier per
+    /// group (derived from each group's first payload), not the full list of contributing
+    /// payloads from within-group merging. Callers who need complete provenance should call
+    /// [`merge`](Self::merge) directly and inspect the [`Merged`] map.
+    ///
+    /// **`LastWins` note:** with [`LastWins`](merger::LastWins) as the configured merger, the
+    /// cross-group pass keeps only the last group's value. Groups are ordered named-alphabetical
+    /// then unnamed, so the unnamed bucket wins when present.
+    pub fn unify(&self, merged: &Merged) -> Result<Entry, Error> {
+        let fallback = merger::LastWins;
+        let merger: &dyn merger::Merge = self.plan.configured_merger().unwrap_or(&fallback);
+        let mut named_keys: Vec<String> = Vec::new();
+        for name in merged.keys().flatten() {
+            named_keys.push(name.clone());
+        }
+        named_keys.sort();
+
+        let mut flat: Vec<(loader::Payload, parser::LocatedValue)> = Vec::new();
+        for name in &named_keys {
+            if let Some(entry) = merged.get(&Some(name.clone()))
+                && let Some(payload) = entry.payloads().first()
+            {
+                let mut synthetic = payload.clone();
+                synthetic.maybe_name = None;
+                flat.push((synthetic, entry.value().clone()));
+            }
+        }
+        if let Some(entry) = merged.get(&None)
+            && let Some(payload) = entry.payloads().first()
+        {
+            let mut synthetic = payload.clone();
+            synthetic.maybe_name = None;
+            flat.push((synthetic, entry.value().clone()));
+        }
+
+        if flat.is_empty() {
+            return Ok(Entry::new(
+                Vec::new(),
+                parser::LocatedValue::new(
+                    tanzim_value::Value::Map(tanzim_value::Map::new()),
+                    tanzim_value::Location::at("", "", None, None, None),
+                ),
+            ));
+        }
+
+        let mut unified = match merger.merge(&flat) {
+            Ok(r) => r,
+            Err(e) => return Err(Error::Merge(e)),
+        };
+
+        let result = match unified.remove(&None) {
+            Some((payloads, value)) => Entry::new(payloads, value),
+            None => Entry::new(
+                Vec::new(),
+                parser::LocatedValue::new(
+                    tanzim_value::Value::Map(tanzim_value::Map::new()),
+                    tanzim_value::Location::at("", "", None, None, None),
+                ),
+            ),
+        };
+        cfg_if! {
+            if #[cfg(feature = "tracing")] {
+                tracing::info!(msg = "Configuration unify stage complete", group_count = named_keys.len() + 1);
+            } else if #[cfg(feature = "logging")] {
+                log::info!("msg=\"Configuration unify stage complete\" group_count={}", named_keys.len() + 1);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Validate (and coerce) the unified configuration against the registered schema.
+    pub fn validate(&self, _value: &mut parser::LocatedValue) -> Result<(), Error> {
         #[cfg(feature = "validate-schema")]
         {
-            if self.schemas.is_empty() {
+            let Some(schema) = &self.schema else {
                 return Ok(());
-            }
+            };
             let registry = validator::Registry::with_builtins();
-            for (name, schema) in &self.schemas {
-                let validator = match registry.build_value(schema) {
-                    Ok(validator) => validator,
-                    Err(inner) => {
-                        return Err(Error::Schema {
-                            name: name.clone(),
-                            inner,
-                        });
-                    }
-                };
-                match _merged.get_mut(name) {
-                    Some(entry) => match validator::validate(validator.as_ref(), entry.value_mut())
-                    {
-                        Ok(()) => {}
-                        Err(inner) => {
-                            return Err(Error::Validate {
-                                name: name.clone(),
-                                inner,
-                            });
-                        }
-                    },
-                    None => {
-                        cfg_if! {
-                            if #[cfg(feature = "tracing")] {
-                                tracing::warn!(msg = "Schema has no matching merged entry", name = ?name);
-                            } else if #[cfg(feature = "logging")] {
-                                log::warn!("msg=\"Schema has no matching merged entry\" name={name:?}");
-                            }
-                        }
-                    }
+            let validator = match registry.build_value(schema) {
+                Ok(validator) => validator,
+                Err(inner) => {
+                    return Err(Error::Schema { inner });
+                }
+            };
+            match validator::validate(validator.as_ref(), _value) {
+                Ok(()) => {}
+                Err(inner) => {
+                    return Err(Error::Validate { inner });
                 }
             }
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
-                    tracing::info!(msg = "Configuration validation stage complete", schema_count = self.schemas.len());
+                    tracing::info!(msg = "Configuration validation stage complete");
                 } else if #[cfg(feature = "logging")] {
-                    log::info!("msg=\"Configuration validation stage complete\" schema_count={}", self.schemas.len());
+                    log::info!("msg=\"Configuration validation stage complete\"");
                 }
             }
         }
         Ok(())
     }
 
-    /// Run load → parse → merge → validate in sequence.
-    pub fn run(&self) -> Result<Merged, Error> {
+    /// Run load → parse → merge → unify → validate in sequence.
+    pub fn run(&self) -> Result<Entry, Error> {
         cfg_if! {
             if #[cfg(feature = "tracing")] {
-                tracing::debug!(msg = "Running multi configuration pipeline", source_count = self.plan.leaves().len(), loader_count = self.loaders.len(), parser_count = self.parsers.len());
+                tracing::debug!(msg = "Running single configuration pipeline", source_count = self.plan.leaves().len(), loader_count = self.loaders.len(), parser_count = self.parsers.len());
             } else if #[cfg(feature = "logging")] {
-                log::debug!("msg=\"Running multi configuration pipeline\" source_count={} loader_count={} parser_count={}", self.plan.leaves().len(), self.loaders.len(), self.parsers.len());
+                log::debug!("msg=\"Running single configuration pipeline\" source_count={} loader_count={} parser_count={}", self.plan.leaves().len(), self.loaders.len(), self.parsers.len());
             }
         }
         let loaded = self.load()?;
         let parsed = self.parse(&loaded)?;
-        let mut merged = self.merge(&parsed)?;
-        self.validate(&mut merged)?;
-        Ok(merged)
+        let merged = self.merge(&parsed)?;
+        let mut entry = self.unify(&merged)?;
+        self.validate(entry.value_mut())?;
+        Ok(entry)
     }
 
-    /// Run the pipeline and deserialize each named entry's configuration into `T`, keyed by
-    /// entry name (the first failure aborts).
-    pub fn try_deserialize<T: serde::de::DeserializeOwned>(
-        &self,
-    ) -> Result<std::collections::HashMap<Option<String>, T>, Error> {
-        let merged = self.run()?;
-        let mut out = std::collections::HashMap::with_capacity(merged.len());
-        for (name, entry) in merged.iter() {
-            let deserialized = match entry.value().try_deserialize::<T>() {
-                Ok(value) => value,
-                Err(error) => {
-                    return Err(Error::Deserialize(error));
-                }
-            };
-            out.insert(name.clone(), deserialized);
+    /// Run the pipeline and deserialize the unified configuration into `T`. A type mismatch
+    /// yields [`Error::Deserialize`] pointing at the offending value's source location; format
+    /// it with `{error:#}` for a source snippet with a caret underline.
+    pub fn try_deserialize<T: serde::de::DeserializeOwned>(&self) -> Result<T, Error> {
+        let entry = self.run()?;
+        match entry.value().try_deserialize::<T>() {
+            Ok(value) => Ok(value),
+            Err(error) => Err(Error::Deserialize(error)),
         }
-        Ok(out)
     }
 }

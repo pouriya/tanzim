@@ -41,7 +41,7 @@ assert_eq!(map.len(), 2);
 
 ## Deserializing into your own types (`serde` feature)
 
-With the optional `serde` feature, [`Value`] and [`LocatedValue`] implement [`serde::Deserializer`],
+With the optional `serde` feature, [`Value`] and [`LocatedValue`] implement [`serde::Deserializer`](::serde::Deserializer),
 so a config tree turns straight into your own structs. A [`LocatedValue`] runs the same [`Value`]
 deserializer but, on failure, stamps the offending node's [`Location`] onto the error:
 
@@ -83,7 +83,7 @@ assert_eq!(server.port, 8080);
 
 | Feature | Enables |
 |---------|---------|
-| `serde` | [`serde::Deserializer`] for [`Value`]/[`LocatedValue`] + `try_deserialize::<T>()`, and [`serde::de::Error`] for [`Error`] |
+| `serde` | [`serde::Deserializer`](::serde::Deserializer) for [`Value`]/[`LocatedValue`] + `try_deserialize::<T>()`, and [`serde::de::Error`](::serde::de::Error) for [`Error`] |
 
 Off by default.
 

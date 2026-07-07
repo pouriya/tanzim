@@ -24,7 +24,7 @@ pub enum Error {
     /// A value could not be deserialized into the requested type (`serde` Cargo feature).
     ///
     /// The offending node's [`Location`] is stamped on by the deserializer (see
-    /// [`Error::or_location`]); because every parsed node's `Location` already carries its
+    /// `Error::or_location`); because every parsed node's `Location` already carries its
     /// pre-rendered source [`snippet`](Location::snippet), `{error:#}` renders a caret underline
     /// without any post-hoc source lookup.
     #[cfg(feature = "serde")]

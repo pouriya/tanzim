@@ -19,7 +19,7 @@
 //!     src("env(prefix=SECRET_)")?,
 //! ]);
 //!
-//! // `plan` is a `MergePlan` tree; hand it to a `Single`/`Multi` pipeline via `with_merge_plan`,
+//! // `plan` is a `MergePlan` tree; hand it to a `Config`/`Pipeline` via `with_merge_plan`,
 //! // or evaluate it directly with `plan::evaluate` against source-grouped payloads.
 //! # let _ = plan;
 //! # Ok::<(), tanzim_merge::Error>(())

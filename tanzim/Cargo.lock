@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "tanzim"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "cfg-if",
  "serde",
@@ -721,7 +721,6 @@ dependencies = [
  "tanzim-source",
  "tanzim-validate",
  "tanzim-value",
- "thiserror",
  "tracing",
 ]
 
@@ -737,30 +736,28 @@ dependencies = [
 
 [[package]]
 name = "tanzim-load"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "cfg-if",
  "tanzim-source",
- "thiserror",
  "tracing",
  "url",
 ]
 
 [[package]]
 name = "tanzim-merge"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "cfg-if",
  "tanzim-load",
  "tanzim-source",
  "tanzim-value",
- "thiserror",
  "tracing",
 ]
 
 [[package]]
 name = "tanzim-parse"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "cfg-if",
  "saphyr",
@@ -773,14 +770,11 @@ dependencies = [
 
 [[package]]
 name = "tanzim-source"
-version = "0.6.0"
-dependencies = [
- "thiserror",
-]
+version = "0.7.0"
 
 [[package]]
 name = "tanzim-validate"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64",
  "bytesize",
@@ -799,30 +793,10 @@ dependencies = [
 
 [[package]]
 name = "tanzim-value"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "serde",
  "tanzim-source",
-]
-
-[[package]]
-name = "thiserror"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
-dependencies = [
- "thiserror-impl",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-use tanzim::{merger::DeepMerge, pipeline::multi::Multi};
+use tanzim::{merger::DeepMerge, pipeline};
 
 #[test]
 fn smoke() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,8 +33,8 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
             .join("tests")
             .join("etc");
 
-        // `Multi::default()` pre-registers all feature-enabled loaders and parsers.
-        let config = Multi::default()
+        // `pipeline::default()` pre-registers all feature-enabled loaders and parsers.
+        let config = pipeline::default()
             .with_merger(DeepMerge::new())
             .expect("register merger")
             .with_source("env(prefix=APP_NAME,separator=__)")

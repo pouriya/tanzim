@@ -5,35 +5,32 @@
 //!
 //! Load, parse, and merge configuration from declarative configuration sources.
 //!
-//! The pipeline lives under [`pipeline`] ([`pipeline::single::Single`] /
-//! [`pipeline::multi::Multi`]).
+//! Most users want [`Config`] — the single-configuration pipeline. Add a couple of sources and
+//! [`try_deserialize`](Config::try_deserialize) into your own type. When your sources describe
+//! several *named* configurations, reach for [`pipeline::Pipeline`] instead
+//! (built with [`pipeline::default`] / [`pipeline::empty`]).
 //!
-//! Workspace crates:
+//! Each stage is a module that re-exports its backing crate and adds the facade's own types:
 //!
-//! - [`source`] — [`tanzim_source`] ([`tanzim_source::Source`])
-//! - [`loader`] — [`tanzim_load`] ([`tanzim_load::Load`])
-//! - [`parser`] — [`tanzim_parse`] ([`tanzim_parse::Parse`])
-//! - [`merger`] — [`tanzim_merge`] ([`tanzim_merge::Merge`])
-//! - [`validator`] — [`tanzim_validate`]
-//! - [`value`] — [`tanzim_value`] ([`tanzim_value::Value`], [`tanzim_value::LocatedValue`])
+//! - [`source`] — the source-string format ([`Source`], [`tanzim_source`])
+//! - [`loader`] — load a source into payloads ([`tanzim_load`])
+//! - [`parser`] — parse a payload into a value tree ([`parser::Parsed`], [`tanzim_parse`])
+//! - [`merger`] — fold sources together ([`merger::Merged`], the [`merge plan`](merger::plan), [`tanzim_merge`])
+//! - [`validator`] — schema validation ([`tanzim_validate`])
+//! - [`value`] — the core value types ([`value::Value`], [`value::LocatedValue`], [`tanzim_value`])
+//! - [`entry`] — one merged [`Entry`](entry::Entry)
 
-pub use tanzim_load as loader;
-pub use tanzim_merge as merger;
-pub use tanzim_parse as parser;
-pub use tanzim_source as source;
-pub use tanzim_validate as validator;
-pub use tanzim_value as value;
-
-pub mod ext {
-    //! Re-exported dependency crates.
-
-    pub extern crate tanzim_load;
-    pub extern crate tanzim_merge;
-    pub extern crate tanzim_parse;
-    pub extern crate tanzim_source;
-    pub extern crate tanzim_validate;
-}
+pub mod config;
+pub mod entry;
+pub mod loader;
+pub mod merger;
+pub mod parser;
+pub mod pipeline;
+pub mod source;
+pub mod validator;
+pub mod value;
 
 mod logging;
 
-pub mod pipeline;
+pub use config::Config;
+pub use source::Source;
