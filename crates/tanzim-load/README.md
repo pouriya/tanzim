@@ -35,33 +35,33 @@ of a full `impl Load`. See the [`Load`] rustdoc for worked details.
 ## Example
 
 ```rust
-use std::env;
-use tanzim_load::{env::Env, Error, Load, Source};
+use tanzim_load::{env::Env, Load, Source};
 
-fn main() -> Result<(), Error> {
-    // SAFETY: example-only; single-threaded doctest env vars.
-    unsafe {
-        env::set_var("MY_APP_CFG.DEBUG", "true");
-        env::set_var("MY_APP_CFG.NAME", "hello");
-        env::set_var("MY_APP_CFG.DATABASE.HOST", "localhost");
-    }
+# tanzim_testing::environment::run(|env| {
+#     env.set_env("MY_APP_CFG.DEBUG", "true")?;
+#     env.set_env("MY_APP_CFG.NAME", "hello")?;
+#     env.set_env("MY_APP_CFG.DATABASE.HOST", "localhost")?;
+// The process environment holds three variables:
+//   MY_APP_CFG.DEBUG=true
+//   MY_APP_CFG.NAME=hello
+//   MY_APP_CFG.DATABASE.HOST=localhost
+// The `MY_APP_` prefix marks them as ours and `.` groups each one under the `cfg` entry.
+let source = Source::parse(r#"env(prefix=MY_APP_,separator=".")"#).unwrap();
 
-    let source = Source::parse(r#"env(prefix=MY_APP_,separator=".")"#).unwrap();
+let payloads = Env::new().load(source).unwrap();
+assert_eq!(payloads.len(), 1);
 
-    let payloads = Env::new().load(source)?;
-    assert_eq!(payloads.len(), 1);
+let payload = payloads[0].clone();
+assert_eq!(payload.maybe_name, Some("cfg".into()));
+assert_eq!(payload.maybe_format, Some("env".into()));
 
-    let payload = payloads[0].clone();
-    assert_eq!(payload.maybe_name, Some("cfg".into()));
-    assert_eq!(payload.maybe_format, Some("env".into()));
-
-    let content = String::from_utf8_lossy(&payload.content);
-    assert!(content.contains("DEBUG=\"true\""));
-    assert!(content.contains("NAME=\"hello\""));
-    assert!(content.contains("DATABASE.HOST=\"localhost\""));
-
-    Ok(())
-}
+let content = String::from_utf8_lossy(&payload.content);
+assert!(content.contains("DEBUG=\"true\""));
+assert!(content.contains("NAME=\"hello\""));
+assert!(content.contains("DATABASE.HOST=\"localhost\""));
+# Ok(())
+# })
+# .unwrap();
 ```
 
 ## Features

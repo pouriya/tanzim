@@ -19,6 +19,7 @@ tanzim-load
 tanzim-parse
 tanzim-merge
 tanzim-validate
+tanzim-testing
 tanzim
 "
 

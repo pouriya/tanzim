@@ -100,6 +100,7 @@ validate-datetime = ["validate-schema", "tanzim-validate/datetime"]
 validate-full = ["validate-schema", "tanzim-validate/full"]
 
 [dev-dependencies]
+tanzim-testing = { path = "../tanzim-testing", version = "0.1.0" }
 tracing-subscriber = { version = "0.3.18", features = ["json"] }
 env_logger = "0.10.1"
 dirs = "5.0.1"

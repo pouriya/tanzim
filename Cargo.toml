@@ -6,6 +6,7 @@ members = [
     "crates/tanzim-validate",
     "crates/tanzim-merge",
     "crates/tanzim-source",
+    "crates/tanzim-testing",
     "crates/tanzim",
 ]
 default-members = ["crates/tanzim"]

@@ -88,7 +88,15 @@ strings (or [`source::Source`] values) and, optionally, pick a global merger —
 `LastWins` when unset. Bind a per-source merger with `with_source_merged`, or supply an explicit
 `MergePlan` tree with `with_merge_plan` for arbitrary folds.
 
-```rust,ignore
+```rust
+# #[cfg(feature = "parse-json")]
+# tanzim_testing::environment::run(|env| {
+#     env.set_env("MY_APP_.web.https.insecure", "false")?;
+#     env.write_file("examples/full/etc/web.json", br#"{"logging": {"level": "info"}}"#)?;
+// The two sources below read from a prepared environment and directory:
+//   - env var `MY_APP_.web.https.insecure=false`  -> web.https.insecure
+//   - file `examples/full/etc/web.json` = {"logging": {"level": "info"}}  -> web.logging.level
+// Both describe the `web` entry, so the deep merger folds them into one.
 use tanzim::pipeline::multi::*; // Multi, Source, DeepMerge, ...
 use serde::Deserialize;
 
@@ -118,19 +126,23 @@ struct Https {
     follow_redirects: bool,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let configs: std::collections::HashMap<Option<String>, Entry> = Multi::default()
-        .with_merger(DeepMerge::new())?
-        .with_source("env(prefix=MY_APP_,separator=.)")?
-        .with_source("file:examples/full/etc")?
-        .try_deserialize()?;
+let configs: std::collections::HashMap<Option<String>, Entry> = Multi::default()
+    .with_merger(DeepMerge::new())
+    .unwrap()
+    .with_source(r#"env(prefix=MY_APP_,separator=".")"#)
+    .unwrap()
+    .with_source("file:examples/full/etc")
+    .unwrap()
+    .try_deserialize()
+    .unwrap();
 
-    for (name, entry) in &configs {
-        let display = name.as_deref().unwrap_or("(unnamed)");
-        println!("{display}: {entry:?}");
-    }
-    Ok(())
+for (name, entry) in &configs {
+    let display = name.as_deref().unwrap_or("(unnamed)");
+    println!("{display}: {entry:?}");
 }
+# Ok(())
+# })
+# .unwrap();
 ```
 
 ### Advanced: explicit merge trees
@@ -139,14 +151,19 @@ The simple builders (`with_source`, `with_source_merged`, `with_merger`) cover t
 folding sources in declared order. For an arbitrary fold, build a `MergePlan` yourself and pass it to
 `with_merge_plan` — the plan's `src(..)` leaves become the pipeline's sources:
 
-```rust,ignore
+```rust
 use tanzim::pipeline::multi::*; // Multi, deep, last_wins, src, ...
 
 // deep-merge base + overrides, then last-wins that result with secrets.
-let pipeline = Multi::default().with_merge_plan(last_wins(vec![
-    deep(vec![src("file:base.toml")?, src("file:overrides.toml")?]),
-    src("env(prefix=SECRET_)")?,
-]))?;
+let _pipeline = Multi::default()
+    .with_merge_plan(last_wins(vec![
+        deep(vec![
+            src("file:base.toml").unwrap(),
+            src("file:overrides.toml").unwrap(),
+        ]),
+        src("env(prefix=SECRET_)").unwrap(),
+    ]))
+    .unwrap();
 ```
 
 The two styles are mutually exclusive: mixing `with_merge_plan` with the simple builders is an

@@ -1,0 +1,25 @@
+[package]
+name = "tanzim-testing"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Sandboxed temporary environment for tanzim tests and examples"
+readme = "README.md"
+homepage = "https://crates.io/crates/tanzim-testing"
+documentation = "https://docs.rs/tanzim-testing"
+categories = ["development-tools::testing", "filesystem"]
+keywords = ["config", "testing", "sandbox", "tempdir", "env"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
+
+[dependencies]
+cfg-if = "1.0.0"
+log = { version = "0.4.20", optional = true }
+tracing = { version = "0.1.40", optional = true }
+
+[features]
+logging = ["dep:log"]
+tracing = ["dep:tracing"]
+
+[package.metadata.docs.rs]
+all-features = true

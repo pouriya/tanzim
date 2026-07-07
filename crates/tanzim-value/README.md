@@ -45,8 +45,12 @@ With the optional `serde` feature, [`Value`] and [`LocatedValue`] implement [`se
 so a config tree turns straight into your own structs. A [`LocatedValue`] runs the same [`Value`]
 deserializer but, on failure, stamps the offending node's [`Location`] onto the error:
 
-```rust,ignore
+```rust
+# // Deserialization lives behind the `serde` feature.
+# #[cfg(feature = "serde")]
+# {
 use serde::Deserialize;
+use tanzim_value::{Value, LocatedValue, Location, Map};
 
 #[derive(Deserialize)]
 struct Server {
@@ -54,10 +58,25 @@ struct Server {
     port: u16,
 }
 
-// `tree` is a `LocatedValue` (e.g. produced by a parser).
-let server: Server = tree.try_deserialize()?;
+# let location = Location::at("file", "server.json", None, None, None);
+# let mut map = Map::new();
+# map.insert(
+#     "host".to_string(),
+#     LocatedValue::new(Value::String("localhost".to_string()), location.clone()),
+# );
+# map.insert(
+#     "port".to_string(),
+#     LocatedValue::new(Value::Int(8080), location.clone()),
+# );
+# let tree = LocatedValue::new(Value::Map(map), location);
+// `tree` is a `LocatedValue` a parser would produce, here the map
+// `{ host: "localhost", port: 8080 }` located at `server.json`.
+let server: Server = tree.try_deserialize().unwrap();
+assert_eq!(server.host, "localhost");
+assert_eq!(server.port, 8080);
 // On a type mismatch: `Err(Error::Deserialize { .. })` whose `Display` points at
 // `source:resource:line:column`.
+# }
 ```
 
 ## Features

@@ -52,9 +52,9 @@ pub const SOURCE: &str = "env";
 /// use tanzim_load::{env::Env, Load};
 /// use tanzim_source::SourceBuilder;
 ///
-/// // SAFETY: example-only; single-threaded doctest env vars.
-/// unsafe { std::env::set_var("MYAPP_DEBUG", "true"); }
-///
+/// # tanzim_testing::environment::run(|env| {
+/// #     env.set_env("MYAPP_DEBUG", "true")?;
+/// // The process environment holds a single matching variable: `MYAPP_DEBUG=true`.
 /// let source = SourceBuilder::new()
 ///     .with_source("env")
 ///     .with_option("prefix", "MYAPP_")
@@ -63,7 +63,11 @@ pub const SOURCE: &str = "env";
 ///
 /// let payloads = Env::new().load(source).unwrap();
 /// let content = String::from_utf8_lossy(&payloads[0].content);
+/// // The `MYAPP_` prefix is stripped, leaving `DEBUG="true"`.
 /// assert!(content.contains(r#"DEBUG="true""#));
+/// # Ok(())
+/// # })
+/// # .unwrap();
 /// ```
 #[derive(Debug, Default, Clone)]
 pub struct Env {
@@ -307,8 +311,8 @@ impl Load for Env {
 #[cfg(all(test, feature = "env"))]
 mod tests {
     use super::*;
-    use std::env;
     use tanzim_source::{Options, SourceBuilder};
+    use tanzim_testing::environment::run;
 
     fn make_source_with_options(options: Options) -> Source {
         let mut builder = SourceBuilder::new().with_source("env");
@@ -318,53 +322,55 @@ mod tests {
 
     #[test]
     fn load_groups_environment_variables_by_name() {
-        // SAFETY: test-only; single-threaded test env vars.
-        unsafe {
-            env::set_var("TANZIM_TEST__FOO__BAR", "baz");
-            env::set_var("TANZIM_TEST__QUX__ABC", "123");
-        }
+        run(|env| {
+            env.set_env("TANZIM_TEST__FOO__BAR", "baz")?;
+            env.set_env("TANZIM_TEST__QUX__ABC", "123")?;
 
-        let mut options = Options::new();
-        options.insert("prefix", "TANZIM_TEST__");
-        options.insert("separator", "__");
-        let loaded = Env::new().load(make_source_with_options(options)).unwrap();
+            let mut options = Options::new();
+            options.insert("prefix", "TANZIM_TEST__");
+            options.insert("separator", "__");
+            let loaded = Env::new().load(make_source_with_options(options)).unwrap();
 
-        let mut foo = None;
-        let mut qux = None;
-        for payload in &loaded {
-            if payload.maybe_name == Some("foo".to_string()) {
-                foo = Some(payload);
-            } else if payload.maybe_name == Some("qux".to_string()) {
-                qux = Some(payload);
+            let mut foo = None;
+            let mut qux = None;
+            for payload in &loaded {
+                if payload.maybe_name == Some("foo".to_string()) {
+                    foo = Some(payload);
+                } else if payload.maybe_name == Some("qux".to_string()) {
+                    qux = Some(payload);
+                }
             }
-        }
 
-        let foo = foo.expect("foo payload");
-        assert_eq!(foo.maybe_format, Some("env".to_string()));
-        assert!(String::from_utf8_lossy(&foo.content).contains("BAR=\"baz\""));
+            let foo = foo.expect("foo payload");
+            assert_eq!(foo.maybe_format, Some("env".to_string()));
+            assert!(String::from_utf8_lossy(&foo.content).contains("BAR=\"baz\""));
 
-        let qux = qux.expect("qux payload");
-        assert!(String::from_utf8_lossy(&qux.content).contains("ABC=\"123\""));
+            let qux = qux.expect("qux payload");
+            assert!(String::from_utf8_lossy(&qux.content).contains("ABC=\"123\""));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
     fn load_without_separator_puts_all_keys_in_one_payload() {
-        // SAFETY: test-only; single-threaded test env vars.
-        unsafe {
-            env::set_var("TANZIM_FLAT__FOO", "1");
-            env::set_var("TANZIM_FLAT__BAR", "2");
-        }
+        run(|env| {
+            env.set_env("TANZIM_FLAT__FOO", "1")?;
+            env.set_env("TANZIM_FLAT__BAR", "2")?;
 
-        let mut options = Options::new();
-        options.insert("prefix", "TANZIM_FLAT__");
-        let loaded = Env::new().load(make_source_with_options(options)).unwrap();
+            let mut options = Options::new();
+            options.insert("prefix", "TANZIM_FLAT__");
+            let loaded = Env::new().load(make_source_with_options(options)).unwrap();
 
-        assert_eq!(loaded.len(), 1);
-        let payload = &loaded[0];
-        assert!(payload.maybe_name.is_none());
-        let content = String::from_utf8_lossy(&payload.content);
-        assert!(content.contains("FOO=\"1\""));
-        assert!(content.contains("BAR=\"2\""));
+            assert_eq!(loaded.len(), 1);
+            let payload = &loaded[0];
+            assert!(payload.maybe_name.is_none());
+            let content = String::from_utf8_lossy(&payload.content);
+            assert!(content.contains("FOO=\"1\""));
+            assert!(content.contains("BAR=\"2\""));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -380,16 +386,18 @@ mod tests {
 
     #[test]
     fn load_honors_strip_prefix_and_lowercase_options() {
-        unsafe {
-            env::set_var("TANZIM_CASE__Foo__BAR", "1");
-        }
-        let mut options = Options::new();
-        options.insert("prefix", "TANZIM_CASE__");
-        options.insert("separator", "__");
-        options.insert("lowercase", false);
-        let loaded = Env::new().load(make_source_with_options(options)).unwrap();
-        assert_eq!(loaded.len(), 1);
-        assert_eq!(loaded[0].maybe_name.as_deref(), Some("Foo"));
+        run(|env| {
+            env.set_env("TANZIM_CASE__Foo__BAR", "1")?;
+            let mut options = Options::new();
+            options.insert("prefix", "TANZIM_CASE__");
+            options.insert("separator", "__");
+            options.insert("lowercase", false);
+            let loaded = Env::new().load(make_source_with_options(options)).unwrap();
+            assert_eq!(loaded.len(), 1);
+            assert_eq!(loaded[0].maybe_name.as_deref(), Some("Foo"));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -413,16 +421,18 @@ mod tests {
 
     #[test]
     fn with_prefix_override_skips_source_option() {
-        unsafe {
-            env::set_var("PINNED__X", "yes");
-        }
-        let source = SourceBuilder::new()
-            .with_source("env")
-            .with_option("prefix", "OTHER__")
-            .build()
-            .unwrap();
-        let loaded = Env::new().with_prefix("PINNED__").load(source).unwrap();
-        let content = String::from_utf8_lossy(&loaded[0].content);
-        assert!(content.contains(r#"X="yes""#));
+        run(|env| {
+            env.set_env("PINNED__X", "yes")?;
+            let source = SourceBuilder::new()
+                .with_source("env")
+                .with_option("prefix", "OTHER__")
+                .build()
+                .unwrap();
+            let loaded = Env::new().with_prefix("PINNED__").load(source).unwrap();
+            let content = String::from_utf8_lossy(&loaded[0].content);
+            assert!(content.contains(r#"X="yes""#));
+            Ok(())
+        })
+        .unwrap();
     }
 }

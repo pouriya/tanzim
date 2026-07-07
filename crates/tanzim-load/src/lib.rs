@@ -309,18 +309,20 @@ impl From<Box<dyn StdError + Send + Sync>> for Error {
 ///     }
 /// }
 ///
-/// // SAFETY: example-only; single-threaded doctest env vars.
-/// unsafe {
-///     env::set_var("DB_HOST", "localhost");
-///     env::set_var("DB_PORT", "5432");
-/// }
-///
+/// # tanzim_testing::environment::run(|sandbox| {
+/// #     sandbox.set_env("DB_HOST", "localhost")?;
+/// #     sandbox.set_env("DB_PORT", "5432")?;
+/// // The process environment holds `DB_HOST=localhost` and `DB_PORT=5432`.
 /// let source = Source::parse("selected-env(keys=[DB_HOST,DB_PORT])").unwrap();
 ///
 /// let payloads = SelectedEnv.load(source).unwrap();
 /// let content = String::from_utf8_lossy(&payloads[0].content);
+/// // The loader emits one `KEY="value"` line per requested variable.
 /// assert!(content.contains(r#"DB_HOST="localhost""#));
 /// assert!(content.contains(r#"DB_PORT="5432""#));
+/// # Ok(())
+/// # })
+/// # .unwrap();
 /// ```
 pub trait Load {
     /// Human-readable name used in error messages.
