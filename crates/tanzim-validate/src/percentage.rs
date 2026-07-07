@@ -58,16 +58,3 @@ impl Validator for Percentage {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn int_and_ratio() {
-        assert!(Percentage::new().validate(&mut Value::Int(50)).is_ok());
-        assert!(Percentage::new().validate(&mut Value::Int(150)).is_err());
-        assert!(Percentage::new().validate(&mut Value::Float(0.5)).is_ok());
-        assert!(Percentage::new().validate(&mut Value::Float(1.5)).is_err());
-    }
-}

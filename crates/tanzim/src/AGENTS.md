@@ -16,3 +16,7 @@
 - `PipelineMultiBuilder` / `PipelineMulti` — load → parse → merge → validate; returns `Merged` (`HashMap<Option<String>, ...>`)
 - Same build validation and included loader/parser helpers as single
 - `with_schema(Option<String>, schema)` registers per-entry validation schemas
+
+## Testing
+
+No tests here — they belong in `tests/`, not `src/`.

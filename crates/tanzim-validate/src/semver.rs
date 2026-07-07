@@ -51,22 +51,3 @@ impl Validator for Semver {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn accepts_and_rejects() {
-        assert!(
-            Semver::new()
-                .validate(&mut Value::String("1.2.3".into()))
-                .is_ok()
-        );
-        assert!(
-            Semver::new()
-                .validate(&mut Value::String("1.2".into()))
-                .is_err()
-        );
-    }
-}

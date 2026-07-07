@@ -6,3 +6,5 @@ Two source files — no sub-modules.
 - `error.rs` — `Error` enum with the two-pass display (single-line default, multi-line `{:#}`)
 
 Edit `value.rs` to add value accessors or change Map behaviour. Edit `error.rs` to change how parse errors are rendered to users.
+
+No tests here — they belong in `tests/`, not `src/`.

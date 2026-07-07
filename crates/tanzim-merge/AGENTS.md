@@ -24,3 +24,7 @@ Third stage of the pipeline: groups parsed payloads by entry name and combines t
 - `plan.rs` — the merge tree: `MergePlan`, the `src`/`deep`/`last_wins`/`merge_with` constructors, `SourceGroup`, and `evaluate`
 
 Add new merge strategies in `lib.rs`; tree/composition logic lives in `plan.rs`.
+
+## Testing
+
+No tests in `src/`. Add/move tests to `tests/` (see workspace `AGENTS.md` for naming).

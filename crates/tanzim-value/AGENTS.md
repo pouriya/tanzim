@@ -18,3 +18,7 @@ This crate contains only type definitions and display formatting. It has no depe
 
 - `value.rs` — `Value`, `LocatedValue`, `Map`, `Location`, `ValueType`
 - `error.rs` — `Error` with alternate `{:#}` display (snippet + caret)
+
+## Testing
+
+No tests in `src/`. Add/move tests to `tests/` (see workspace `AGENTS.md` for naming).

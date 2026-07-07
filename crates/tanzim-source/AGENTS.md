@@ -25,3 +25,7 @@ Examples: `env`, `env(prefix=APP_)`, `file:/etc/app`, `file(on_error=(load=skip)
 - `serde.rs` — (feature `serde`) serialize/deserialize `Source` as its canonical string
 
 When editing the parser, remember that `Source: Display` must round-trip through `parse()`.
+
+## Testing
+
+No tests in `src/`. Add/move tests to `tests/` (see workspace `AGENTS.md` for naming).

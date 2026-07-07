@@ -6,3 +6,5 @@
 - `serde.rs` — serde glue (feature-gated)
 
 The grammar lives only in `parse.rs`. Display (canonical form) is also in `parse.rs` and must round-trip.
+
+No tests here — they belong in `tests/`, not `src/`.

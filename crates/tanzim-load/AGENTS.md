@@ -28,3 +28,7 @@ First stage of the pipeline: reads raw configuration bytes from a declared sourc
 ## Adding a loader
 
 Implement `Load`. Return one `Payload` per config entry. Set `maybe_name` to the entry name and `maybe_format` to the file extension / format hint so the parser stage can auto-select the right parser. Only validate options your loader reads via `Options::get`; ignore unknown keys.
+
+## Testing
+
+No tests in `src/`. Add/move tests to `tests/` (see workspace `AGENTS.md` for naming).

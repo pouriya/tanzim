@@ -26,5 +26,10 @@ serde_json = "1.0.140"
 name = "parse_sources"
 path = "examples/parse_sources.rs"
 
+[[test]]
+name = "serde"
+path = "tests/serde.rs"
+required-features = ["serde"]
+
 [package.metadata.docs.rs]
 all-features = true

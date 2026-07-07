@@ -118,5 +118,55 @@ name = "schema"
 path = "examples/schema.rs"
 required-features = ["schema"]
 
+[[test]]
+name = "bytesize"
+path = "tests/bytesize.rs"
+required-features = ["bytesize"]
+
+[[test]]
+name = "cidr"
+path = "tests/cidr.rs"
+required-features = ["cidr"]
+
+[[test]]
+name = "datetime"
+path = "tests/datetime.rs"
+required-features = ["datetime"]
+
+[[test]]
+name = "duration"
+path = "tests/duration.rs"
+required-features = ["duration"]
+
+[[test]]
+name = "encoding"
+path = "tests/encoding.rs"
+required-features = ["encoding"]
+
+[[test]]
+name = "regex"
+path = "tests/regex.rs"
+required-features = ["regex"]
+
+[[test]]
+name = "semver"
+path = "tests/semver.rs"
+required-features = ["semver"]
+
+[[test]]
+name = "url"
+path = "tests/url.rs"
+required-features = ["url"]
+
+[[test]]
+name = "uuid"
+path = "tests/uuid.rs"
+required-features = ["uuid"]
+
+[[test]]
+name = "schema"
+path = "tests/schema.rs"
+required-features = ["full"]
+
 [package.metadata.docs.rs]
 all-features = true

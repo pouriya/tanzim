@@ -29,6 +29,10 @@ Source strings
 
 `pipeline::single::Single::run()` and `pipeline::multi::Multi::run()` execute all stages. Each stage can also be called individually via `load()`, `parse()`, `merge()` (and `unify()` for single). Construct either pipeline with `default()` (all feature-enabled loaders + parsers; global merger defaults to `LastWins`) or `empty()` (nothing registered) — there is no `new()`. `with_source`/`add_source` accept a string or a `Source` and return `Result` (parse errors → `Error::Source`); `with_source_merged` binds a per-source merger; `with_merge_plan` supplies an explicit `merger::plan::MergePlan` tree instead of the simple builders (mixing the two is `Error::PlanConflict`). `parse()` returns `Vec<Parsed>`, `merge()` returns `Merged` (a map of named `Entry` values); single `run()` returns one unified `Entry`, multi `run()` returns `Merged`. `Parsed`/`Entry`/`Merged` are structs with `payload()`/`payloads()`/`value()` accessors (no public fields).
 
+## Testing
+
+No `#[cfg(test)]` blocks in `src/` — ever. All tests live in `tests/`. Naming: `lib.rs` tests → `tests/all.rs`; module `x` → `tests/x.rs`; submodule `a::b` → `tests/a_b.rs`. A test needing a private item with no public path is deleted, not kept inline and not exposed via a new `pub`.
+
 ## Key conventions
 
 - `Payload::maybe_name` is `Option<String>`: `None` means unnamed; all unnamed payloads share the `None` key in the merger.

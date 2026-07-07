@@ -37,5 +37,20 @@ name = "load_config"
 path = "examples/load_config.rs"
 required-features = ["full"]
 
+[[test]]
+name = "env"
+path = "tests/env.rs"
+required-features = ["env"]
+
+[[test]]
+name = "file"
+path = "tests/file.rs"
+required-features = ["file"]
+
+[[test]]
+name = "http"
+path = "tests/http.rs"
+required-features = ["http"]
+
 [package.metadata.docs.rs]
 all-features = true

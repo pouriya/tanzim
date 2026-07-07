@@ -49,3 +49,7 @@ Because the registry consumes a `Value`, a tree from `tanzim-parse` can be fed d
 One module per validator (`integer.rs`, `static_map.rs`, `net.rs`, …), `error.rs`, `number.rs`
 (holds the shared `Sign` helper), and `schema.rs` (the `schema` feature). Examples in
 `examples/` (`builder`, `schema`).
+
+## Testing
+
+No tests in `src/`. Add/move tests to `tests/` (see workspace `AGENTS.md` for naming).

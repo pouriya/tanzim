@@ -50,22 +50,3 @@ impl Validator for NonEmpty {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn rejects_blank() {
-        assert!(
-            NonEmpty::new()
-                .validate(&mut Value::String("x".into()))
-                .is_ok()
-        );
-        assert!(
-            NonEmpty::new()
-                .validate(&mut Value::String("   ".into()))
-                .is_err()
-        );
-    }
-}

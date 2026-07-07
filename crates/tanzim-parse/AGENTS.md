@@ -28,3 +28,7 @@ Second stage of the pipeline: parses raw bytes into typed, source-located value 
 ## Adding a parser
 
 Implement `Parse`. Return `LocatedValue` with locations attached to every node. Use `is_format_supported` to enable auto-detection when `Payload::maybe_format` is `None`.
+
+## Testing
+
+No tests in `src/`. Add/move tests to `tests/` (see workspace `AGENTS.md` for naming).

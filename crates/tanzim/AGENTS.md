@@ -40,3 +40,7 @@ Facade crate that wires the full load → parse → merge pipeline behind two mo
   Transparent variants forward the formatter with `std::fmt::Display::fmt(inner, f)` so `{error:#}`
   reaches the wrapped error's alternate form (source snippet / caret).
 - `NoLoader` and `NoParser` include the source string without options via `source_display()`.
+
+## Testing
+
+No tests in `src/`. Add/move tests to `tests/` (see workspace `AGENTS.md` for naming).

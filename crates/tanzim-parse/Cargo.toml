@@ -37,5 +37,25 @@ name = "parse_config_file"
 path = "examples/parse_config_file.rs"
 required-features = ["full"]
 
+[[test]]
+name = "env"
+path = "tests/env.rs"
+required-features = ["env"]
+
+[[test]]
+name = "json"
+path = "tests/json.rs"
+required-features = ["json"]
+
+[[test]]
+name = "toml"
+path = "tests/toml.rs"
+required-features = ["toml"]
+
+[[test]]
+name = "yaml"
+path = "tests/yaml.rs"
+required-features = ["yaml"]
+
 [package.metadata.docs.rs]
 all-features = true
