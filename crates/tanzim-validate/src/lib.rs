@@ -177,6 +177,12 @@ impl<V: Validator + 'static> From<V> for Box<dyn Validator> {
     }
 }
 
+impl<V: Validator + Send + Sync + 'static> From<V> for Box<dyn Validator + Send + Sync> {
+    fn from(validator: V) -> Self {
+        Box::new(validator)
+    }
+}
+
 /// Getters and fluent setters for every validator's [`Meta`].
 ///
 /// Invoked via [`impl_meta_methods!`] on each concrete validator so

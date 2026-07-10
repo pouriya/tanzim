@@ -347,7 +347,7 @@ impl Node<'_> {
     }
 
     /// Build a required nested validator from a sub-schema field.
-    pub fn child(&self, field: &str) -> Result<Box<dyn Validator>, SchemaError> {
+    pub fn child(&self, field: &str) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> {
         match self.map.get(field) {
             Some(entry) => self.build_sub(entry, field),
             None => Err(self.missing(field)),
@@ -355,7 +355,10 @@ impl Node<'_> {
     }
 
     /// Build an optional nested validator from a sub-schema field.
-    pub fn opt_child(&self, field: &str) -> Result<Option<Box<dyn Validator>>, SchemaError> {
+    pub fn opt_child(
+        &self,
+        field: &str,
+    ) -> Result<Option<Box<dyn Validator + Send + Sync>>, SchemaError> {
         match self.map.get(field) {
             Some(entry) => Ok(Some(self.build_sub(entry, field)?)),
             None => Ok(None),
@@ -366,7 +369,7 @@ impl Node<'_> {
         &self,
         entry: &LocatedValue,
         field: &str,
-    ) -> Result<Box<dyn Validator>, SchemaError> {
+    ) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> {
         let mut path = self.path.clone();
         path.push(Segment::Key(field.to_string()));
         let node = self.registry.node(entry, path)?;
@@ -375,7 +378,7 @@ impl Node<'_> {
 }
 
 /// Constructs one validator kind from its [`Node`].
-pub type Constructor = Box<dyn Fn(&Node) -> Result<Box<dyn Validator>, SchemaError>>;
+pub type Constructor = Box<dyn Fn(&Node) -> Result<Box<dyn Validator + Send + Sync>, SchemaError>>;
 
 /// Maps `"type"` tags to validator constructors.
 pub struct Registry {
@@ -400,19 +403,25 @@ impl Registry {
     pub fn register(
         &mut self,
         tag: impl Into<String>,
-        constructor: impl Fn(&Node) -> Result<Box<dyn Validator>, SchemaError> + 'static,
+        constructor: impl Fn(&Node) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> + 'static,
     ) {
         self.constructors.insert(tag.into(), Box::new(constructor));
     }
 
     /// Build a validator from a located schema node, seeding source locations into errors.
-    pub fn build(&self, value: &LocatedValue) -> Result<Box<dyn Validator>, SchemaError> {
+    pub fn build(
+        &self,
+        value: &LocatedValue,
+    ) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> {
         let node = self.node(value, Vec::new())?;
         self.build_node(&node)
     }
 
     /// Build a validator from a bare [`Value`] (errors carry no source location).
-    pub fn build_value(&self, value: &Value) -> Result<Box<dyn Validator>, SchemaError> {
+    pub fn build_value(
+        &self,
+        value: &Value,
+    ) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> {
         let located = LocatedValue::new(value.clone(), schema_location());
         self.build(&located)
     }
@@ -437,7 +446,7 @@ impl Registry {
         }
     }
 
-    fn build_node(&self, node: &Node) -> Result<Box<dyn Validator>, SchemaError> {
+    fn build_node(&self, node: &Node) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> {
         let tag = node.req_str("type")?;
         match self.constructors.get(tag) {
             Some(constructor) => constructor(node),
@@ -765,11 +774,11 @@ impl Registry {
 }
 
 /// Build a validator from a located schema node using a default [`Registry`].
-pub fn build(value: &LocatedValue) -> Result<Box<dyn Validator>, SchemaError> {
+pub fn build(value: &LocatedValue) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> {
     Registry::with_builtins().build(value)
 }
 
 /// Build a validator from a bare [`Value`] using a default [`Registry`].
-pub fn build_value(value: &Value) -> Result<Box<dyn Validator>, SchemaError> {
+pub fn build_value(value: &Value) -> Result<Box<dyn Validator + Send + Sync>, SchemaError> {
     Registry::with_builtins().build_value(value)
 }

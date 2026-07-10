@@ -5,7 +5,7 @@ use tanzim_value::{Value, ValueType};
 struct Field {
     key: String,
     required: bool,
-    validator: Option<Box<dyn Validator>>,
+    validator: Option<Box<dyn Validator + Send + Sync>>,
 }
 
 /// (`static_map` feature) Accepts a map with a known set of keys.
@@ -39,7 +39,7 @@ impl StaticMap {
     pub fn required(
         mut self,
         key: impl Into<String>,
-        validator: impl Into<Box<dyn Validator>>,
+        validator: impl Into<Box<dyn Validator + Send + Sync>>,
     ) -> Self {
         self.fields.push(Field {
             key: key.into(),
@@ -53,7 +53,7 @@ impl StaticMap {
     pub fn optional(
         mut self,
         key: impl Into<String>,
-        validator: impl Into<Box<dyn Validator>>,
+        validator: impl Into<Box<dyn Validator + Send + Sync>>,
     ) -> Self {
         self.fields.push(Field {
             key: key.into(),

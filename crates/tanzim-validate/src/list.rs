@@ -13,7 +13,7 @@ pub struct List {
     min_len: Option<usize>,
     max_len: Option<usize>,
     unique: bool,
-    items: Option<Box<dyn Validator>>,
+    items: Option<Box<dyn Validator + Send + Sync>>,
 }
 
 impl List {
@@ -43,7 +43,7 @@ impl List {
     }
 
     /// Validate every item with `validator`.
-    pub fn items(mut self, validator: impl Into<Box<dyn Validator>>) -> Self {
+    pub fn items(mut self, validator: impl Into<Box<dyn Validator + Send + Sync>>) -> Self {
         self.items = Some(validator.into());
         self
     }

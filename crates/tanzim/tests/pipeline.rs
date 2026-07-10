@@ -1,6 +1,6 @@
 use tanzim::{
-    Config, ConfigBuilder, Sources,
-    config::Error as SingleError,
+    Config,
+    config::{ConfigBuilder, Error as SingleError, Plan, Sources},
     loader::closure::Closure as LoaderClosure,
     merger::{DeepMerge, LastWins},
     parser::closure::Closure as ParserClosure,
@@ -21,9 +21,9 @@ fn public_types_are_send_and_sync() {
     assert_send_sync::<Config>();
     assert_send_sync::<Pipeline>();
     assert_send_sync::<ConfigBuilder<Sources>>();
-    assert_send_sync::<ConfigBuilder<tanzim::Plan>>();
+    assert_send_sync::<ConfigBuilder<Plan>>();
     assert_send_sync::<PipelineBuilder<Sources>>();
-    assert_send_sync::<PipelineBuilder<tanzim::Plan>>();
+    assert_send_sync::<PipelineBuilder<Plan>>();
     assert_send_sync::<tanzim::merger::plan::MergePlan>();
 }
 
@@ -97,9 +97,9 @@ fn failing_loader() -> LoaderClosure {
     )
 }
 
-fn schema_from_json(json: &str) -> Value {
+fn schema_from_json(json: &str) -> Box<dyn tanzim::validator::Validator + Send + Sync> {
     let schema: SchemaValue = serde_json::from_str(json).unwrap();
-    schema.into_value()
+    tanzim::validator::build_value(schema.value()).unwrap()
 }
 
 fn build_single() -> ConfigBuilder<Sources> {
@@ -302,18 +302,10 @@ fn single_validate_without_schema_is_noop() {
 }
 
 #[test]
-fn single_validate_rejects_invalid_schema() {
-    let pipeline = build_single()
-        .with_schema(schema_from_json(r#"{"type": "nope"}"#))
-        .build();
-    let mut value = LocatedValue::new(
-        Value::String("hello".into()),
-        Location::at("mock", "one", None, None, None),
-    );
-    match pipeline.stages().validate(&mut value) {
-        Ok(()) => panic!("expected schema error"),
-        Err(error) => assert!(matches!(error, SingleError::Schema { .. })),
-    }
+fn build_value_rejects_invalid_schema() {
+    // Invalid schema documents fail when the validator is built, before any pipeline runs.
+    let schema: SchemaValue = serde_json::from_str(r#"{"type": "nope"}"#).unwrap();
+    assert!(tanzim::validator::build_value(schema.value()).is_err());
 }
 
 #[test]
@@ -652,9 +644,8 @@ fn single_run_with_valid_schema_coerces_configuration() {
 
 #[test]
 fn single_schema_accessor_returns_registered_schema() {
-    let schema = schema_from_json(r#"{"type": "string"}"#);
-    let pipeline = build_single().with_schema(schema.clone());
-    assert_eq!(pipeline.schema(), Some(&schema));
+    let pipeline = build_single().with_schema(schema_from_json(r#"{"type": "string"}"#));
+    assert!(pipeline.schema().is_some());
 }
 
 #[test]
@@ -683,21 +674,6 @@ fn multi_load_and_parse_error_paths() {
     match stages.parse(&loaded) {
         Ok(_) => panic!("expected parse error"),
         Err(error) => assert!(matches!(error, MultiError::Parse(_))),
-    }
-}
-
-#[test]
-fn multi_validate_rejects_invalid_schema() {
-    let pipeline = build_multi()
-        .with_schema(Some("app".into()), schema_from_json(r#"{"type": "nope"}"#))
-        .build();
-    let stages = pipeline.stages();
-    let loaded = stages.load().unwrap();
-    let parsed = stages.parse(&loaded).unwrap();
-    let mut merged = stages.merge(&parsed).unwrap();
-    match stages.validate(&mut merged) {
-        Ok(()) => panic!("expected schema error"),
-        Err(error) => assert!(matches!(error, MultiError::Schema { .. })),
     }
 }
 

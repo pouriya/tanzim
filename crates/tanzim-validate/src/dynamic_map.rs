@@ -12,7 +12,7 @@ pub struct DynamicMap {
     meta: Meta,
     min_len: Option<usize>,
     max_len: Option<usize>,
-    values: Option<Box<dyn Validator>>,
+    values: Option<Box<dyn Validator + Send + Sync>>,
 }
 
 impl DynamicMap {
@@ -37,7 +37,7 @@ impl DynamicMap {
     }
 
     /// Validate every value with `validator`.
-    pub fn values(mut self, validator: impl Into<Box<dyn Validator>>) -> Self {
+    pub fn values(mut self, validator: impl Into<Box<dyn Validator + Send + Sync>>) -> Self {
         self.values = Some(validator.into());
         self
     }

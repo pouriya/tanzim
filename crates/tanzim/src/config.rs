@@ -75,10 +75,6 @@ pub enum Error {
     },
 
     #[cfg(feature = "validate-schema")]
-    Schema {
-        inner: validator::SchemaError,
-    },
-    #[cfg(feature = "validate-schema")]
     Validate {
         inner: validator::Error,
     },
@@ -101,11 +97,6 @@ impl std::fmt::Display for Error {
                 write!(f, "no parser found for format `{format}` in `{at}`")
             }
             #[cfg(feature = "validate-schema")]
-            Self::Schema { inner } => {
-                write!(f, "schema is invalid: ")?;
-                std::fmt::Display::fmt(inner, f)
-            }
-            #[cfg(feature = "validate-schema")]
             Self::Validate { inner } => {
                 write!(f, "configuration failed validation: ")?;
                 std::fmt::Display::fmt(inner, f)
@@ -121,8 +112,6 @@ impl std::error::Error for Error {
             Self::Load(error) => Some(error),
             Self::Parse(error) | Self::Deserialize(error) => Some(error),
             Self::Merge(error) => Some(error),
-            #[cfg(feature = "validate-schema")]
-            Self::Schema { inner } => Some(inner),
             #[cfg(feature = "validate-schema")]
             Self::Validate { inner } => Some(inner),
             Self::NoLoaders | Self::NoParsers | Self::NoLoader { .. } | Self::NoParser { .. } => {
@@ -164,7 +153,7 @@ pub struct ConfigBuilder<State: BuilderState> {
     loaders: Vec<Box<dyn loader::Load + Send + Sync>>,
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
-    schema: Option<validator::Value>,
+    schema: Option<Box<dyn validator::Validator + Send + Sync>>,
     _state: PhantomData<State>,
 }
 
@@ -186,6 +175,18 @@ impl Config {
             schema: None,
             _state: PhantomData,
         }
+    }
+
+    /// Start a [`ConfigBuilder<Sources>`](ConfigBuilder) pre-loaded with every feature-enabled
+    /// default loader and parser — the common starting point. Add sources with
+    /// [`with_source`](ConfigBuilder::with_source) and finish with
+    /// [`try_deserialize`](ConfigBuilder::try_deserialize) (or [`with_schema`](ConfigBuilder::with_schema)
+    /// first to validate).
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> ConfigBuilder<Sources> {
+        Self::builder()
+            .with_default_loaders()
+            .with_default_parsers()
     }
 
     /// Start a [`ConfigBuilder<Plan>`](ConfigBuilder) from an explicit [`MergePlan`] tree. Build the
@@ -257,12 +258,12 @@ impl<State: BuilderState> ConfigBuilder<State> {
     }
 
     #[cfg(feature = "validate-schema")]
-    pub fn schema(&self) -> Option<&validator::Value> {
-        self.schema.as_ref()
+    pub fn schema(&self) -> Option<&(dyn validator::Validator + Send + Sync)> {
+        self.schema.as_deref()
     }
 
     #[cfg(feature = "validate-schema")]
-    pub fn schema_mut(&mut self) -> &mut Option<validator::Value> {
+    pub fn schema_mut(&mut self) -> &mut Option<Box<dyn validator::Validator + Send + Sync>> {
         &mut self.schema
     }
 
@@ -331,8 +332,15 @@ impl<State: BuilderState> ConfigBuilder<State> {
         self.with_default_parsers()
     }
 
+    /// Register a validator to check (and coerce) the unified configuration before deserialization.
+    /// Pass any [`Validator`](validator::Validator) — build one fluently (e.g.
+    /// `StaticMap::new().required("port", Integer::new().min(1).max(65535))`), or turn a declarative
+    /// schema document into one with [`validator::build_value`].
     #[cfg(feature = "validate-schema")]
-    pub fn with_schema(mut self, schema: impl Into<validator::Value>) -> Self {
+    pub fn with_schema(
+        mut self,
+        schema: impl Into<Box<dyn validator::Validator + Send + Sync>>,
+    ) -> Self {
         self.schema = Some(schema.into());
         self
     }
@@ -425,7 +433,7 @@ pub struct Config {
     loaders: Vec<Box<dyn loader::Load + Send + Sync>>,
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
-    schema: Option<validator::Value>,
+    schema: Option<Box<dyn validator::Validator + Send + Sync>>,
 }
 
 impl Config {
@@ -451,8 +459,8 @@ impl Config {
     }
 
     #[cfg(feature = "validate-schema")]
-    pub fn schema(&self) -> Option<&validator::Value> {
-        self.schema.as_ref()
+    pub fn schema(&self) -> Option<&(dyn validator::Validator + Send + Sync)> {
+        self.schema.as_deref()
     }
 
     /// The individual pipeline stages (`load` → `parse` → `merge` → `unify` → `validate`), for
@@ -787,14 +795,7 @@ impl ConfigStages<'_> {
             let Some(schema) = &self.config.schema else {
                 return Ok(());
             };
-            let registry = validator::Registry::with_builtins();
-            let validator = match registry.build_value(schema) {
-                Ok(validator) => validator,
-                Err(inner) => {
-                    return Err(Error::Schema { inner });
-                }
-            };
-            match validator::validate(validator.as_ref(), _value) {
+            match validator::validate(schema.as_ref(), _value) {
                 Ok(()) => {}
                 Err(inner) => {
                     return Err(Error::Validate { inner });

@@ -10,8 +10,8 @@ use tanzim_value::Value;
 /// errors are combined into a single [`ErrorKind::Either`] that reports what each expected.
 pub struct Either {
     meta: Meta,
-    first: Box<dyn Validator>,
-    second: Box<dyn Validator>,
+    first: Box<dyn Validator + Send + Sync>,
+    second: Box<dyn Validator + Send + Sync>,
 }
 
 impl Either {
@@ -22,8 +22,8 @@ impl Either {
     }
 
     pub fn new(
-        first: impl Into<Box<dyn Validator>>,
-        second: impl Into<Box<dyn Validator>>,
+        first: impl Into<Box<dyn Validator + Send + Sync>>,
+        second: impl Into<Box<dyn Validator + Send + Sync>>,
     ) -> Self {
         Self {
             meta: Meta::default(),

@@ -25,9 +25,11 @@ use tanzim_source::{OnError, Stage};
 #[cfg(feature = "validate-schema")]
 use crate::validator;
 
-/// Validation schemas keyed by merged entry name.
+/// Validation schemas keyed by merged entry name (`None` = the unnamed bucket). Each value is a
+/// [`Validator`](validator::Validator) — build one fluently or via [`validator::build_value`].
 #[cfg(feature = "validate-schema")]
-pub type Schemas = std::collections::HashMap<Option<String>, validator::Value>;
+pub type Schemas =
+    std::collections::HashMap<Option<String>, Box<dyn validator::Validator + Send + Sync>>;
 
 fn source_display(cs: &Source) -> String {
     let mut s = cs.source().to_string();
@@ -57,11 +59,6 @@ pub enum Error {
     },
 
     #[cfg(feature = "validate-schema")]
-    Schema {
-        name: Option<String>,
-        inner: validator::SchemaError,
-    },
-    #[cfg(feature = "validate-schema")]
     Validate {
         name: Option<String>,
         inner: validator::Error,
@@ -85,11 +82,6 @@ impl std::fmt::Display for Error {
                 write!(f, "no parser found for format `{format}` in `{at}`")
             }
             #[cfg(feature = "validate-schema")]
-            Self::Schema { name, inner } => {
-                write!(f, "schema for `{name:?}` is invalid: ")?;
-                std::fmt::Display::fmt(inner, f)
-            }
-            #[cfg(feature = "validate-schema")]
             Self::Validate { name, inner } => {
                 write!(f, "configuration `{name:?}` failed validation: ")?;
                 std::fmt::Display::fmt(inner, f)
@@ -105,8 +97,6 @@ impl std::error::Error for Error {
             Self::Load(error) => Some(error),
             Self::Parse(error) | Self::Deserialize(error) => Some(error),
             Self::Merge(error) => Some(error),
-            #[cfg(feature = "validate-schema")]
-            Self::Schema { inner, .. } => Some(inner),
             #[cfg(feature = "validate-schema")]
             Self::Validate { inner, .. } => Some(inner),
             Self::NoLoaders | Self::NoParsers | Self::NoLoader { .. } | Self::NoParser { .. } => {
@@ -169,6 +159,17 @@ impl Pipeline {
             schemas: Schemas::new(),
             _state: PhantomData,
         }
+    }
+
+    /// Start a [`PipelineBuilder<Sources>`](PipelineBuilder) pre-loaded with every feature-enabled
+    /// default loader and parser — the common starting point. Add sources with
+    /// [`with_source`](PipelineBuilder::with_source) and finish with
+    /// [`try_deserialize`](PipelineBuilder::try_deserialize).
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> PipelineBuilder<Sources> {
+        Self::builder()
+            .with_default_loaders()
+            .with_default_parsers()
     }
 
     /// Start a [`PipelineBuilder<Plan>`](PipelineBuilder) from an explicit [`MergePlan`] tree (see
@@ -292,11 +293,14 @@ impl<State: BuilderState> PipelineBuilder<State> {
         self.with_default_parsers()
     }
 
+    /// Register a validator for one named entry (`None` = the unnamed bucket). Pass any
+    /// [`Validator`](validator::Validator) — build one fluently, or from a declarative schema
+    /// document with [`validator::build_value`].
     #[cfg(feature = "validate-schema")]
     pub fn with_schema(
         mut self,
         name: Option<String>,
-        schema: impl Into<validator::Value>,
+        schema: impl Into<Box<dyn validator::Validator + Send + Sync>>,
     ) -> Self {
         self.schemas.insert(name, schema.into());
         self
@@ -693,20 +697,9 @@ impl PipelineStages<'_> {
             if schemas.is_empty() {
                 return Ok(());
             }
-            let registry = validator::Registry::with_builtins();
             for (name, schema) in schemas {
-                let validator = match registry.build_value(schema) {
-                    Ok(validator) => validator,
-                    Err(inner) => {
-                        return Err(Error::Schema {
-                            name: name.clone(),
-                            inner,
-                        });
-                    }
-                };
                 match _merged.get_mut(name) {
-                    Some(entry) => match validator::validate(validator.as_ref(), entry.value_mut())
-                    {
+                    Some(entry) => match validator::validate(schema.as_ref(), entry.value_mut()) {
                         Ok(()) => {}
                         Err(inner) => {
                             return Err(Error::Validate {

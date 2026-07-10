@@ -115,4 +115,4 @@ Full walkthrough, features, and per-stage recipes → [crates.io](https://crates
 
 ## License
 
-Licensed under [BSD-3-Clause](LICENSE).
+Licensed under [MIT](LICENSE).
