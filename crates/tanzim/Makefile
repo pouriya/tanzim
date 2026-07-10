@@ -7,7 +7,7 @@ build:
 	cargo build -p tanzim
 	cargo build -p tanzim --no-default-features --features load-env
 	cargo build -p tanzim --no-default-features --features load-file
-	cargo build -p tanzim --no-default-features --features load-http
+	cargo build -p tanzim --no-default-features --features load-http-closure
 	cargo build -p tanzim --no-default-features --features parse-env
 	cargo build -p tanzim --no-default-features --features parse-json
 	cargo build -p tanzim --no-default-features --features parse-yaml
@@ -19,7 +19,7 @@ build:
 	cargo build -p tanzim --no-default-features --features validate-full
 	cargo build -p tanzim --no-default-features --features logging
 	cargo build -p tanzim --no-default-features --features tracing
-	cargo build -p tanzim --no-default-features --features load-env,load-file,load-http,parse-env,parse-json,parse-yaml,parse-toml
+	cargo build -p tanzim --no-default-features --features load-env,load-file,load-http-closure,parse-env,parse-json,parse-yaml,parse-toml
 	cargo build -p tanzim --no-default-features --features full
 	cargo build -p tanzim --no-default-features --features full,logging
 	cargo build -p tanzim --no-default-features --features full,tracing

@@ -9,7 +9,7 @@ pub mod closure;
 pub mod env;
 #[cfg(feature = "file")]
 pub mod file;
-#[cfg(feature = "http")]
+#[cfg(feature = "http-closure")]
 pub mod http;
 
 /// Raw bytes for one configuration entry, with its declaring [`Source`].

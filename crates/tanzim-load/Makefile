@@ -7,13 +7,13 @@ build:
 	cargo build -p tanzim-load
 	cargo build -p tanzim-load --no-default-features --features env
 	cargo build -p tanzim-load --no-default-features --features file
-	cargo build -p tanzim-load --no-default-features --features http
+	cargo build -p tanzim-load --no-default-features --features http-closure
 	cargo build -p tanzim-load --no-default-features --features logging
 	cargo build -p tanzim-load --no-default-features --features tracing
 	cargo build -p tanzim-load --no-default-features --features env,file
-	cargo build -p tanzim-load --no-default-features --features env,file,http
-	cargo build -p tanzim-load --no-default-features --features env,file,http,logging
-	cargo build -p tanzim-load --no-default-features --features env,file,http,tracing
+	cargo build -p tanzim-load --no-default-features --features env,file,http-closure
+	cargo build -p tanzim-load --no-default-features --features env,file,http-closure,logging
+	cargo build -p tanzim-load --no-default-features --features env,file,http-closure,tracing
 	cargo build -p tanzim-load --no-default-features --features full
 	cargo build -p tanzim-load --all-features
 

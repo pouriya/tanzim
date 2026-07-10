@@ -14,7 +14,7 @@ First stage of the pipeline: reads raw configuration bytes from a declared sourc
 |--------|---------|---------------|
 | `env` | `env` | `env` |
 | `file` | `file` | `file` |
-| `http` | `http` | `http` |
+| `http` | `http-closure` | `http` |
 | `closure` | — | user-defined |
 
 ## src/ layout

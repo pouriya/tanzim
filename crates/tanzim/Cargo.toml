@@ -1,6 +1,6 @@
 [package]
 name = "tanzim"
-version = "0.23.0"
+version = "0.24.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -13,7 +13,7 @@ keywords = ["configuration", "config", "cfg", "settings", "env"]
 include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
-tanzim-load = { path = "../tanzim-load", version = "0.13.0", default-features = false }
+tanzim-load = { path = "../tanzim-load", version = "0.14.0", default-features = false }
 tanzim-parse = { path = "../tanzim-parse", version = "0.18.0", default-features = false }
 tanzim-merge = { path = "../tanzim-merge", version = "0.17.0", default-features = false }
 tanzim-source = { path = "../tanzim-source", version = "0.8.0" }
@@ -28,7 +28,7 @@ tracing = { version = "0.1.40", optional = true }
 default = [
     "load-env",
     "load-file",
-    "load-http",
+    "load-http-closure",
     "parse-env",
     "validate-default",
     "validate-schema",
@@ -36,7 +36,7 @@ default = [
 
 load-env = ["tanzim-load/env"]
 load-file = ["tanzim-load/file"]
-load-http = ["tanzim-load/http"]
+load-http-closure = ["tanzim-load/http-closure"]
 
 parse-env = ["tanzim-parse/env"]
 parse-json = ["tanzim-parse/json"]
@@ -61,7 +61,7 @@ tracing = [
 full = [
     "load-env",
     "load-file",
-    "load-http",
+    "load-http-closure",
     "parse-env",
     "parse-json",
     "parse-yaml",

@@ -1,9 +1,9 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all build test clippy check-style version-check docs open-docs examples example-full cli cli-docker
+.PHONY: all build test clippy check-style check-version docs open-docs examples example-full cli cli-docker
 
-all: build clippy test check-style
+all: build clippy test check-style check-version
 
 cli:
 	cargo build --release --manifest-path tanzim/Cargo.toml
@@ -41,7 +41,7 @@ clippy:
 check-style:
 	cargo fmt --check --verbose
 
-version-check:
+check-version:
 	./crates/versioning.sh --check
 
 docs:

@@ -1,4 +1,4 @@
-//! HTTP loader (`http` feature).
+//! HTTP loader (`http-closure` feature).
 //!
 //! Fetches configuration bytes through a user-provided closure so this crate does not depend on
 //! any HTTP client library. You supply the actual transport (via [`Http::new`]); the loader

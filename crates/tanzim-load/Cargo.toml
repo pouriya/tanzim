@@ -1,6 +1,6 @@
 [package]
 name = "tanzim-load"
-version = "0.13.0"
+version = "0.14.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -20,13 +20,13 @@ tracing = { version = "0.1.40", optional = true }
 url = { version = "2.5.8", optional = true, default-features = false }
 
 [features]
-default = ["env", "file", "http"]
+default = ["env", "file", "http-closure"]
 env = []
 file = []
-http = ["dep:url"]
+http-closure = ["dep:url"]
 logging = ["dep:log"]
 tracing = ["dep:tracing"]
-full = ["env", "file", "http"]
+full = ["env", "file", "http-closure"]
 
 [dev-dependencies]
 tanzim-testing = { path = "../tanzim-testing", version = "0.2.0" }
@@ -50,7 +50,7 @@ required-features = ["file"]
 [[test]]
 name = "http"
 path = "tests/http.rs"
-required-features = ["http"]
+required-features = ["http-closure"]
 
 [package.metadata.docs.rs]
 all-features = true

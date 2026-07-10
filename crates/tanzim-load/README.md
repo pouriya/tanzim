@@ -29,7 +29,7 @@ of a full `impl Load`. See the [`Load`] rustdoc for worked details.
 |--------|---------|---------------|
 | `env` | `env` | `env` |
 | `file` | `file` | `file` |
-| `http` | `http` | `http` |
+| `http` | `http-closure` | `http` |
 | `closure` | — | any (user-defined) |
 
 ## Example
@@ -70,12 +70,12 @@ assert!(content.contains("DATABASE.HOST=\"localhost\""));
 |---------|---------|
 | `env` | `env` loader (reads environment variables) |
 | `file` | `file` loader (reads from filesystem) |
-| `http` | `http` loader (user-provided fetch closure) |
+| `http-closure` | `http` loader (user-provided fetch closure) |
 | `logging` | emit log messages via the `log` crate |
 | `tracing` | emit trace spans via the `tracing` crate |
-| `full` | `env` + `file` + `http` |
+| `full` | `env` + `file` + `http-closure` |
 
-Default features: `env`, `file`, `http`. Logging/tracing are opt-in.
+Default features: `env`, `file`, `http-closure`. Logging/tracing are opt-in.
 
 ## Relations
 

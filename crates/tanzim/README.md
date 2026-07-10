@@ -352,7 +352,7 @@ assert_eq!(names, ["db".to_string(), "web".to_string()]);
 
 | Feature | Enables |
 |---------|---------|
-| `load-env` / `load-file` / `load-http` | env / filesystem / HTTP (closure-based) loaders |
+| `load-env` / `load-file` / `load-http-closure` | env / filesystem / HTTP (closure-based) loaders |
 | `parse-env` | env parser |
 | `parse-json` / `parse-yaml` / `parse-toml` | format parsers |
 | `validate-default` | the std-only validators (no extra dependencies) |
@@ -362,7 +362,7 @@ assert_eq!(names, ["db".to_string(), "web".to_string()]);
 | `full` | all loaders + all parsers + `validate-full` (examples, smoke test) |
 | `logging` / `tracing` | optional log integration across all crates |
 
-Defaults: `load-env`, `load-file`, `load-http`, `parse-env`, `validate-default`, `validate-schema`.
+Defaults: `load-env`, `load-file`, `load-http-closure`, `parse-env`, `validate-default`, `validate-schema`.
 
 ## Examples
 
