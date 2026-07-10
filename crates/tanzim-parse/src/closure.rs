@@ -44,14 +44,15 @@ use tanzim_value::{Error, LocatedValue};
 /// Called with the [`Source`] declaration and the raw `&[u8]` bytes. Return a [`LocatedValue`]
 /// tree (ideally with a [`Location`](tanzim_value::Location) on every node), or an [`Error`] on
 /// failure.
-pub type BoxedParseFn = Box<dyn Fn(&Source, &[u8], &[Source]) -> Result<LocatedValue, Error>>;
+pub type BoxedParseFn =
+    Box<dyn Fn(&Source, &[u8], &[Source]) -> Result<LocatedValue, Error> + Send + Sync>;
 
 /// The optional auto-detection probe for a [`Closure`] parser — same contract as
 /// [`Parse::is_format_supported`].
 ///
 /// Given the raw bytes, return `Some(true)` if confident, `Some(false)` if definitely not this
 /// format, or `None` to abstain. The default (when none is set) abstains with `None`.
-pub type BoxedValidatorFn = Box<dyn Fn(&[u8]) -> Option<bool>>;
+pub type BoxedValidatorFn = Box<dyn Fn(&[u8]) -> Option<bool> + Send + Sync>;
 
 /// A [`Parse`] implementation whose behaviour is supplied by closures.
 ///

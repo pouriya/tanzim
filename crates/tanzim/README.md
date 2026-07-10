@@ -42,11 +42,13 @@ struct Server {
     port: u16,
 }
 
-// `Config::default()` pre-registers every feature-enabled loader and parser.
+// `with_default_loaders`/`with_default_parsers` register every feature-enabled loader and parser.
 // Sources are read in declared order; a deep merger folds later sources into
 // earlier ones field-by-field, so the env var wins `host` while `port` survives.
-let config: AppConfig = tanzim::Config::default()
-    .with_merger(DeepMerge::new()).unwrap()
+let config: AppConfig = tanzim::Config::builder()
+    .with_default_loaders()
+    .with_default_parsers()
+    .with_merger(DeepMerge::new())
     .with_source("file:app.toml").unwrap()
     .with_source("env(prefix=APP_,separator=__)").unwrap()
     .try_deserialize().unwrap();
@@ -73,8 +75,9 @@ The merge stage folds the sources together. Pick a global merger with `with_merg
 
 The simple builders always fold in declared order. For an **arbitrary fold** — deep-merge some
 sources, then last-wins the result against others — build a [`MergePlan`](https://docs.rs/tanzim-merge)
-yourself with the `merger::plan` constructors (`src`, `deep`, `last_wins`, `merge_with`) and hand it
-to `with_merge_plan`. The plan's `src(..)` leaves become the pipeline's sources:
+yourself with the `merger::plan` constructors (`src`, `deep`, `last_wins`, `merge_with`) and start the
+builder with `Config::from_plan(..)` instead of `Config::builder()`. The plan's `src(..)` leaves
+become the pipeline's sources:
 
 ```rust
 # #[cfg(feature = "parse-toml")]
@@ -94,12 +97,12 @@ struct App {
 }
 
 // Build the fold yourself: deep-merge `base` under `prod`.
-let config: App = tanzim::Config::default()
-    .with_merge_plan(deep(vec![
+let config: App = tanzim::Config::from_plan(deep(vec![
         src("file:base/app.toml").unwrap(),
         src("file:prod/app.toml").unwrap(),
     ]))
-    .unwrap()
+    .with_default_loaders()
+    .with_default_parsers()
     .try_deserialize()
     .unwrap();
 
@@ -110,16 +113,19 @@ assert_eq!(config.port, 8080);      // overridden by prod
 # .unwrap();
 ```
 
-The simple source builders and `with_merge_plan` are mutually exclusive — mixing them yields
-`Error::PlanConflict`. Either let the pipeline build the plan, or build it yourself.
+The two paths are separate builder modes: `Config::builder()` is a `ConfigBuilder<Sources>` (exposes
+`with_source` / `with_merger`), while `Config::from_plan(..)` is a `ConfigBuilder<Plan>` (does not).
+Mixing them — say, calling `with_source` on a plan builder — is a **compile error**, so there is no
+runtime conflict to handle.
 
 ## `Pipeline` — multiple named entries
 
 `Pipeline` keeps every entry separate, keyed by name. Names come from the source: a **file's** name
 is its filename stem (`web.toml` → `web`); an **env** source with a `separator` splits each variable
 once — the left part is the entry name, the right part is the key within it (`APP_web__port` →
-entry `web`, key `port`). Build one with the free [`pipeline::default()`] / [`pipeline::empty()`]
-functions.
+entry `web`, key `port`). Build one with `Pipeline::builder()` (add
+`with_default_loaders()`/`with_default_parsers()` for the feature-enabled defaults) or
+`Pipeline::from_plan(..)`.
 
 ### 1. Named entries, deep-merged
 
@@ -143,8 +149,10 @@ struct Service {
     url: Option<String>,
 }
 
-let services: HashMap<Option<String>, Service> = tanzim::pipeline::default()
-    .with_merger(DeepMerge::new()).unwrap()
+let services: HashMap<Option<String>, Service> = tanzim::pipeline::Pipeline::builder()
+    .with_default_loaders()
+    .with_default_parsers()
+    .with_merger(DeepMerge::new())
     .with_source("file:etc").unwrap()
     .with_source("env(prefix=APP_,separator=__)").unwrap()
     .try_deserialize().unwrap();
@@ -190,9 +198,11 @@ let schema = serde_json::from_str::<SchemaValue>(
 .unwrap()
 .into_value();
 
-// Builder pattern: `default()` registers the loaders + parsers, then add the source and the
-// per-entry schema. Schemas are keyed by entry name, so the error names the entry it came from.
-let error = tanzim::pipeline::default()
+// Builder pattern: register the loaders + parsers, then add the source and the per-entry schema.
+// Schemas are keyed by entry name, so the error names the entry it came from.
+let error = tanzim::pipeline::Pipeline::builder()
+    .with_default_loaders()
+    .with_default_parsers()
     .with_source("file:etc").unwrap()
     .with_schema(Some("web".into()), schema)
     .run()
@@ -270,12 +280,17 @@ provenance — the payloads that contributed to it — alongside the combined va
 env.write_file("etc/web.toml", b"port = 8080\n")?;
 env.write_file("etc/db.toml", b"url = \"postgres://localhost\"\n")?;
 
-let pipeline = tanzim::pipeline::default().with_source("file:etc").unwrap();
+let pipeline = tanzim::pipeline::Pipeline::builder()
+    .with_default_loaders()
+    .with_default_parsers()
+    .with_source("file:etc").unwrap()
+    .build();
 
-// Run the stages by hand to inspect intermediate results.
-let loaded = pipeline.load().unwrap();        // Vec<Payload>
-let parsed = pipeline.parse(&loaded).unwrap(); // Vec<Parsed> — payload paired with its value tree
-let merged = pipeline.merge(&parsed).unwrap(); // Merged — a map keyed by entry name
+// Run the stages by hand (via `.stages()`) to inspect intermediate results.
+let stages = pipeline.stages();
+let loaded = stages.load().unwrap();        // Vec<Payload>
+let parsed = stages.parse(&loaded).unwrap(); // Vec<Parsed> — payload paired with its value tree
+let merged = stages.merge(&parsed).unwrap(); // Merged — a map keyed by entry name
 
 let web = merged.get(&Some("web".into())).unwrap();
 assert_eq!(web.payloads().len(), 1); // one source contributed to `web`
@@ -304,7 +319,9 @@ assert_eq!(names, ["db".to_string(), "web".to_string()]);
   # tanzim_testing::environment::run(|env| {
   env.write_file("app.toml", b"port = 8080\n")?;
   // `missing.toml` is absent, but the source skips the load error instead of failing the run.
-  let merged = tanzim::pipeline::default()
+  let merged = tanzim::pipeline::Pipeline::builder()
+      .with_default_loaders()
+      .with_default_parsers()
       .with_source("file:app.toml").unwrap()
       .with_source("file(on_error=(load=skip)):missing.toml").unwrap()
       .run().unwrap();
@@ -324,7 +341,9 @@ assert_eq!(names, ["db".to_string(), "web".to_string()]);
   env.write_file("app.toml", b"port = \"not-a-number\"\n")?;
   #[derive(Debug, Deserialize)]
   struct App { port: u16 }
-  let error = tanzim::Config::default()
+  let error = tanzim::Config::builder()
+      .with_default_loaders()
+      .with_default_parsers()
       .with_source("file:app.toml").unwrap()
       .try_deserialize::<App>()
       .unwrap_err();

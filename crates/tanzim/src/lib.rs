@@ -8,7 +8,8 @@
 //! Most users want [`Config`] — the single-configuration pipeline. Add a couple of sources and
 //! [`try_deserialize`](Config::try_deserialize) into your own type. When your sources describe
 //! several *named* configurations, reach for [`pipeline::Pipeline`] instead
-//! (built with [`pipeline::default`] / [`pipeline::empty`]).
+//! (built with [`Pipeline::builder`](pipeline::Pipeline::builder) /
+//! [`Pipeline::from_plan`](pipeline::Pipeline::from_plan)).
 //!
 //! Each stage is a module that re-exports its backing crate and adds the facade's own types:
 //!
@@ -32,5 +33,5 @@ pub mod value;
 
 mod logging;
 
-pub use config::Config;
+pub use config::{BuilderState, Config, ConfigBuilder, ConfigStages, Plan, Sources};
 pub use source::Source;

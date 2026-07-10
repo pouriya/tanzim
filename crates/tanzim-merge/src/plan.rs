@@ -43,7 +43,7 @@ pub enum MergePlan {
     Source(Source),
     /// Merge each child (in order) and fold the results with `merger`.
     Merge {
-        merger: Box<dyn Merge>,
+        merger: Box<dyn Merge + Send + Sync>,
         children: Vec<MergePlan>,
     },
 }
@@ -62,7 +62,10 @@ where
 }
 
 /// A merge node folding `children` with a custom `merger`.
-pub fn merge_with(merger: impl Merge + 'static, children: Vec<MergePlan>) -> MergePlan {
+pub fn merge_with(
+    merger: impl Merge + Send + Sync + 'static,
+    children: Vec<MergePlan>,
+) -> MergePlan {
     MergePlan::Merge {
         merger: Box::new(merger),
         children,

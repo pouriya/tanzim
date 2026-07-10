@@ -1,16 +1,31 @@
 use tanzim::{
-    Config,
+    Config, ConfigBuilder, Sources,
     config::Error as SingleError,
     loader::closure::Closure as LoaderClosure,
     merger::{DeepMerge, LastWins},
     parser::closure::Closure as ParserClosure,
-    pipeline::{Error as MultiError, Pipeline},
+    pipeline::{Error as MultiError, Pipeline, PipelineBuilder},
     source::Source,
     validator::SchemaValue,
 };
 use tanzim_load::{Error as LoadError, Payload};
 use tanzim_parse::LocatedValue;
 use tanzim_value::{Location, Value};
+
+/// Compile-time proof that the public builder and value types are `Send + Sync`, so a built
+/// `Config`/`Pipeline` can be moved across threads and shared via `Arc` (e.g. as axum/actix handler
+/// state). If any trait object stored inside were not thread-safe, this would fail to compile.
+#[test]
+fn public_types_are_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Config>();
+    assert_send_sync::<Pipeline>();
+    assert_send_sync::<ConfigBuilder<Sources>>();
+    assert_send_sync::<ConfigBuilder<tanzim::Plan>>();
+    assert_send_sync::<PipelineBuilder<Sources>>();
+    assert_send_sync::<PipelineBuilder<tanzim::Plan>>();
+    assert_send_sync::<tanzim::merger::plan::MergePlan>();
+}
 
 fn txt_parser() -> ParserClosure {
     ParserClosure::new(
@@ -87,34 +102,31 @@ fn schema_from_json(json: &str) -> Value {
     schema.into_value()
 }
 
-fn build_single() -> Config {
-    Config::empty()
+fn build_single() -> ConfigBuilder<Sources> {
+    Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"hello", Some("app")))
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap()
 }
 
 #[test]
 fn single_reports_missing_loaders_and_parsers_at_run_time() {
-    let no_loaders = Config::empty()
+    let no_loaders = Config::builder()
         .with_parser(txt_parser())
-        .with_merger(LastWins)
-        .unwrap();
+        .with_merger(LastWins);
     assert!(matches!(no_loaders.run(), Err(SingleError::NoLoaders)));
 
-    let no_parsers = Config::empty()
+    let no_parsers = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
-        .with_merger(LastWins)
-        .unwrap();
+        .with_merger(LastWins);
     assert!(matches!(no_parsers.run(), Err(SingleError::NoParsers)));
 
     // No explicit merger: the merge stage now defaults to `LastWins`, so the pipeline runs.
-    let no_merger = Config::empty()
+    let no_merger = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
@@ -124,19 +136,25 @@ fn single_reports_missing_loaders_and_parsers_at_run_time() {
 
 #[test]
 fn single_default_includes_loaders_and_parsers_but_no_merger() {
-    let pipeline = Config::default();
+    let pipeline = Config::builder()
+        .with_default_loaders()
+        .with_default_parsers();
     assert!(!pipeline.loaders().is_empty());
     assert!(!pipeline.parsers().is_empty());
     assert!(pipeline.merger().is_none());
     // With loaders and parsers but no merger and no sources, the merge stage defaults to `LastWins`
     // and the pipeline runs, yielding an empty unified entry.
-    let entry = Config::default().run().unwrap();
+    let entry = Config::builder()
+        .with_default_loaders()
+        .with_default_parsers()
+        .run()
+        .unwrap();
     assert!(entry.value().value().as_map().unwrap().is_empty());
 }
 
 #[test]
 fn single_empty_registers_nothing() {
-    let pipeline = Config::empty();
+    let pipeline = Config::builder();
     assert!(pipeline.loaders().is_empty());
     assert!(pipeline.parsers().is_empty());
     assert!(pipeline.merger().is_none());
@@ -150,14 +168,14 @@ fn source_parse_rejects_invalid_string() {
 
 #[test]
 fn single_load_errors_when_no_loader_matches() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("other:path")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap();
-    match pipeline.load() {
+        .build();
+    match pipeline.stages().load() {
         Ok(_) => panic!("expected load error"),
         Err(error) => assert!(matches!(error, SingleError::NoLoader { .. })),
     }
@@ -165,29 +183,30 @@ fn single_load_errors_when_no_loader_matches() {
 
 #[test]
 fn single_load_skips_errors_when_source_ignores_them() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock(on_error=(load=skip)):bad")
         .unwrap()
         .with_loader(failing_loader())
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
+        .build();
+    let loaded = pipeline.stages().load().unwrap();
     assert!(loaded.is_empty());
 }
 
 #[test]
 fn single_parse_uses_explicit_format() {
-    let pipeline = build_single();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
+    let pipeline = build_single().build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
     assert_eq!(parsed.len(), 1);
     assert_eq!(parsed[0].value().value().as_string().unwrap(), "hello");
 }
 
 #[test]
 fn single_parse_auto_detects_format() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(LoaderClosure::new(
@@ -204,15 +223,16 @@ fn single_parse_auto_detects_format() {
         ))
         .with_parser(auto_txt_parser())
         .with_merger(LastWins)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
     assert_eq!(parsed[0].value().value().as_string().unwrap(), "auto");
 }
 
 #[test]
 fn single_parse_errors_when_no_parser_matches() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(LoaderClosure::new(
@@ -229,9 +249,10 @@ fn single_parse_errors_when_no_parser_matches() {
         ))
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    match pipeline.parse(&loaded) {
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    match stages.parse(&loaded) {
         Ok(_) => panic!("expected parse error"),
         Err(error) => assert!(matches!(error, SingleError::NoParser { .. })),
     }
@@ -239,54 +260,57 @@ fn single_parse_errors_when_no_parser_matches() {
 
 #[test]
 fn single_unify_empty_merge_returns_empty_map() {
-    let pipeline = build_single();
-    let merged = pipeline.merge(&[]).unwrap();
-    let entry = pipeline.unify(&merged).unwrap();
+    let pipeline = build_single().build();
+    let stages = pipeline.stages();
+    let merged = stages.merge(&[]).unwrap();
+    let entry = stages.unify(&merged).unwrap();
     assert!(entry.payloads().is_empty());
     assert!(entry.value().value().as_map().unwrap().entries().is_empty());
 }
 
 #[test]
 fn single_unify_collapses_named_groups_with_last_wins() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(dual_loader())
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    let merged = pipeline.merge(&parsed).unwrap();
-    let entry = pipeline.unify(&merged).unwrap();
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    let merged = stages.merge(&parsed).unwrap();
+    let entry = stages.unify(&merged).unwrap();
     assert_eq!(entry.value().value().as_string().unwrap(), "beta-value");
 }
 
 #[test]
 fn single_run_executes_full_pipeline() {
-    let pipeline = build_single();
-    let entry = pipeline.run().unwrap();
+    let entry = build_single().run().unwrap();
     assert_eq!(entry.value().value().as_string().unwrap(), "hello");
 }
 
 #[test]
 fn single_validate_without_schema_is_noop() {
-    let pipeline = build_single();
+    let pipeline = build_single().build();
     let mut value = LocatedValue::new(
         Value::String("hello".into()),
         Location::at("mock", "one", None, None, None),
     );
-    pipeline.validate(&mut value).unwrap();
+    pipeline.stages().validate(&mut value).unwrap();
 }
 
 #[test]
 fn single_validate_rejects_invalid_schema() {
-    let pipeline = build_single().with_schema(schema_from_json(r#"{"type": "nope"}"#));
+    let pipeline = build_single()
+        .with_schema(schema_from_json(r#"{"type": "nope"}"#))
+        .build();
     let mut value = LocatedValue::new(
         Value::String("hello".into()),
         Location::at("mock", "one", None, None, None),
     );
-    match pipeline.validate(&mut value) {
+    match pipeline.stages().validate(&mut value) {
         Ok(()) => panic!("expected schema error"),
         Err(error) => assert!(matches!(error, SingleError::Schema { .. })),
     }
@@ -294,28 +318,29 @@ fn single_validate_rejects_invalid_schema() {
 
 #[test]
 fn single_validate_rejects_bad_configuration() {
-    let pipeline = build_single().with_schema(schema_from_json(r#"{"type": "integer"}"#));
+    let pipeline = build_single()
+        .with_schema(schema_from_json(r#"{"type": "integer"}"#))
+        .build();
     let mut value = LocatedValue::new(
         Value::String("hello".into()),
         Location::at("mock", "one", None, None, None),
     );
-    match pipeline.validate(&mut value) {
+    match pipeline.stages().validate(&mut value) {
         Ok(()) => panic!("expected validation error"),
         Err(error) => assert!(matches!(error, SingleError::Validate { .. })),
     }
 }
 
 #[test]
-fn single_pipeline_accessors_and_included_helpers() {
-    let pipeline = Config::empty()
+fn single_builder_accessors_and_default_helpers() {
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap()
-        .with_included_loaders()
-        .with_included_parsers();
+        .with_default_loaders()
+        .with_default_parsers();
     assert_eq!(pipeline.sources().count(), 1);
     assert!(!pipeline.loaders().is_empty());
     assert!(!pipeline.parsers().is_empty());
@@ -326,40 +351,36 @@ fn single_pipeline_accessors_and_included_helpers() {
         .with_loader(mock_loader(b"y", None))
         .with_parser(txt_parser())
         .with_merger(DeepMerge::new())
-        .unwrap()
-        .set_included_loaders()
-        .set_included_parsers();
+        .set_default_loaders()
+        .set_default_parsers();
     assert_eq!(pipeline.sources().count(), 2);
 }
 
-fn build_multi() -> Pipeline {
-    Pipeline::empty()
+fn build_multi() -> PipelineBuilder<Sources> {
+    Pipeline::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"hello", Some("app")))
         .with_parser(txt_parser())
         .with_merger(DeepMerge::new())
-        .unwrap()
 }
 
 #[test]
 fn multi_reports_missing_components_at_run_time() {
-    let no_loaders = Pipeline::empty()
+    let no_loaders = Pipeline::builder()
         .with_parser(txt_parser())
-        .with_merger(DeepMerge::new())
-        .unwrap();
+        .with_merger(DeepMerge::new());
     assert!(matches!(no_loaders.run(), Err(MultiError::NoLoaders)));
 
-    let no_parsers = Pipeline::empty()
+    let no_parsers = Pipeline::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
-        .with_merger(DeepMerge::new())
-        .unwrap();
+        .with_merger(DeepMerge::new());
     assert!(matches!(no_parsers.run(), Err(MultiError::NoParsers)));
 
     // No explicit merger: the merge stage now defaults to `LastWins`, so the pipeline runs.
-    let no_merger = Pipeline::empty()
+    let no_merger = Pipeline::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
@@ -370,42 +391,54 @@ fn multi_reports_missing_components_at_run_time() {
 #[test]
 fn multi_default_and_empty() {
     // No sources and no merger: defaults to `LastWins`, runs and yields an empty entry map.
-    assert!(Pipeline::default().run().unwrap().is_empty());
+    assert!(
+        Pipeline::builder()
+            .with_default_loaders()
+            .with_default_parsers()
+            .run()
+            .unwrap()
+            .is_empty()
+    );
     assert!(matches!(
-        Pipeline::empty().run(),
+        Pipeline::builder().run(),
         Err(MultiError::NoLoaders)
     ));
 }
 
 #[test]
 fn multi_run_returns_named_entries() {
-    let pipeline = build_multi();
-    let merged = pipeline.run().unwrap();
+    let merged = build_multi().run().unwrap();
     assert!(merged.contains_key(&Some("app".into())));
 }
 
 #[test]
 fn multi_validate_warns_when_schema_has_no_matching_entry() {
-    let pipeline = build_multi().with_schema(
-        Some("missing".into()),
-        schema_from_json(r#"{"type": "string"}"#),
-    );
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    let mut merged = pipeline.merge(&parsed).unwrap();
-    pipeline.validate(&mut merged).unwrap();
+    let pipeline = build_multi()
+        .with_schema(
+            Some("missing".into()),
+            schema_from_json(r#"{"type": "string"}"#),
+        )
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    let mut merged = stages.merge(&parsed).unwrap();
+    stages.validate(&mut merged).unwrap();
 }
 
 #[test]
 fn multi_validate_rejects_bad_configuration() {
-    let pipeline = build_multi().with_schema(
-        Some("app".into()),
-        schema_from_json(r#"{"type": "integer"}"#),
-    );
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    let mut merged = pipeline.merge(&parsed).unwrap();
-    match pipeline.validate(&mut merged) {
+    let pipeline = build_multi()
+        .with_schema(
+            Some("app".into()),
+            schema_from_json(r#"{"type": "integer"}"#),
+        )
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    let mut merged = stages.merge(&parsed).unwrap();
+    match stages.validate(&mut merged) {
         Ok(()) => panic!("expected validation error"),
         Err(error) => assert!(matches!(error, MultiError::Validate { .. })),
     }
@@ -449,14 +482,14 @@ fn failing_parser() -> ParserClosure {
 
 #[test]
 fn single_load_propagates_loader_error() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:bad")
         .unwrap()
         .with_loader(failing_loader())
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap();
-    match pipeline.load() {
+        .build();
+    match pipeline.stages().load() {
         Ok(_) => panic!("expected load error"),
         Err(error) => assert!(matches!(error, SingleError::Load(_))),
     }
@@ -464,7 +497,7 @@ fn single_load_propagates_loader_error() {
 
 #[test]
 fn single_parse_skips_errors_when_payload_source_ignores_them() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock(on_error=(parse=skip)):one")
         .unwrap()
         .with_loader(LoaderClosure::new(
@@ -481,23 +514,25 @@ fn single_parse_skips_errors_when_payload_source_ignores_them() {
         ))
         .with_parser(failing_parser())
         .with_merger(LastWins)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
     assert!(parsed.is_empty());
 }
 
 #[test]
 fn single_parse_propagates_parser_error() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", Some("app")))
         .with_parser(failing_parser())
         .with_merger(LastWins)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    match pipeline.parse(&loaded) {
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    match stages.parse(&loaded) {
         Ok(_) => panic!("expected parse error"),
         Err(error) => assert!(matches!(error, SingleError::Parse(_))),
     }
@@ -505,16 +540,17 @@ fn single_parse_propagates_parser_error() {
 
 #[test]
 fn single_merge_propagates_merge_error() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
         .with_parser(txt_parser())
         .with_merger(FailMerge)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    match pipeline.merge(&parsed) {
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    match stages.merge(&parsed) {
         Ok(_) => panic!("expected merge error"),
         Err(error) => assert!(matches!(error, SingleError::Merge(_))),
     }
@@ -522,7 +558,7 @@ fn single_merge_propagates_merge_error() {
 
 #[test]
 fn single_unify_with_deep_merge_combines_map_groups() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(LoaderClosure::new(
@@ -547,11 +583,12 @@ fn single_unify_with_deep_merge_combines_map_groups() {
         ))
         .with_parser(tanzim::parser::json::Json::new())
         .with_merger(DeepMerge::new())
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    let merged = pipeline.merge(&parsed).unwrap();
-    let entry = pipeline.unify(&merged).unwrap();
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    let merged = stages.merge(&parsed).unwrap();
+    let entry = stages.unify(&merged).unwrap();
     let value = entry.value();
     let map = value.value().as_map().unwrap();
     assert_eq!(
@@ -566,7 +603,7 @@ fn single_unify_with_deep_merge_combines_map_groups() {
 
 #[test]
 fn single_unify_last_wins_prefers_unnamed_bucket() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(LoaderClosure::new(
@@ -591,23 +628,23 @@ fn single_unify_last_wins_prefers_unnamed_bucket() {
         ))
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    let merged = pipeline.merge(&parsed).unwrap();
-    let entry = pipeline.unify(&merged).unwrap();
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    let merged = stages.merge(&parsed).unwrap();
+    let entry = stages.unify(&merged).unwrap();
     assert_eq!(entry.value().value().as_string().unwrap(), "unnamed");
 }
 
 #[test]
 fn single_run_with_valid_schema_coerces_configuration() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"42", Some("app")))
         .with_parser(txt_parser())
         .with_merger(LastWins)
-        .unwrap()
         .with_schema(schema_from_json(r#"{"type": "integer"}"#));
     let entry = pipeline.run().unwrap();
     assert_eq!(*entry.value().value(), Value::Int(42));
@@ -622,27 +659,28 @@ fn single_schema_accessor_returns_registered_schema() {
 
 #[test]
 fn multi_load_and_parse_error_paths() {
-    let pipeline = Pipeline::empty()
+    let pipeline = Pipeline::builder()
         .with_source("mock:bad")
         .unwrap()
         .with_loader(failing_loader())
         .with_parser(txt_parser())
         .with_merger(DeepMerge::new())
-        .unwrap();
-    match pipeline.load() {
+        .build();
+    match pipeline.stages().load() {
         Ok(_) => panic!("expected load error"),
         Err(error) => assert!(matches!(error, MultiError::Load(_))),
     }
 
-    let pipeline = Pipeline::empty()
+    let pipeline = Pipeline::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", Some("app")))
         .with_parser(failing_parser())
         .with_merger(DeepMerge::new())
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    match pipeline.parse(&loaded) {
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    match stages.parse(&loaded) {
         Ok(_) => panic!("expected parse error"),
         Err(error) => assert!(matches!(error, MultiError::Parse(_))),
     }
@@ -650,12 +688,14 @@ fn multi_load_and_parse_error_paths() {
 
 #[test]
 fn multi_validate_rejects_invalid_schema() {
-    let pipeline =
-        build_multi().with_schema(Some("app".into()), schema_from_json(r#"{"type": "nope"}"#));
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    let mut merged = pipeline.merge(&parsed).unwrap();
-    match pipeline.validate(&mut merged) {
+    let pipeline = build_multi()
+        .with_schema(Some("app".into()), schema_from_json(r#"{"type": "nope"}"#))
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    let mut merged = stages.merge(&parsed).unwrap();
+    match stages.validate(&mut merged) {
         Ok(()) => panic!("expected schema error"),
         Err(error) => assert!(matches!(error, MultiError::Schema { .. })),
     }
@@ -663,12 +703,14 @@ fn multi_validate_rejects_invalid_schema() {
 
 #[test]
 fn multi_validate_succeeds_for_matching_schema() {
-    let pipeline = build_multi().with_schema(
-        Some("app".into()),
-        schema_from_json(r#"{"type": "string"}"#),
-    );
+    let pipeline = build_multi()
+        .with_schema(
+            Some("app".into()),
+            schema_from_json(r#"{"type": "string"}"#),
+        )
+        .build();
     let mut merged = pipeline.run().unwrap();
-    pipeline.validate(&mut merged).unwrap();
+    pipeline.stages().validate(&mut merged).unwrap();
 }
 
 #[test]
@@ -711,15 +753,14 @@ fn init_logging() {
 #[test]
 fn single_run_with_logging_enabled_exercises_pipeline_stages() {
     init_logging();
-    let pipeline = build_single();
-    let entry = pipeline.run().unwrap();
+    let entry = build_single().run().unwrap();
     assert_eq!(entry.value().value().as_string().unwrap(), "hello");
 }
 
 #[test]
 fn multi_parse_skips_errors_when_payload_source_ignores_them() {
     init_logging();
-    let pipeline = Pipeline::empty()
+    let pipeline = Pipeline::builder()
         .with_source("mock(on_error=(parse=skip)):one")
         .unwrap()
         .with_loader(LoaderClosure::new(
@@ -736,40 +777,58 @@ fn multi_parse_skips_errors_when_payload_source_ignores_them() {
         ))
         .with_parser(failing_parser())
         .with_merger(DeepMerge::new())
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
     assert!(parsed.is_empty());
 }
 
 #[test]
 fn multi_load_skips_errors_when_source_ignores_them() {
-    let pipeline = Pipeline::empty()
+    let pipeline = Pipeline::builder()
         .with_source("mock(on_error=(load=skip)):bad")
         .unwrap()
         .with_loader(failing_loader())
         .with_parser(txt_parser())
         .with_merger(DeepMerge::new())
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
+        .build();
+    let loaded = pipeline.stages().load().unwrap();
     assert!(loaded.is_empty());
 }
 
 #[test]
 fn multi_merge_propagates_merge_error() {
-    let pipeline = Pipeline::empty()
+    let pipeline = Pipeline::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"x", None))
         .with_parser(txt_parser())
         .with_merger(FailMerge)
-        .unwrap();
-    let loaded = pipeline.load().unwrap();
-    let parsed = pipeline.parse(&loaded).unwrap();
-    match pipeline.merge(&parsed) {
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    match stages.merge(&parsed) {
         Ok(_) => panic!("expected merge error"),
         Err(error) => assert!(matches!(error, MultiError::Merge(_))),
     }
+}
+
+#[test]
+fn multi_from_plan_keeps_named_entries() {
+    use tanzim::merger::plan::{deep, src};
+    // The named + explicit-plan axis: a `Pipeline::from_plan` builder deep-merges two sources, and the
+    // result stays keyed by entry name (unlike `Config::from_plan`, which would unify into one value).
+    let pipeline = Pipeline::from_plan(deep(vec![
+        src("mock:one").unwrap(),
+        src("mock:two").unwrap(),
+    ]))
+    .with_loader(mock_loader(b"hello", Some("app")))
+    .with_parser(txt_parser());
+    assert_eq!(pipeline.sources().count(), 2);
+    let merged = pipeline.run().unwrap();
+    assert!(merged.contains_key(&Some("app".into())));
 }
 
 #[test]
@@ -845,7 +904,7 @@ fn resource_kv_loader() -> LoaderClosure {
 #[test]
 fn single_default_merger_is_last_wins() {
     // No merger configured: the source's two payloads fold with the default `LastWins`.
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:a")
         .unwrap()
         .with_loader(two_payload_loader(b"x=1", b"y=2"))
@@ -860,7 +919,7 @@ fn single_default_merger_is_last_wins() {
 fn single_with_source_merged_pre_merges_before_global() {
     // The per-source `DeepMerge` combines the source's two payloads, keeping both keys — whereas the
     // default global `LastWins` alone would have dropped `x`.
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source_merged("mock:a", DeepMerge::new())
         .unwrap()
         .with_loader(two_payload_loader(b"x=1", b"y=2"))
@@ -872,21 +931,19 @@ fn single_with_source_merged_pre_merges_before_global() {
 }
 
 #[test]
-fn single_with_merge_plan_advanced_fold() {
+fn single_from_plan_advanced_fold() {
     use tanzim::merger::plan::{deep, last_wins, src};
-    // The sources live entirely in the plan — no simple `with_source` calls (which would conflict).
-    // last_wins(c, deep(a, b)): deep-merge a+b (keeps both keys), then last-wins with c as the
-    // *earlier* child → the deep result wins. This differs from the default `LastWins` fold
+    // The sources live entirely in the plan — a `from_plan` builder has no `with_source` (that would
+    // not compile). last_wins(c, deep(a, b)): deep-merge a+b (keeps both keys), then last-wins with c
+    // as the *earlier* child → the deep result wins. This differs from the default `LastWins` fold
     // (which, folding a, b, c in order, would keep only c) — proving the explicit plan is applied
     // and its nested `deep` node runs.
-    let pipeline = Config::empty()
-        .with_loader(resource_kv_loader())
-        .with_parser(kv_parser())
-        .with_merge_plan(last_wins(vec![
-            src("mock:c").unwrap(),
-            deep(vec![src("mock:a").unwrap(), src("mock:b").unwrap()]),
-        ]))
-        .unwrap();
+    let pipeline = Config::from_plan(last_wins(vec![
+        src("mock:c").unwrap(),
+        deep(vec![src("mock:a").unwrap(), src("mock:b").unwrap()]),
+    ]))
+    .with_loader(resource_kv_loader())
+    .with_parser(kv_parser());
     // The plan's leaves are surfaced as the pipeline's sources for loading.
     assert_eq!(pipeline.sources().count(), 3);
     let entry = pipeline.run().unwrap();
@@ -897,41 +954,9 @@ fn single_with_merge_plan_advanced_fold() {
 }
 
 #[test]
-fn merge_plan_and_simple_builders_are_mutually_exclusive() {
-    use tanzim::merger::plan::{last_wins, src};
-    // A source configured first, then an explicit plan → conflict.
-    let after_source = Config::empty()
-        .with_source("mock:a")
-        .unwrap()
-        .with_merge_plan(last_wins(vec![src("mock:a").unwrap()]));
-    assert!(matches!(after_source, Err(SingleError::PlanConflict)));
-
-    // A merger configured first, then an explicit plan → conflict.
-    let after_merger = Config::empty()
-        .with_merger(LastWins)
-        .unwrap()
-        .with_merge_plan(last_wins(vec![src("mock:a").unwrap()]));
-    assert!(matches!(after_merger, Err(SingleError::PlanConflict)));
-
-    // The reverse: an explicit plan first, then a simple builder → conflict.
-    let mut pipeline = Config::empty();
-    pipeline
-        .add_merge_plan(last_wins(vec![src("mock:a").unwrap()]))
-        .unwrap();
-    assert!(matches!(
-        pipeline.add_source("mock:b"),
-        Err(SingleError::PlanConflict)
-    ));
-    assert!(matches!(
-        pipeline.add_merger(LastWins),
-        Err(SingleError::PlanConflict)
-    ));
-}
-
-#[test]
 fn with_source_rejects_invalid_source_string() {
     assert!(matches!(
-        Config::empty().with_source("bad("),
+        Config::builder().with_source("bad("),
         Err(SingleError::Source(_))
     ));
 }
@@ -990,13 +1015,12 @@ fn bad_port_parser() -> ParserClosure {
 
 #[test]
 fn single_try_deserialize_produces_typed_config() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"hello", Some("app")))
         .with_parser(map_parser())
-        .with_merger(LastWins)
-        .unwrap();
+        .with_merger(LastWins);
     let app: App = pipeline.try_deserialize().unwrap();
     assert_eq!(
         app,
@@ -1009,13 +1033,12 @@ fn single_try_deserialize_produces_typed_config() {
 
 #[test]
 fn single_try_deserialize_reports_located_error() {
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"hello", Some("app")))
         .with_parser(bad_port_parser())
-        .with_merger(LastWins)
-        .unwrap();
+        .with_merger(LastWins);
     let error = pipeline.try_deserialize::<App>().unwrap_err();
     assert!(
         matches!(error, SingleError::Deserialize(_)),
@@ -1044,7 +1067,7 @@ fn single_try_deserialize_error_renders_caret() {
     }
 
     let toml = b"[listen]\nport = \"eighty\"\n";
-    let pipeline = Config::empty()
+    let pipeline = Config::builder()
         .with_source("file:app.toml")
         .unwrap()
         .with_loader(LoaderClosure::new(
@@ -1060,8 +1083,7 @@ fn single_try_deserialize_error_renders_caret() {
             "file",
         ))
         .with_parser(Toml::new())
-        .with_merger(LastWins)
-        .unwrap();
+        .with_merger(LastWins);
 
     let error = pipeline.try_deserialize::<Cfg>().unwrap_err();
     assert!(matches!(error, SingleError::Deserialize(_)));
@@ -1079,13 +1101,12 @@ fn single_try_deserialize_error_renders_caret() {
 
 #[test]
 fn multi_try_deserialize_returns_map_per_entry() {
-    let pipeline = Pipeline::empty()
+    let pipeline = Pipeline::builder()
         .with_source("mock:one")
         .unwrap()
         .with_loader(mock_loader(b"hello", Some("app")))
         .with_parser(map_parser())
-        .with_merger(LastWins)
-        .unwrap();
+        .with_merger(LastWins);
     let deserialized: std::collections::HashMap<Option<String>, App> =
         pipeline.try_deserialize().unwrap();
     assert_eq!(
