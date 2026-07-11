@@ -27,18 +27,22 @@ impl Entry {
         Self { payloads, value }
     }
 
+    /// The payloads that contributed to this entry.
     pub fn payloads(&self) -> &[loader::Payload] {
         &self.payloads
     }
 
+    /// Mutable access to the contributing payloads.
     pub fn payloads_mut(&mut self) -> &mut Vec<loader::Payload> {
         &mut self.payloads
     }
 
+    /// The combined value.
     pub fn value(&self) -> &parser::LocatedValue {
         &self.value
     }
 
+    /// Mutable access to the combined value.
     pub fn value_mut(&mut self) -> &mut parser::LocatedValue {
         &mut self.value
     }

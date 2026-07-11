@@ -59,23 +59,37 @@ fn source_display(cs: &Source) -> String {
 /// Errors produced by the single-configuration pipeline.
 #[derive(Debug)]
 pub enum Error {
+    /// No loaders are registered, so no source can be loaded.
     NoLoaders,
+    /// No parsers are registered, so no payload can be parsed.
     NoParsers,
+    /// A source string failed to parse.
     Source(source::ParseError),
+    /// Loading a source failed.
     Load(loader::Error),
+    /// Parsing a loaded payload failed.
     Parse(tanzim_value::Error),
+    /// Merging the parsed payloads failed.
     Merge(merger::Error),
+    /// Deserializing the unified configuration into the target type failed.
     Deserialize(tanzim_value::Error),
+    /// No registered loader supports a configured source.
     NoLoader {
+        /// The display form of the source that no loader matched.
         at: String,
     },
+    /// No registered parser supports a loaded payload's format.
     NoParser {
+        /// The format that no parser matched (or `"unknown"` if none was declared).
         format: String,
+        /// The display form of the source the payload came from.
         at: String,
     },
 
+    /// The unified configuration failed schema validation.
     #[cfg(feature = "validate-schema")]
     Validate {
+        /// The underlying validation error.
         inner: validator::Error,
     },
 }
@@ -154,6 +168,9 @@ pub struct ConfigBuilder<State: BuilderState> {
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
     schema: Option<Box<dyn validator::Validator + Send + Sync>>,
+    /// The first source string that failed to parse, stashed so the source builders can stay
+    /// infallible. Surfaced (as [`Error::Source`]) when the pipeline runs.
+    deferred_error: Option<source::ParseError>,
     _state: PhantomData<State>,
 }
 
@@ -173,6 +190,7 @@ impl Config {
             parsers: Vec::new(),
             #[cfg(feature = "validate-schema")]
             schema: None,
+            deferred_error: None,
             _state: PhantomData,
         }
     }
@@ -196,22 +214,28 @@ impl Config {
     /// `last_wins(vec![deep(vec![a, b]), c])`. The plan's [`Source`] leaves become the sources to
     /// load. This mode does not expose the per-source builders — mixing the two is a compile error.
     ///
-    /// A [`Plan`]-mode builder has no `with_source` (the plan is the source list):
+    /// A [`Plan`]-mode builder exposes neither `with_source` (the plan *is* the source list) nor
+    /// `with_merger` (the plan carries its own mergers); calling either is a compile error. Register
+    /// loaders/parsers and run:
     ///
-    /// ```compile_fail
+    /// ```rust
+    /// # #[cfg(all(feature = "load-env", feature = "parse-env"))]
+    /// # tanzim_testing::environment::run(|env| {
     /// use tanzim::Config;
     /// use tanzim::merger::plan::{last_wins, src};
-    /// Config::from_plan(last_wins(vec![src("mock:a").unwrap()]))
-    ///     .with_source("mock:b"); // no such method in `Plan` mode
-    /// ```
+    /// # env.set_env("APP_HOST", "localhost")?;
     ///
-    /// …and no `with_merger` (the plan carries its own mergers):
+    /// // last_wins over a single env source; the plan's leaves become the sources to load.
+    /// let entry = Config::from_plan(last_wins(vec![src("env(prefix=APP_)").unwrap()]))
+    ///     .with_default_loaders()
+    ///     .with_default_parsers()
+    ///     .run()
+    ///     .unwrap();
     ///
-    /// ```compile_fail
-    /// use tanzim::Config;
-    /// use tanzim::merger::{LastWins, plan::{last_wins, src}};
-    /// Config::from_plan(last_wins(vec![src("mock:a").unwrap()]))
-    ///     .with_merger(LastWins); // no such method in `Plan` mode
+    /// assert!(entry.value().value().as_map().is_some());
+    /// # Ok(())
+    /// # })
+    /// # .unwrap();
     /// ```
     pub fn from_plan(plan: MergePlan) -> ConfigBuilder<Plan> {
         ConfigBuilder {
@@ -221,6 +245,7 @@ impl Config {
             parsers: Vec::new(),
             #[cfg(feature = "validate-schema")]
             schema: None,
+            deferred_error: None,
             _state: PhantomData,
         }
     }
@@ -232,18 +257,22 @@ impl<State: BuilderState> ConfigBuilder<State> {
         merger::leaves(&self.plan).into_iter()
     }
 
+    /// The registered loaders, in declared order.
     pub fn loaders(&self) -> &[Box<dyn loader::Load + Send + Sync>] {
         &self.loaders
     }
 
+    /// Mutable access to the registered loaders.
     pub fn loaders_mut(&mut self) -> &mut Vec<Box<dyn loader::Load + Send + Sync>> {
         &mut self.loaders
     }
 
+    /// The registered parsers, in declared order.
     pub fn parsers(&self) -> &[Box<dyn parser::Parse + Send + Sync>] {
         &self.parsers
     }
 
+    /// Mutable access to the registered parsers.
     pub fn parsers_mut(&mut self) -> &mut Vec<Box<dyn parser::Parse + Send + Sync>> {
         &mut self.parsers
     }
@@ -257,21 +286,25 @@ impl<State: BuilderState> ConfigBuilder<State> {
             .flatten()
     }
 
+    /// The registered validation schema, if any.
     #[cfg(feature = "validate-schema")]
     pub fn schema(&self) -> Option<&(dyn validator::Validator + Send + Sync)> {
         self.schema.as_deref()
     }
 
+    /// Mutable access to the registered validation schema.
     #[cfg(feature = "validate-schema")]
     pub fn schema_mut(&mut self) -> &mut Option<Box<dyn validator::Validator + Send + Sync>> {
         &mut self.schema
     }
 
+    /// Append a single loader (builder-style).
     pub fn with_loader(mut self, loader: impl loader::Load + Send + Sync + 'static) -> Self {
         self.loaders.push(Box::new(loader));
         self
     }
 
+    /// Append a single parser (builder-style).
     pub fn with_parser(mut self, parser: impl parser::Parse + Send + Sync + 'static) -> Self {
         self.parsers.push(Box::new(parser));
         self
@@ -354,6 +387,7 @@ impl<State: BuilderState> ConfigBuilder<State> {
             parsers: self.parsers,
             #[cfg(feature = "validate-schema")]
             schema: self.schema,
+            deferred_error: self.deferred_error,
         }
     }
 
@@ -370,47 +404,63 @@ impl<State: BuilderState> ConfigBuilder<State> {
 
 impl ConfigBuilder<Sources> {
     /// Append a configuration source (builder-style). `source` may be a [`Source`] or any string form
-    /// (e.g. `"file:app.toml"`), parsed now — an invalid source yields [`Error::Source`].
-    pub fn with_source<S>(mut self, source: S) -> Result<Self, Error>
+    /// (e.g. `"file:app.toml"`), parsed now. This method is infallible: an invalid source string is
+    /// stashed and surfaced later as [`Error::Source`] when the pipeline runs, so calls keep chaining.
+    pub fn with_source<S>(mut self, source: S) -> Self
     where
         S: TryInto<Source>,
         Error: From<S::Error>,
     {
-        self.add_source(source)?;
-        Ok(self)
+        self.add_source(source);
+        self
     }
 
     /// Append a configuration source (in-place). See [`with_source`](Self::with_source).
-    pub fn add_source<S>(&mut self, source: S) -> Result<&mut Self, Error>
+    pub fn add_source<S>(&mut self, source: S) -> &mut Self
     where
         S: TryInto<Source>,
         Error: From<S::Error>,
     {
-        let source = source.try_into()?;
-        merger::push_child(&mut self.plan, MergePlan::Source(source));
-        Ok(self)
+        match source.try_into() {
+            Ok(source) => merger::push_child(&mut self.plan, MergePlan::Source(source)),
+            Err(error) => self.record_deferred(error.into()),
+        }
+        self
     }
 
     /// Append a source bound to its own `merger`, applied to that source's payloads before the
-    /// global merger folds everything (builder-style).
+    /// global merger folds everything (builder-style). Infallible like [`with_source`](Self::with_source):
+    /// an invalid source string is deferred to [`run`](Config::run).
     pub fn with_source_merged<S>(
         mut self,
         source: S,
         merger: impl merger::Merge + Send + Sync + 'static,
-    ) -> Result<Self, Error>
+    ) -> Self
     where
         S: TryInto<Source>,
         Error: From<S::Error>,
     {
-        let source = source.try_into()?;
-        merger::push_child(
-            &mut self.plan,
-            MergePlan::Merge {
-                merger: Box::new(merger),
-                children: vec![MergePlan::Source(source)],
-            },
-        );
-        Ok(self)
+        match source.try_into() {
+            Ok(source) => merger::push_child(
+                &mut self.plan,
+                MergePlan::Merge {
+                    merger: Box::new(merger),
+                    children: vec![MergePlan::Source(source)],
+                },
+            ),
+            Err(error) => self.record_deferred(error.into()),
+        }
+        self
+    }
+
+    /// Stash the first source-parse failure, keeping the source builders infallible. Later failures
+    /// are dropped — the first one wins and is returned by [`run`](Config::run).
+    fn record_deferred(&mut self, error: Error) {
+        if self.deferred_error.is_none()
+            && let Error::Source(parse_error) = error
+        {
+            self.deferred_error = Some(parse_error);
+        }
     }
 
     /// Set the global merger that folds all sources together. Defaults to
@@ -427,6 +477,37 @@ impl ConfigBuilder<Sources> {
 /// Assemble one with [`Config::builder`] (simple-fold) or [`Config::from_plan`] (explicit tree), then
 /// [`build`](ConfigBuilder::build). Call [`run`](Self::run) / [`try_deserialize`](Self::try_deserialize)
 /// for the whole pipeline, or reach the individual stages through [`stages`](Self::stages).
+///
+/// # Example
+///
+/// [`Config::default`] registers every feature-enabled loader and parser; add a source and
+/// deserialize straight into your own type. The sandbox sets the environment variables the example
+/// reads.
+///
+/// ```rust
+/// # #[cfg(all(feature = "load-env", feature = "parse-env"))]
+/// # tanzim_testing::environment::run(|env| {
+/// use serde::Deserialize;
+/// # env.set_env("APP_HOST", "localhost")?;
+/// # env.set_env("APP_PORT", "8080")?;
+///
+/// #[derive(Deserialize)]
+/// struct Settings {
+///     host: String,
+///     port: String, // the env parser keeps every value as a string
+/// }
+///
+/// let settings: Settings = tanzim::Config::default()
+///     .with_source("env(prefix=APP_)")
+///     .try_deserialize()
+///     .unwrap();
+///
+/// assert_eq!(settings.host, "localhost");
+/// assert_eq!(settings.port, "8080");
+/// # Ok(())
+/// # })
+/// # .unwrap();
+/// ```
 pub struct Config {
     plan: MergePlan,
     merger_set: bool,
@@ -434,6 +515,9 @@ pub struct Config {
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
     schema: Option<Box<dyn validator::Validator + Send + Sync>>,
+    /// A source string that failed to parse while assembling the builder, deferred to here so the
+    /// source builders could stay infallible. Returned by [`run`](Config::run) before any work.
+    deferred_error: Option<source::ParseError>,
 }
 
 impl Config {
@@ -442,10 +526,12 @@ impl Config {
         merger::leaves(&self.plan).into_iter()
     }
 
+    /// The registered loaders, in declared order.
     pub fn loaders(&self) -> &[Box<dyn loader::Load + Send + Sync>] {
         &self.loaders
     }
 
+    /// The registered parsers, in declared order.
     pub fn parsers(&self) -> &[Box<dyn parser::Parse + Send + Sync>] {
         &self.parsers
     }
@@ -458,6 +544,7 @@ impl Config {
             .flatten()
     }
 
+    /// The registered validation schema, if any.
     #[cfg(feature = "validate-schema")]
     pub fn schema(&self) -> Option<&(dyn validator::Validator + Send + Sync)> {
         self.schema.as_deref()
@@ -472,6 +559,9 @@ impl Config {
 
     /// Run load → parse → merge → unify → validate in sequence.
     pub fn run(&self) -> Result<Entry, Error> {
+        if let Some(error) = &self.deferred_error {
+            return Err(Error::Source(error.clone()));
+        }
         cfg_if! {
             if #[cfg(feature = "tracing")] {
                 tracing::debug!(msg = "Running single configuration pipeline", source_count = merger::leaves(&self.plan).len(), loader_count = self.loaders.len(), parser_count = self.parsers.len());
@@ -510,6 +600,7 @@ pub struct ConfigStages<'a> {
 }
 
 impl ConfigStages<'_> {
+    /// Run the load stage: read every configured source into raw payloads.
     pub fn load(&self) -> Result<Vec<loader::Payload>, Error> {
         let config = self.config;
         if config.loaders.is_empty() {
@@ -586,6 +677,7 @@ impl ConfigStages<'_> {
         Ok(result)
     }
 
+    /// Run the parse stage: turn every loaded payload into a value tree.
     pub fn parse(&self, loaded: &[loader::Payload]) -> Result<Vec<Parsed>, Error> {
         let config = self.config;
         if config.parsers.is_empty() {

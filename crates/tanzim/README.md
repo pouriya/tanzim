@@ -26,10 +26,8 @@ struct LogRotation {
 
 fn load() -> Result<LogRotation, tanzim::config::Error> {
     // `Config::default()` registers every feature-enabled loader and parser;
-    // this reads `app.toml` (plus any env overrides) and deserializes it.
-    Config::default()
-        .with_source("file:app.toml")?
-        .try_deserialize()
+    // this reads `app.toml` deserializes it.
+    Config::default().with_source("file:app.toml").try_deserialize()
 }
 ```
 

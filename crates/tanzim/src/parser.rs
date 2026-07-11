@@ -22,18 +22,22 @@ impl Parsed {
         Self { payload, value }
     }
 
+    /// The loaded payload.
     pub fn payload(&self) -> &loader::Payload {
         &self.payload
     }
 
+    /// Mutable access to the loaded payload.
     pub fn payload_mut(&mut self) -> &mut loader::Payload {
         &mut self.payload
     }
 
+    /// The value produced by parsing the payload.
     pub fn value(&self) -> &LocatedValue {
         &self.value
     }
 
+    /// Mutable access to the parsed value.
     pub fn value_mut(&mut self) -> &mut LocatedValue {
         &mut self.value
     }

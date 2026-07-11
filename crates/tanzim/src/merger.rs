@@ -107,48 +107,59 @@ pub struct Merged {
 }
 
 impl Merged {
+    /// An empty merged map.
     pub fn new() -> Self {
         Self {
             entries: std::collections::HashMap::new(),
         }
     }
 
+    /// The number of merged entries.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Whether there are no merged entries.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// The entry for `name` (`None` = the unnamed bucket), if present.
     pub fn get(&self, name: &Option<String>) -> Option<&Entry> {
         self.entries.get(name)
     }
 
+    /// Mutable access to the entry for `name`, if present.
     pub fn get_mut(&mut self, name: &Option<String>) -> Option<&mut Entry> {
         self.entries.get_mut(name)
     }
 
+    /// Insert (or replace) the entry for `name`, returning the previous entry if any.
     pub fn insert(&mut self, name: Option<String>, entry: Entry) -> Option<Entry> {
         self.entries.insert(name, entry)
     }
 
+    /// Remove and return the entry for `name`, if present.
     pub fn remove(&mut self, name: &Option<String>) -> Option<Entry> {
         self.entries.remove(name)
     }
 
+    /// Whether an entry for `name` is present.
     pub fn contains_key(&self, name: &Option<String>) -> bool {
         self.entries.contains_key(name)
     }
 
+    /// The entry names, in arbitrary order.
     pub fn keys(&self) -> impl Iterator<Item = &Option<String>> {
         self.entries.keys()
     }
 
+    /// Iterate over the entries by name, in arbitrary order.
     pub fn iter(&self) -> impl Iterator<Item = (&Option<String>, &Entry)> {
         self.entries.iter()
     }
 
+    /// Iterate mutably over the entries by name, in arbitrary order.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Option<String>, &mut Entry)> {
         self.entries.iter_mut()
     }

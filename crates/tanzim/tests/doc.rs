@@ -38,20 +38,23 @@ fn example1_wrong_type_caret() {
     run(|env| {
         env.write_file(
             "app.toml",
-            "file = \"/var/log/app.log\"\nrotate_count = \"five\"\n",
+            "file = \"/var/log/app.log\"\nrotate_count = \"five\"",
         )?;
         let error = Config::default()
             .with_source("file:app.toml")
-            .unwrap()
             .try_deserialize::<LogRotation1>()
             .unwrap_err();
 
         println!("--- example1 default ---\n{error}\n");
         println!("--- example1 alternate ---\n{error:#}\n");
 
-        let alternate = format!("{error:#}");
-        assert!(alternate.contains("rotate_count = \"five\""), "{alternate}");
-        assert!(alternate.contains('^'), "{alternate}");
+        // The exact `{error:#}` rendering shown in the `lib.rs` docs.
+        let expected = "\
+failed to deserialize configuration: invalid type: string \"five\", expected u32 at file:app.toml:2:16
+  1 | file = \"/var/log/app.log\"
+  2 | rotate_count = \"five\"
+    |                ^^^^^^";
+        assert_eq!(format!("{error:#}"), expected);
         Ok(())
     })
     .unwrap();
@@ -64,7 +67,7 @@ fn example2_bytesize_validation_error() {
     run(|env| {
         env.write_file(
             "app.toml",
-            "file = \"/var/log/app.log\"\nmax_size = \"banana\"\n",
+            "file = \"/var/log/app.log\"\nmax_size = \"banana\"",
         )?;
         let schema = StaticMap::new().required("file", NonEmpty::new()).required(
             "max_size",
@@ -74,7 +77,6 @@ fn example2_bytesize_validation_error() {
         );
         let error = Config::default()
             .with_source("file:app.toml")
-            .unwrap()
             .with_schema(schema)
             .try_deserialize::<LogRotation2>()
             .unwrap_err();
@@ -82,8 +84,15 @@ fn example2_bytesize_validation_error() {
         println!("--- example2 default ---\n{error}\n");
         println!("--- example2 alternate ---\n{error:#}\n");
 
-        let alternate = format!("{error:#}");
-        assert!(alternate.contains("max_size"), "{alternate}");
+        // The exact `{error:#}` rendering shown in the `lib.rs` docs.
+        let expected = "\
+configuration failed validation: max_size: invalid byte size at file:app.toml:2:12
+  Rotate the log once it grows past this size.
+  example: \"10MB\"
+  1 | file = \"/var/log/app.log\"
+  2 | max_size = \"banana\"
+    |            ^^^^^^^^";
+        assert_eq!(format!("{error:#}"), expected);
         Ok(())
     })
     .unwrap();
@@ -102,7 +111,6 @@ fn example2_bytesize_coerces() {
             .required("max_size", ByteSize::new());
         let cfg = Config::default()
             .with_source("file:app.toml")
-            .unwrap()
             .with_schema(schema)
             .try_deserialize::<LogRotation2>()
             .unwrap();

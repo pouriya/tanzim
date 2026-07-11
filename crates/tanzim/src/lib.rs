@@ -1,4 +1,5 @@
 #![doc(test(no_crate_inject))]
+#![deny(missing_docs)]
 
 //! # tanzim
 //!
@@ -30,7 +31,7 @@
 //! }
 //!
 //! let config: LogRotation = tanzim::Config::default()
-//!     .with_source("file:app.toml").unwrap()
+//!     .with_source("file:app.toml")
 //!     .try_deserialize().unwrap();
 //!
 //! assert_eq!(config.file, "/var/log/app.log");
@@ -42,7 +43,8 @@
 //!
 //! No schema is needed to catch a **wrong type**: because every value keeps its origin, a
 //! mismatch during deserialization still points at the offending value. Had the file said
-//! `rotate_count = "five"`, `try_deserialize` would fail, and `{error:#}` renders:
+//! `rotate_count = "five"`, `try_deserialize` would fail, and `{error:#}` renders (verified exactly
+//! in `tests/doc.rs`):
 //!
 //! ```text
 //! failed to deserialize configuration: invalid type: string "five", expected u32 at file:app.toml:2:16
@@ -88,7 +90,7 @@
 //!     );
 //!
 //! let config: LogRotation = tanzim::Config::default()
-//!     .with_source("file:app.toml").unwrap()
+//!     .with_source("file:app.toml")
 //!     .with_schema(schema)
 //!     .try_deserialize().unwrap();
 //!
@@ -98,8 +100,8 @@
 //! # .unwrap();
 //! ```
 //!
-//! Had the file said `max_size = "banana"`, validation would fail — and the caret, the
-//! description, and the example all surface via `{error:#}`:
+//! Had the file said `max_size = "banana"`, validation would fail — and the caret, the description,
+//! and the example all surface via `{error:#}` (verified exactly in `tests/doc.rs`):
 //!
 //! ```text
 //! configuration failed validation: max_size: invalid byte size at file:app.toml:2:12

@@ -43,24 +43,39 @@ fn source_display(cs: &Source) -> String {
 /// Errors produced by the multi-configuration pipeline.
 #[derive(Debug)]
 pub enum Error {
+    /// No loaders are registered, so no source can be loaded.
     NoLoaders,
+    /// No parsers are registered, so no payload can be parsed.
     NoParsers,
+    /// A source string failed to parse.
     Source(source::ParseError),
+    /// Loading a source failed.
     Load(loader::Error),
+    /// Parsing a loaded payload failed.
     Parse(tanzim_value::Error),
+    /// Merging the parsed payloads failed.
     Merge(merger::Error),
+    /// Deserializing a merged entry into the target type failed.
     Deserialize(tanzim_value::Error),
+    /// No registered loader supports a configured source.
     NoLoader {
+        /// The display form of the source that no loader matched.
         at: String,
     },
+    /// No registered parser supports a loaded payload's format.
     NoParser {
+        /// The format that no parser matched (or `"unknown"` if none was declared).
         format: String,
+        /// The display form of the source the payload came from.
         at: String,
     },
 
+    /// A merged entry failed schema validation.
     #[cfg(feature = "validate-schema")]
     Validate {
+        /// The name of the entry that failed validation (`None` = the unnamed bucket).
         name: Option<String>,
+        /// The underlying validation error.
         inner: validator::Error,
     },
 }
@@ -138,6 +153,9 @@ pub struct PipelineBuilder<State: BuilderState> {
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
     schemas: Schemas,
+    /// The first source string that failed to parse, stashed so the source builders can stay
+    /// infallible. Surfaced (as [`Error::Source`]) when the pipeline runs.
+    deferred_error: Option<source::ParseError>,
     _state: PhantomData<State>,
 }
 
@@ -157,6 +175,7 @@ impl Pipeline {
             parsers: Vec::new(),
             #[cfg(feature = "validate-schema")]
             schemas: Schemas::new(),
+            deferred_error: None,
             _state: PhantomData,
         }
     }
@@ -183,6 +202,7 @@ impl Pipeline {
             parsers: Vec::new(),
             #[cfg(feature = "validate-schema")]
             schemas: Schemas::new(),
+            deferred_error: None,
             _state: PhantomData,
         }
     }
@@ -194,18 +214,22 @@ impl<State: BuilderState> PipelineBuilder<State> {
         merger::leaves(&self.plan).into_iter()
     }
 
+    /// The registered loaders, in declared order.
     pub fn loaders(&self) -> &[Box<dyn loader::Load + Send + Sync>] {
         &self.loaders
     }
 
+    /// Mutable access to the registered loaders.
     pub fn loaders_mut(&mut self) -> &mut Vec<Box<dyn loader::Load + Send + Sync>> {
         &mut self.loaders
     }
 
+    /// The registered parsers, in declared order.
     pub fn parsers(&self) -> &[Box<dyn parser::Parse + Send + Sync>] {
         &self.parsers
     }
 
+    /// Mutable access to the registered parsers.
     pub fn parsers_mut(&mut self) -> &mut Vec<Box<dyn parser::Parse + Send + Sync>> {
         &mut self.parsers
     }
@@ -218,21 +242,25 @@ impl<State: BuilderState> PipelineBuilder<State> {
             .flatten()
     }
 
+    /// The registered validation schemas, keyed by entry name.
     #[cfg(feature = "validate-schema")]
     pub fn schemas(&self) -> &Schemas {
         &self.schemas
     }
 
+    /// Mutable access to the registered validation schemas.
     #[cfg(feature = "validate-schema")]
     pub fn schemas_mut(&mut self) -> &mut Schemas {
         &mut self.schemas
     }
 
+    /// Append a single loader (builder-style).
     pub fn with_loader(mut self, loader: impl loader::Load + Send + Sync + 'static) -> Self {
         self.loaders.push(Box::new(loader));
         self
     }
 
+    /// Append a single parser (builder-style).
     pub fn with_parser(mut self, parser: impl parser::Parse + Send + Sync + 'static) -> Self {
         self.parsers.push(Box::new(parser));
         self
@@ -306,6 +334,7 @@ impl<State: BuilderState> PipelineBuilder<State> {
         self
     }
 
+    /// Register multiple validators at once (builder-style), merging them into any already set.
     #[cfg(feature = "validate-schema")]
     pub fn with_schemas(mut self, schemas: Schemas) -> Self {
         for (name, schema) in schemas {
@@ -323,6 +352,7 @@ impl<State: BuilderState> PipelineBuilder<State> {
             parsers: self.parsers,
             #[cfg(feature = "validate-schema")]
             schemas: self.schemas,
+            deferred_error: self.deferred_error,
         }
     }
 
@@ -341,47 +371,63 @@ impl<State: BuilderState> PipelineBuilder<State> {
 
 impl PipelineBuilder<Sources> {
     /// Append a configuration source (builder-style). `source` may be a [`Source`] or any string form
-    /// (e.g. `"file:app.toml"`), parsed now — an invalid source yields [`Error::Source`].
-    pub fn with_source<S>(mut self, source: S) -> Result<Self, Error>
+    /// (e.g. `"file:app.toml"`), parsed now. This method is infallible: an invalid source string is
+    /// stashed and surfaced later as [`Error::Source`] when the pipeline runs, so calls keep chaining.
+    pub fn with_source<S>(mut self, source: S) -> Self
     where
         S: TryInto<Source>,
         Error: From<S::Error>,
     {
-        self.add_source(source)?;
-        Ok(self)
+        self.add_source(source);
+        self
     }
 
     /// Append a configuration source (in-place). See [`with_source`](Self::with_source).
-    pub fn add_source<S>(&mut self, source: S) -> Result<&mut Self, Error>
+    pub fn add_source<S>(&mut self, source: S) -> &mut Self
     where
         S: TryInto<Source>,
         Error: From<S::Error>,
     {
-        let source = source.try_into()?;
-        merger::push_child(&mut self.plan, MergePlan::Source(source));
-        Ok(self)
+        match source.try_into() {
+            Ok(source) => merger::push_child(&mut self.plan, MergePlan::Source(source)),
+            Err(error) => self.record_deferred(error.into()),
+        }
+        self
     }
 
     /// Append a source bound to its own `merger`, applied to that source's payloads before the
-    /// global merger folds everything (builder-style).
+    /// global merger folds everything (builder-style). Infallible like [`with_source`](Self::with_source):
+    /// an invalid source string is deferred to [`run`](Pipeline::run).
     pub fn with_source_merged<S>(
         mut self,
         source: S,
         merger: impl merger::Merge + Send + Sync + 'static,
-    ) -> Result<Self, Error>
+    ) -> Self
     where
         S: TryInto<Source>,
         Error: From<S::Error>,
     {
-        let source = source.try_into()?;
-        merger::push_child(
-            &mut self.plan,
-            MergePlan::Merge {
-                merger: Box::new(merger),
-                children: vec![MergePlan::Source(source)],
-            },
-        );
-        Ok(self)
+        match source.try_into() {
+            Ok(source) => merger::push_child(
+                &mut self.plan,
+                MergePlan::Merge {
+                    merger: Box::new(merger),
+                    children: vec![MergePlan::Source(source)],
+                },
+            ),
+            Err(error) => self.record_deferred(error.into()),
+        }
+        self
+    }
+
+    /// Stash the first source-parse failure, keeping the source builders infallible. Later failures
+    /// are dropped — the first one wins and is returned by [`run`](Pipeline::run).
+    fn record_deferred(&mut self, error: Error) {
+        if self.deferred_error.is_none()
+            && let Error::Source(parse_error) = error
+        {
+            self.deferred_error = Some(parse_error);
+        }
     }
 
     /// Set the global merger that folds all sources together. Defaults to
@@ -399,6 +445,38 @@ impl PipelineBuilder<Sources> {
 /// then [`build`](PipelineBuilder::build). Call [`run`](Self::run) /
 /// [`try_deserialize`](Self::try_deserialize) for the whole pipeline, or reach the individual stages
 /// through [`stages`](Self::stages).
+///
+/// # Example
+///
+/// Where [`Config`](crate::Config) collapses everything into one value, a `Pipeline` keeps a map of
+/// named entries. An env `separator` splits `APP_web__port` into entry `web`, key `port`; each entry
+/// deserializes on its own. The sandbox sets the environment variables the example reads.
+///
+/// ```rust
+/// # #[cfg(all(feature = "load-env", feature = "parse-env"))]
+/// # tanzim_testing::environment::run(|env| {
+/// use std::collections::HashMap;
+/// use serde::Deserialize;
+/// use tanzim::pipeline::Pipeline;
+/// # env.set_env("APP_WEB__PORT", "8080")?;
+/// # env.set_env("APP_DB__PORT", "5432")?;
+///
+/// #[derive(Deserialize)]
+/// struct Service {
+///     port: String, // the env parser keeps every value as a string
+/// }
+///
+/// let services: HashMap<Option<String>, Service> = Pipeline::default()
+///     .with_source("env(prefix=APP_,separator=__)")
+///     .try_deserialize()
+///     .unwrap();
+///
+/// assert_eq!(services[&Some("web".to_string())].port, "8080");
+/// assert_eq!(services[&Some("db".to_string())].port, "5432");
+/// # Ok(())
+/// # })
+/// # .unwrap();
+/// ```
 pub struct Pipeline {
     plan: MergePlan,
     merger_set: bool,
@@ -406,6 +484,9 @@ pub struct Pipeline {
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
     schemas: Schemas,
+    /// A source string that failed to parse while assembling the builder, deferred to here so the
+    /// source builders could stay infallible. Returned by [`run`](Pipeline::run) before any work.
+    deferred_error: Option<source::ParseError>,
 }
 
 impl Pipeline {
@@ -414,10 +495,12 @@ impl Pipeline {
         merger::leaves(&self.plan).into_iter()
     }
 
+    /// The registered loaders, in declared order.
     pub fn loaders(&self) -> &[Box<dyn loader::Load + Send + Sync>] {
         &self.loaders
     }
 
+    /// The registered parsers, in declared order.
     pub fn parsers(&self) -> &[Box<dyn parser::Parse + Send + Sync>] {
         &self.parsers
     }
@@ -430,6 +513,7 @@ impl Pipeline {
             .flatten()
     }
 
+    /// The registered validation schemas, keyed by entry name.
     #[cfg(feature = "validate-schema")]
     pub fn schemas(&self) -> &Schemas {
         &self.schemas
@@ -444,6 +528,9 @@ impl Pipeline {
 
     /// Run load → parse → merge → validate in sequence.
     pub fn run(&self) -> Result<Merged, Error> {
+        if let Some(error) = &self.deferred_error {
+            return Err(Error::Source(error.clone()));
+        }
         cfg_if! {
             if #[cfg(feature = "tracing")] {
                 tracing::debug!(msg = "Running multi configuration pipeline", source_count = merger::leaves(&self.plan).len(), loader_count = self.loaders.len(), parser_count = self.parsers.len());
@@ -488,6 +575,7 @@ pub struct PipelineStages<'a> {
 }
 
 impl PipelineStages<'_> {
+    /// Run the load stage: read every configured source into raw payloads.
     pub fn load(&self) -> Result<Vec<loader::Payload>, Error> {
         let pipeline = self.pipeline;
         if pipeline.loaders.is_empty() {
@@ -564,6 +652,7 @@ impl PipelineStages<'_> {
         Ok(result)
     }
 
+    /// Run the parse stage: turn every loaded payload into a value tree.
     pub fn parse(&self, loaded: &[loader::Payload]) -> Result<Vec<Parsed>, Error> {
         let pipeline = self.pipeline;
         if pipeline.parsers.is_empty() {

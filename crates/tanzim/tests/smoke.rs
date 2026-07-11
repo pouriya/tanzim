@@ -39,9 +39,7 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
             .with_default_parsers()
             .with_merger(DeepMerge::new())
             .with_source("env(prefix=APP_NAME,separator=__)")
-            .expect("register env source")
-            .with_source(format!("file:{}", etc.display()))
-            .expect("register file source");
+            .with_source(format!("file:{}", etc.display()));
 
         let merged = config.run().expect("run pipeline");
 
