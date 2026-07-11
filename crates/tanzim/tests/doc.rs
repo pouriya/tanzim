@@ -40,7 +40,10 @@ struct LogRotation2 {
 #[test]
 fn example_simple_happy_path() {
     run(|env| {
-        env.write_file("app.toml", "file = \"/var/log/app.log\"\nrotate_count = 5\n")?;
+        env.write_file(
+            "app.toml",
+            "file = \"/var/log/app.log\"\nrotate_count = 5\n",
+        )?;
         let cfg = Config::default()
             .with_source("file:app.toml")
             .try_deserialize::<LogRotation1>()
@@ -95,7 +98,10 @@ failed to deserialize configuration: invalid type: string \"five\", expected u32
 #[test]
 fn example_advanced_happy_path() {
     run(|env| {
-        env.write_file("app.toml", "file = \"/var/log/app.log\"\nmax_size = \"100MB\"\n")?;
+        env.write_file(
+            "app.toml",
+            "file = \"/var/log/app.log\"\nmax_size = \"100MB\"\n",
+        )?;
         env.write_file("user/app.toml", "max_size = \"10MB\"\n")?;
         env.set_env("APP_FILE", "/var/log/app.log")?;
         env.set_env("APP_MAX_SIZE", "20MB")?;
@@ -106,14 +112,12 @@ fn example_advanced_happy_path() {
             ]),
             src("env(prefix=APP_)").unwrap(),
         ]);
-        let schema = StaticMap::new()
-            .required("file", NonEmpty::new())
-            .required(
-                "max_size",
-                ByteSize::new()
-                    .with_description("Rotate the log once it grows past this size.")
-                    .with_example("10MB"),
-            );
+        let schema = StaticMap::new().required("file", NonEmpty::new()).required(
+            "max_size",
+            ByteSize::new()
+                .with_description("Rotate the log once it grows past this size.")
+                .with_example("10MB"),
+        );
         let cfg = Config::from_plan(plan)
             .with_default_loaders()
             .with_default_parsers()
@@ -132,20 +136,21 @@ fn example_advanced_happy_path() {
 #[test]
 fn example_advanced_validation_error() {
     run(|env| {
-        env.write_file("app.toml", "file = \"/var/log/app.log\"\nmax_size = \"100MB\"\n")?;
+        env.write_file(
+            "app.toml",
+            "file = \"/var/log/app.log\"\nmax_size = \"100MB\"\n",
+        )?;
         env.write_file("user/app.toml", "max_size = \"banana\"\n")?;
         let plan = deep(vec![
             src("file:app.toml").unwrap(),
             src("file:user/app.toml").unwrap(),
         ]);
-        let schema = StaticMap::new()
-            .required("file", NonEmpty::new())
-            .required(
-                "max_size",
-                ByteSize::new()
-                    .with_description("Rotate the log once it grows past this size.")
-                    .with_example("10MB"),
-            );
+        let schema = StaticMap::new().required("file", NonEmpty::new()).required(
+            "max_size",
+            ByteSize::new()
+                .with_description("Rotate the log once it grows past this size.")
+                .with_example("10MB"),
+        );
         let error = Config::from_plan(plan)
             .with_default_loaders()
             .with_default_parsers()
