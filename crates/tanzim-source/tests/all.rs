@@ -196,7 +196,7 @@ fn source_display_and_builder_resource_colon() {
 
     let mut source = SourceBuilder::new()
         .with_source("file")
-        .with_option("ignore", vec!["not-found"])
+        .with_option("skip", vec!["not-found"])
         .with_resource("/tmp/x")
         .build()
         .unwrap();

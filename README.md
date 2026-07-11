@@ -43,7 +43,7 @@ struct LogRotation {
 }
 
 let config: LogRotation = Config::default()
-    .with_source("file:app.toml")
+    .with_source(tanzim::source::file("app.toml"))
     .try_deserialize()
     .unwrap();
 

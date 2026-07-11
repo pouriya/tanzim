@@ -91,11 +91,11 @@ fn load_reads_files_from_directory() {
 }
 
 #[test]
-fn load_ignores_not_found_when_configured() {
+fn load_skips_not_found_when_configured() {
     let source = SourceBuilder::new()
         .with_source("file")
         .with_resource("/no/such/path")
-        .with_option("ignore", vec!["not-found"])
+        .with_option("skip", vec!["not-found"])
         .build()
         .unwrap();
     let loaded = File::new().load(source).unwrap();
@@ -140,27 +140,27 @@ fn load_ignores_unknown_option() {
 }
 
 #[test]
-fn load_rejects_invalid_ignore_list() {
+fn load_rejects_invalid_skip_list() {
     let source = SourceBuilder::new()
         .with_source("file")
         .with_resource("/tmp")
-        .with_option("ignore", "not-a-list")
+        .with_option("skip", "not-a-list")
         .build()
         .unwrap();
     let error = File::new().load(source).unwrap_err();
-    assert!(matches!(error, Error::InvalidOption { key, .. } if key == "ignore"));
+    assert!(matches!(error, Error::InvalidOption { key, .. } if key == "skip"));
 }
 
 #[test]
-fn load_rejects_unknown_ignore_value() {
+fn load_rejects_unknown_skip_value() {
     let source = SourceBuilder::new()
         .with_source("file")
         .with_resource("/tmp")
-        .with_option("ignore", vec!["bogus"])
+        .with_option("skip", vec!["bogus"])
         .build()
         .unwrap();
     let error = File::new().load(source).unwrap_err();
-    assert!(matches!(error, Error::InvalidOption { key, .. } if key == "ignore"));
+    assert!(matches!(error, Error::InvalidOption { key, .. } if key == "skip"));
 }
 
 #[test]

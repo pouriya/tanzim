@@ -6,6 +6,7 @@
 //! ```
 #![cfg(all(
     feature = "load-env",
+    feature = "load-file",
     feature = "parse-env",
     feature = "parse-toml",
     feature = "validate-static_map",
@@ -45,7 +46,7 @@ fn example_simple_happy_path() {
             "file = \"/var/log/app.log\"\nrotate_count = 5\n",
         )?;
         let cfg = Config::default()
-            .with_source("file:app.toml")
+            .with_source(tanzim::source::file("app.toml"))
             .try_deserialize::<LogRotation1>()
             .unwrap();
         assert_eq!(cfg.file, "/var/log/app.log");
@@ -65,7 +66,7 @@ fn example1_wrong_type_caret() {
             "file = \"/var/log/app.log\"\nrotate_count = \"five\"",
         )?;
         let error = Config::default()
-            .with_source("file:app.toml")
+            .with_source(tanzim::source::file("app.toml"))
             .try_deserialize::<LogRotation1>()
             .unwrap_err();
 
@@ -193,7 +194,7 @@ fn example2_bytesize_validation_error() {
                 .with_example("10MB"),
         );
         let error = Config::default()
-            .with_source("file:app.toml")
+            .with_source(tanzim::source::file("app.toml"))
             .with_schema(schema)
             .try_deserialize::<LogRotation2>()
             .unwrap_err();
@@ -227,7 +228,7 @@ fn example2_bytesize_coerces() {
             .required("file", NonEmpty::new())
             .required("max_size", ByteSize::new());
         let cfg = Config::default()
-            .with_source("file:app.toml")
+            .with_source(tanzim::source::file("app.toml"))
             .with_schema(schema)
             .try_deserialize::<LogRotation2>()
             .unwrap();

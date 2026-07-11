@@ -256,7 +256,7 @@ impl From<Box<dyn StdError + Send + Sync>> for Error {
 ///
 /// # Reading options
 ///
-/// Options declared on the source (e.g. `file(ignore=[not-found])`) are available via
+/// Options declared on the source (e.g. `file(skip=[not-found])`) are available via
 /// [`Source::options`]. Look each up with [`Options::get`], convert with the typed accessors
 /// ([`OptionValue::as_bool`], [`OptionValue::as_string`], [`OptionValue::as_list`], …), and on a
 /// type mismatch build the `reason` from [`OptionValue::type_name`]. Only look up the options your

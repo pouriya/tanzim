@@ -15,7 +15,7 @@
 //! your own type. The example runs inside a throwaway sandbox that prepares the file.
 //!
 //! ```rust
-//! # #[cfg(feature = "parse-toml")]
+//! # #[cfg(all(feature = "parse-toml", feature = "load-file"))]
 //! # tanzim_testing::environment::run(|env| {
 //! use serde::Deserialize;
 //!
@@ -31,7 +31,7 @@
 //! }
 //!
 //! let config: LogRotation = tanzim::Config::default()
-//!     .with_source("file:app.toml")
+//!     .with_source(tanzim::source::file("app.toml"))
 //!     .try_deserialize().unwrap();
 //!
 //! assert_eq!(config.file, "/var/log/app.log");
@@ -62,7 +62,7 @@
 //! count, and its metadata surfaces in error messages.
 //!
 //! ```rust
-//! # #[cfg(all(feature = "parse-toml", feature = "validate-static_map", feature = "validate-bytesize", feature = "validate-non_empty"))]
+//! # #[cfg(all(feature = "parse-toml", feature = "load-file", feature = "validate-static_map", feature = "validate-bytesize", feature = "validate-non_empty"))]
 //! # tanzim_testing::environment::run(|env| {
 //! use serde::Deserialize;
 //! use tanzim::validator::{ByteSize, NonEmpty, StaticMap};
@@ -90,7 +90,7 @@
 //!     );
 //!
 //! let config: LogRotation = tanzim::Config::default()
-//!     .with_source("file:app.toml")
+//!     .with_source(tanzim::source::file("app.toml"))
 //!     .with_schema(schema)
 //!     .try_deserialize().unwrap();
 //!

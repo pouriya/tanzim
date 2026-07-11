@@ -18,18 +18,18 @@
 //!   diagnostics point at the exact file rather than the directory.
 //! - Missing paths and permission errors normally surface as
 //!   [`Error::NotFound`] / [`Error::NoAccess`];
-//!   the `ignore` option downgrades them to a skipped entry instead.
+//!   the `skip` option downgrades them to a skipped entry instead.
 //!
 //! # Options
 //!
-//! - `ignore` — list of `not-found` and/or `no-access` (default `[]`)
+//! - `skip` — list of `not-found` and/or `no-access` (default `[]`)
 //! - `lowercase` — boolean (default `true`; whether to lowercase entry names and formats)
 //!
 //! # Example
 //!
 //! ```text
 //! file:/path/to/config.json
-//! file(ignore=[not-found]):/optional/config
+//! file(skip=[not-found]):/optional/config
 //! ```
 
 use crate::{Error, Load, Payload, Source};
@@ -43,12 +43,12 @@ use std::{
 pub const NAME: &str = "File";
 /// Source string handled by [`File`] (see [`Load::supported_source_list`]).
 pub const SOURCE: &str = "file";
-const IGNORE_NOT_FOUND: &str = "not-found";
-const IGNORE_NO_ACCESS: &str = "no-access";
+const SKIP_NOT_FOUND: &str = "not-found";
+const SKIP_NO_ACCESS: &str = "no-access";
 
 /// Loader for the `file` source: reads a single file or every file in a directory.
 ///
-/// See the [module docs](self) for how names/formats are derived and how the `ignore` and
+/// See the [module docs](self) for how names/formats are derived and how the `skip` and
 /// `lowercase` options behave. Stateless — construct with [`File::new`].
 ///
 /// # Example
@@ -57,17 +57,17 @@ const IGNORE_NO_ACCESS: &str = "no-access";
 /// use tanzim_load::{file::File, Load};
 /// use tanzim_source::SourceBuilder;
 ///
-/// // `ignore=[not-found]` turns a missing path into an empty result instead of an error,
+/// // `skip=[not-found]` turns a missing path into an empty result instead of an error,
 /// // so this example is self-contained.
 /// let source = SourceBuilder::new()
 ///     .with_source("file")
 ///     .with_resource("/path/to/config") // a file or a directory
-///     .with_option("ignore", vec!["not-found"])
+///     .with_option("skip", vec!["not-found"])
 ///     .build()
 ///     .unwrap();
 ///
 /// let payloads = File::new().load(source).unwrap();
-/// assert!(payloads.is_empty()); // nothing at that path, and not-found is ignored
+/// assert!(payloads.is_empty()); // nothing at that path, and not-found is skipped
 /// ```
 #[derive(Default, Clone, Debug)]
 pub struct File;
@@ -78,10 +78,10 @@ impl File {
         Default::default()
     }
 
-    fn should_ignore(ignore: &[String], kind: io::ErrorKind) -> bool {
+    fn should_skip(skip: &[String], kind: io::ErrorKind) -> bool {
         match kind {
-            io::ErrorKind::NotFound => ignore.iter().any(|item| item == IGNORE_NOT_FOUND),
-            io::ErrorKind::PermissionDenied => ignore.iter().any(|item| item == IGNORE_NO_ACCESS),
+            io::ErrorKind::NotFound => skip.iter().any(|item| item == SKIP_NOT_FOUND),
+            io::ErrorKind::PermissionDenied => skip.iter().any(|item| item == SKIP_NO_ACCESS),
             _ => false,
         }
     }
@@ -91,9 +91,9 @@ impl File {
         if !path.is_file() {
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
-                    tracing::warn!(msg = "Ignored configuration file directory entry", path = ?path, reason = "not a file");
+                    tracing::warn!(msg = "Skipped configuration file directory entry", path = ?path, reason = "not a file");
                 } else if #[cfg(feature = "logging")] {
-                    log::warn!("msg=\"Ignored configuration file directory entry\" path={path:?} reason=\"not a file\"");
+                    log::warn!("msg=\"Skipped configuration file directory entry\" path={path:?} reason=\"not a file\"");
                 }
             }
             return None;
@@ -170,36 +170,36 @@ impl Load for File {
         let options = source.options().clone();
         let resource = source.resource().to_string();
 
-        let ignore =
-            match options.get("ignore") {
+        let skip =
+            match options.get("skip") {
                 None => Vec::new(),
                 Some(value) => {
                     let list = value.as_list().ok_or_else(|| Error::InvalidOption {
                         loader: NAME.to_string(),
-                        key: "ignore".to_string(),
+                        key: "skip".to_string(),
                         reason: format!("expected list, found {}", value.type_name()),
                     })?;
-                    let mut ignore = Vec::with_capacity(list.len());
+                    let mut skip = Vec::with_capacity(list.len());
                     for item in list {
-                        ignore.push(item.as_string().cloned().ok_or_else(|| {
+                        skip.push(item.as_string().cloned().ok_or_else(|| {
                             Error::InvalidOption {
                                 loader: NAME.to_string(),
-                                key: "ignore".to_string(),
+                                key: "skip".to_string(),
                                 reason: format!("expected string, found {}", item.type_name()),
                             }
                         })?);
                     }
-                    ignore
+                    skip
                 }
             };
 
-        for item in &ignore {
-            if item != IGNORE_NOT_FOUND && item != IGNORE_NO_ACCESS {
+        for item in &skip {
+            if item != SKIP_NOT_FOUND && item != SKIP_NO_ACCESS {
                 return Err(Error::InvalidOption {
                     loader: NAME.to_string(),
-                    key: "ignore".into(),
+                    key: "skip".into(),
                     reason: format!(
-                        "unknown ignore value `{item}` (expected `not-found` or `no-access`)"
+                        "unknown skip value `{item}` (expected `not-found` or `no-access`)"
                     ),
                 });
             }
@@ -236,12 +236,12 @@ impl Load for File {
         let list: Vec<(Option<String>, Option<String>, PathBuf, Source)> = if path.is_dir() {
             let entry_list = match fs::read_dir(&path) {
                 Ok(entry_list) => entry_list,
-                Err(error) if Self::should_ignore(&ignore, error.kind()) => {
+                Err(error) if Self::should_skip(&skip, error.kind()) => {
                     cfg_if! {
                         if #[cfg(feature = "tracing")] {
-                            tracing::warn!(msg = "Ignored configuration file directory", path = ?path, reason = ?error);
+                            tracing::warn!(msg = "Skipped configuration file directory", path = ?path, reason = ?error);
                         } else if #[cfg(feature = "logging")] {
-                            log::debug!("msg=\"Ignored configuration file directory\" path={path:?} reason={error:?}");
+                            log::debug!("msg=\"Skipped configuration file directory\" path={path:?} reason={error:?}");
                         }
                     }
                     return Ok(Vec::new());
@@ -274,12 +274,12 @@ impl Load for File {
             for maybe_entry in entry_list {
                 let entry = match maybe_entry {
                     Ok(entry) => entry,
-                    Err(error) if Self::should_ignore(&ignore, error.kind()) => {
+                    Err(error) if Self::should_skip(&skip, error.kind()) => {
                         cfg_if! {
                             if #[cfg(feature = "tracing")] {
-                                tracing::warn!(msg = "Ignored configuration file directory entry", path = ?path, reason = ?error);
+                                tracing::warn!(msg = "Skipped configuration file directory entry", path = ?path, reason = ?error);
                             } else if #[cfg(feature = "logging")] {
-                                log::warn!("msg=\"Ignored configuration file directory entry\" path={path:?} reason={error:?}");
+                                log::warn!("msg=\"Skipped configuration file directory entry\" path={path:?} reason={error:?}");
                             }
                         }
                         continue;
@@ -302,9 +302,9 @@ impl Load for File {
                 } else {
                     cfg_if! {
                         if #[cfg(feature = "tracing")] {
-                            tracing::warn!(msg = "Ignored configuration file directory entry", path = ?entry_path, reason = "not a file");
+                            tracing::warn!(msg = "Skipped configuration file directory entry", path = ?entry_path, reason = "not a file");
                         } else if #[cfg(feature = "logging")] {
-                            log::warn!("msg=\"Ignored configuration file directory entry\" path={entry_path:?} reason=\"not a file\"");
+                            log::warn!("msg=\"Skipped configuration file directory entry\" path={entry_path:?} reason=\"not a file\"");
                         }
                     }
                     continue;
@@ -348,7 +348,7 @@ impl Load for File {
                 resource: resource.to_string(),
                 reason: "resource is not a directory or regular file".into(),
             });
-        } else if Self::should_ignore(&ignore, io::ErrorKind::NotFound) {
+        } else if Self::should_skip(&skip, io::ErrorKind::NotFound) {
             return Ok(Vec::new());
         } else {
             return Err(Error::NotFound {
@@ -362,12 +362,12 @@ impl Load for File {
         for (maybe_name, maybe_format, path, source) in list {
             let content = match fs::read(&path) {
                 Ok(content) => Some(content),
-                Err(error) if Self::should_ignore(&ignore, error.kind()) => {
+                Err(error) if Self::should_skip(&skip, error.kind()) => {
                     cfg_if! {
                         if #[cfg(feature = "tracing")] {
-                            tracing::warn!(msg = "Ignored configuration file", path = ?path, reason = ?error);
+                            tracing::warn!(msg = "Skipped configuration file", path = ?path, reason = ?error);
                         } else if #[cfg(feature = "logging")] {
-                            log::warn!("msg=\"Ignored configuration file\" path={path:?} reason={error:?}");
+                            log::warn!("msg=\"Skipped configuration file\" path={path:?} reason={error:?}");
                         }
                     }
                     None
