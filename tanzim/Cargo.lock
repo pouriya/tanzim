@@ -833,7 +833,7 @@ dependencies = [
 
 [[package]]
 name = "tanzim"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "cfg-if",
  "serde",
@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "tanzim-load"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "cfg-if",
  "tanzim-source",
@@ -869,7 +869,7 @@ dependencies = [
 
 [[package]]
 name = "tanzim-merge"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "cfg-if",
  "tanzim-load",

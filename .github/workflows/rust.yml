@@ -13,36 +13,92 @@ env:
 
 jobs:
   style:
+    name: Check Style
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check style
         run: make check-style
 
-  clippy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Clippy
-        run: make clippy
-
   docs:
+    name: Documentation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Documentation
         run: make docs
 
-  test:
-    runs-on: ubuntu-latest
+  clippy:
+    name: Lint (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: macos-latest
+            name: macos
+          - os: windows-latest
+            name: windows
     steps:
       - uses: actions/checkout@v4
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
+      - name: Clippy
+        run: make clippy
+
+  test:
+    name: Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: macos-latest
+            name: macos
+          - os: windows-latest
+            name: windows
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
       - name: Test
         run: make test
 
   examples:
-    runs-on: ubuntu-latest
+    name: Examples/CLI (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: macos-latest
+            name: macos
+          - os: windows-latest
+            name: windows
     steps:
       - uses: actions/checkout@v4
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
       - name: Examples
-        run: make examples
+        run: |
+          make examples
+          make cli
+          ls -sh ./bin
