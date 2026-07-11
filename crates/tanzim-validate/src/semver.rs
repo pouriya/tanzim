@@ -9,6 +9,7 @@ pub struct Semver {
 }
 
 impl Semver {
+    /// A new, unconfigured `Semver` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

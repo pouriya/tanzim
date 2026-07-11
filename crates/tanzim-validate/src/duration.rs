@@ -17,6 +17,7 @@ impl Duration {
         self
     }
 
+    /// A new `Duration` validator that coerces to seconds.
     pub fn new() -> Self {
         Self::default()
     }

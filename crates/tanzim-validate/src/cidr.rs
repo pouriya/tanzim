@@ -9,6 +9,7 @@ pub struct Cidr {
 }
 
 impl Cidr {
+    /// A new, unconfigured `Cidr` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

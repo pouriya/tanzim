@@ -5,8 +5,11 @@ use tanzim_value::{Value, ValueType};
 /// (`path` feature) The kind of filesystem entry a [`Path`] must point at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathKind {
+    /// A directory.
     Dir,
+    /// A regular file.
     File,
+    /// A symbolic link.
     Symlink,
 }
 
@@ -35,16 +38,19 @@ impl Path {
         self
     }
 
+    /// A new, unconfigured `Path` validator.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Require the path to be absolute.
     pub fn absolute(mut self) -> Self {
         self.absolute = true;
         self.relative = false;
         self
     }
 
+    /// Require the path to be relative.
     pub fn relative(mut self) -> Self {
         self.relative = true;
         self.absolute = false;

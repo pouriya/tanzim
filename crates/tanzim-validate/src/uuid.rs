@@ -9,6 +9,7 @@ pub struct Uuid {
 }
 
 impl Uuid {
+    /// A new, unconfigured `Uuid` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

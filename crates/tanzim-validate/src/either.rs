@@ -21,6 +21,7 @@ impl Either {
         self
     }
 
+    /// An `Either` that accepts a value when `first` or `second` accepts it.
     pub fn new(
         first: impl Into<Box<dyn Validator + Send + Sync>>,
         second: impl Into<Box<dyn Validator + Send + Sync>>,

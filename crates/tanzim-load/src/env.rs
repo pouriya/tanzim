@@ -37,7 +37,9 @@ use crate::{Error, Load, Payload, Source};
 use cfg_if::cfg_if;
 use std::{collections::HashMap, env};
 
+/// Loader name reported by [`Env::name`](crate::Load::name) and used in error messages.
 pub const NAME: &str = "Environment-Variables";
+/// Source string handled by [`Env`] (see [`Load::supported_source_list`]).
 pub const SOURCE: &str = "env";
 
 /// Loader for the `env` source: reads process environment variables into configuration entries.
@@ -112,16 +114,19 @@ impl Env {
         }
     }
 
+    /// Set the prefix override when `maybe_prefix` is `Some`; otherwise leave it unchanged.
     pub fn set_maybe_prefix<P: Into<String>>(&mut self, maybe_prefix: Option<P>) {
         if let Some(prefix) = maybe_prefix {
             self.set_prefix(prefix);
         }
     }
 
+    /// Pin the prefix, overriding the source's `prefix` option and the auto-detected default.
     pub fn set_prefix<P: Into<String>>(&mut self, prefix: P) {
         self.prefix_override = Some(prefix.into());
     }
 
+    /// Builder form of [`Env::set_prefix`].
     pub fn with_prefix<P: Into<String>>(mut self, prefix: P) -> Self {
         self.set_prefix(prefix.into());
         self

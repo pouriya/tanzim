@@ -23,20 +23,24 @@ impl List {
         self
     }
 
+    /// A new, unconfigured `List` validator.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Require at least `min` items.
     pub fn min_len(mut self, min: usize) -> Self {
         self.min_len = Some(min);
         self
     }
 
+    /// Require at most `max` items.
     pub fn max_len(mut self, max: usize) -> Self {
         self.max_len = Some(max);
         self
     }
 
+    /// Reject duplicate items.
     pub fn unique(mut self) -> Self {
         self.unique = true;
         self

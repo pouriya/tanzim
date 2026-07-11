@@ -11,8 +11,11 @@ use tanzim_source::Source;
 /// name/resource, for synthetic origins).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Location {
+    /// The originating [`Source`] (name, options, resource, `on_error` policy).
     pub source: Source,
+    /// 1-based line number, when known.
     pub line: Option<NonZeroU32>,
+    /// 1-based column number, when known.
     pub column: Option<NonZeroU32>,
     /// UTF-8 character span length for error underlines; defaults to one caret.
     pub length: Option<NonZeroU32>,
@@ -139,6 +142,7 @@ impl Location {
         self.source.resource()
     }
 
+    /// Builder: set the UTF-8 character span length used for error underlines.
     pub fn with_length(mut self, length: usize) -> Self {
         self.length = position(length);
         self
@@ -164,12 +168,19 @@ impl Display for Location {
 /// Kind of value stored in [`Value`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValueType {
+    /// A boolean value.
     Bool,
+    /// A signed integer value.
     Int,
+    /// A floating-point value.
     Float,
+    /// A string value.
     String,
+    /// A list of values.
     List,
+    /// A map of keys to values.
     Map,
+    /// The absence of a value.
     Null,
 }
 
@@ -188,24 +199,51 @@ impl Display for ValueType {
 }
 
 /// Ordered map of configuration keys to located values (last key wins on lookup).
+///
+/// Backed by a `Vec` of `(key, value)` pairs rather than a hash map, so insertion order is
+/// preserved for display and iteration. Lookups scan from the end, so a repeated key shadows
+/// its earlier insertion without removing it.
+///
+/// ```rust
+/// use tanzim_value::{Location, Map, Value, LocatedValue};
+///
+/// let mut map = Map::new();
+/// let location = Location::at("env", "", None, None, None);
+/// map.insert(
+///     "port".to_string(),
+///     LocatedValue::new(Value::Int(8080), location.clone()),
+/// );
+/// map.insert(
+///     "host".to_string(),
+///     LocatedValue::new(Value::String("localhost".to_string()), location),
+/// );
+///
+/// assert_eq!(map.len(), 2);
+/// assert!(map.contains_key("port"));
+/// assert_eq!(map.get("port").unwrap().value().as_int(), Some(8080));
+/// ```
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Map {
     entries: Vec<(String, LocatedValue)>,
 }
 
 impl Map {
+    /// Create an empty map.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Number of entries, including any shadowed (repeated-key) entries.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// `true` when the map has no entries.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// `true` when `key` is present (checking the most recently inserted occurrence).
     pub fn contains_key(&self, key: &str) -> bool {
         for index in (0..self.entries.len()).rev() {
             if self.entries[index].0 == key {
@@ -215,6 +253,8 @@ impl Map {
         false
     }
 
+    /// The value for `key`, or `None` if absent. When `key` was inserted more than once, this
+    /// returns the most recently inserted value.
     pub fn get(&self, key: &str) -> Option<&LocatedValue> {
         for index in (0..self.entries.len()).rev() {
             if self.entries[index].0 == key {
@@ -224,6 +264,7 @@ impl Map {
         None
     }
 
+    /// Mutable access to the value for `key`, or `None` if absent.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut LocatedValue> {
         let mut found = None;
         for index in (0..self.entries.len()).rev() {
@@ -239,12 +280,14 @@ impl Map {
         }
     }
 
+    /// Insert `value` under `key`, removing (and returning) any prior value for that key.
     pub fn insert(&mut self, key: String, value: LocatedValue) -> Option<LocatedValue> {
         let old = self.remove(&key);
         self.entries.push((key, value));
         old
     }
 
+    /// Remove and return the value for `key`, if present.
     pub fn remove(&mut self, key: &str) -> Option<LocatedValue> {
         let mut found = None;
         for index in (0..self.entries.len()).rev() {
@@ -260,10 +303,12 @@ impl Map {
         }
     }
 
+    /// All entries in insertion order, including any shadowed (repeated-key) entries.
     pub fn entries(&self) -> &[(String, LocatedValue)] {
         &self.entries
     }
 
+    /// Mutable access to all entries, for in-place edits, reordering, or removal.
     pub fn entries_mut(&mut self) -> &mut Vec<(String, LocatedValue)> {
         &mut self.entries
     }
@@ -285,14 +330,36 @@ impl Display for Map {
 }
 
 /// Dynamically typed configuration value.
+///
+/// The tree shape produced by parsing configuration input: booleans, integers, floats, strings,
+/// lists, maps, and null. Use the `is_*`/`as_*`/`into_*` family of methods to inspect or extract
+/// a specific variant without a `match`.
+///
+/// ```rust
+/// use tanzim_value::Value;
+///
+/// let value: Value = 8080isize.into();
+/// assert!(value.is_int());
+/// assert_eq!(value.as_int(), Some(8080));
+///
+/// let value: Value = "localhost".into();
+/// assert_eq!(value.as_string().map(String::as_str), Some("localhost"));
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    /// A boolean value.
     Bool(bool),
+    /// A signed integer value.
     Int(isize),
+    /// A floating-point value.
     Float(f64),
+    /// A string value.
     String(String),
+    /// A list of located values.
     List(Vec<LocatedValue>),
+    /// A map of keys to located values.
     Map(Map),
+    /// The absence of a value.
     Null,
 }
 
@@ -337,6 +404,7 @@ pub struct Comment {
 }
 
 impl Comment {
+    /// Create an empty comment (no before-lines, no inline comment).
     pub fn new() -> Self {
         Self::default()
     }
@@ -346,6 +414,7 @@ impl Comment {
         &self.before
     }
 
+    /// Mutable access to the before-lines.
     pub fn before_mut(&mut self) -> &mut Vec<String> {
         &mut self.before
     }
@@ -355,6 +424,7 @@ impl Comment {
         self.after.as_deref()
     }
 
+    /// Mutable access to the inline after-comment.
     pub fn after_mut(&mut self) -> &mut Option<String> {
         &mut self.after
     }
@@ -387,6 +457,17 @@ impl Comment {
 /// Fields are private; build with [`LocatedValue::new`] and access through the provided
 /// accessor methods. [`Display`] is compact by default; use `{value:#}` for a multiline dump
 /// with `@source:resource:line:column` on the first line.
+///
+/// ```rust
+/// use tanzim_value::{LocatedValue, Location, Value};
+///
+/// let location = Location::at("env", "PORT", None, None, None);
+/// let located = LocatedValue::new(Value::Int(8080), location);
+///
+/// assert_eq!(located.value().as_int(), Some(8080));
+/// assert_eq!(located.location().source_name(), "env");
+/// assert_eq!(format!("{located}"), "8080");
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocatedValue {
     value: Value,
@@ -406,61 +487,74 @@ impl LocatedValue {
 
     // --- value ---
 
+    /// The wrapped [`Value`].
     pub fn value(&self) -> &Value {
         &self.value
     }
 
+    /// Mutable access to the wrapped [`Value`].
     pub fn value_mut(&mut self) -> &mut Value {
         &mut self.value
     }
 
+    /// Consume this located value, discarding location and comment, and return the [`Value`].
     pub fn into_value(self) -> Value {
         self.value
     }
 
+    /// Builder: replace the wrapped value.
     pub fn with_value(mut self, value: impl Into<Value>) -> Self {
         self.value = value.into();
         self
     }
 
+    /// In-place setter for the wrapped value.
     pub fn set_value(&mut self, value: impl Into<Value>) {
         self.value = value.into();
     }
 
     // --- location ---
 
+    /// The value's [`Location`].
     pub fn location(&self) -> &Location {
         &self.location
     }
 
+    /// Mutable access to the [`Location`].
     pub fn location_mut(&mut self) -> &mut Location {
         &mut self.location
     }
 
+    /// Builder: replace the location.
     pub fn with_location(mut self, location: impl Into<Location>) -> Self {
         self.location = location.into();
         self
     }
 
+    /// In-place setter for the location.
     pub fn set_location(&mut self, location: impl Into<Location>) {
         self.location = location.into();
     }
 
     // --- comment ---
 
+    /// The value's [`Comment`] (empty when none was attached).
     pub fn comment(&self) -> &Comment {
         &self.comment
     }
 
+    /// Mutable access to the [`Comment`].
     pub fn comment_mut(&mut self) -> &mut Comment {
         &mut self.comment
     }
 
+    /// Builder: replace the comment.
     pub fn with_comment(mut self, comment: Comment) -> Self {
         self.comment = comment;
         self
     }
 
+    /// In-place setter for the comment.
     pub fn set_comment(&mut self, comment: Comment) {
         self.comment = comment;
     }
@@ -501,22 +595,27 @@ impl AsRef<Value> for LocatedValue {
 }
 
 impl Value {
+    /// Create an empty [`Value::Map`].
     pub fn new_map() -> Self {
         Self::Map(Map::new())
     }
 
+    /// Create an empty [`Value::List`].
     pub fn new_list() -> Self {
         Self::List(Vec::new())
     }
 
+    /// Create an empty [`Value::String`].
     pub fn new_string() -> Self {
         Self::String(String::new())
     }
 
+    /// `true` if this is a [`Value::Bool`].
     pub fn is_bool(&self) -> bool {
         matches!(self, Self::Bool(_))
     }
 
+    /// The boolean, if this is a [`Value::Bool`].
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(value) => Some(*value),
@@ -524,6 +623,7 @@ impl Value {
         }
     }
 
+    /// Consume and return the boolean, if this is a [`Value::Bool`].
     pub fn into_bool(self) -> Option<bool> {
         match self {
             Self::Bool(value) => Some(value),
@@ -531,6 +631,7 @@ impl Value {
         }
     }
 
+    /// Mutable access to the boolean, if this is a [`Value::Bool`].
     pub fn bool_mut(&mut self) -> Option<&mut bool> {
         match self {
             Self::Bool(value) => Some(value),
@@ -538,10 +639,12 @@ impl Value {
         }
     }
 
+    /// `true` if this is a [`Value::Int`].
     pub fn is_int(&self) -> bool {
         matches!(self, Self::Int(_))
     }
 
+    /// The integer, if this is a [`Value::Int`].
     pub fn as_int(&self) -> Option<isize> {
         match self {
             Self::Int(value) => Some(*value),
@@ -549,6 +652,7 @@ impl Value {
         }
     }
 
+    /// Consume and return the integer, if this is a [`Value::Int`].
     pub fn into_int(self) -> Option<isize> {
         match self {
             Self::Int(value) => Some(value),
@@ -556,6 +660,7 @@ impl Value {
         }
     }
 
+    /// Mutable access to the integer, if this is a [`Value::Int`].
     pub fn int_mut(&mut self) -> Option<&mut isize> {
         match self {
             Self::Int(value) => Some(value),
@@ -563,10 +668,12 @@ impl Value {
         }
     }
 
+    /// `true` if this is a [`Value::Float`].
     pub fn is_float(&self) -> bool {
         matches!(self, Self::Float(_))
     }
 
+    /// The float, if this is a [`Value::Float`].
     pub fn as_float(&self) -> Option<f64> {
         match self {
             Self::Float(value) => Some(*value),
@@ -574,6 +681,7 @@ impl Value {
         }
     }
 
+    /// Consume and return the float, if this is a [`Value::Float`].
     pub fn into_float(self) -> Option<f64> {
         match self {
             Self::Float(value) => Some(value),
@@ -581,6 +689,7 @@ impl Value {
         }
     }
 
+    /// Mutable access to the float, if this is a [`Value::Float`].
     pub fn float_mut(&mut self) -> Option<&mut f64> {
         match self {
             Self::Float(value) => Some(value),
@@ -588,10 +697,12 @@ impl Value {
         }
     }
 
+    /// `true` if this is a [`Value::String`].
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String(_))
     }
 
+    /// The string, if this is a [`Value::String`].
     pub fn as_string(&self) -> Option<&String> {
         match self {
             Self::String(value) => Some(value),
@@ -599,6 +710,7 @@ impl Value {
         }
     }
 
+    /// Consume and return the string, if this is a [`Value::String`].
     pub fn into_string(self) -> Option<String> {
         match self {
             Self::String(value) => Some(value),
@@ -606,6 +718,7 @@ impl Value {
         }
     }
 
+    /// Mutable access to the string, if this is a [`Value::String`].
     pub fn string_mut(&mut self) -> Option<&mut String> {
         match self {
             Self::String(value) => Some(value),
@@ -613,10 +726,12 @@ impl Value {
         }
     }
 
+    /// `true` if this is a [`Value::List`].
     pub fn is_list(&self) -> bool {
         matches!(self, Self::List(_))
     }
 
+    /// The list, if this is a [`Value::List`].
     pub fn as_list(&self) -> Option<&Vec<LocatedValue>> {
         match self {
             Self::List(value) => Some(value),
@@ -624,6 +739,7 @@ impl Value {
         }
     }
 
+    /// Consume and return the list, if this is a [`Value::List`].
     pub fn into_list(self) -> Option<Vec<LocatedValue>> {
         match self {
             Self::List(value) => Some(value),
@@ -631,6 +747,7 @@ impl Value {
         }
     }
 
+    /// Mutable access to the list, if this is a [`Value::List`].
     pub fn list_mut(&mut self) -> Option<&mut Vec<LocatedValue>> {
         match self {
             Self::List(value) => Some(value),
@@ -638,10 +755,12 @@ impl Value {
         }
     }
 
+    /// `true` if this is a [`Value::Map`].
     pub fn is_map(&self) -> bool {
         matches!(self, Self::Map(_))
     }
 
+    /// The map, if this is a [`Value::Map`].
     pub fn as_map(&self) -> Option<&Map> {
         match self {
             Self::Map(value) => Some(value),
@@ -649,6 +768,7 @@ impl Value {
         }
     }
 
+    /// Consume and return the map, if this is a [`Value::Map`].
     pub fn into_map(self) -> Option<Map> {
         match self {
             Self::Map(value) => Some(value),
@@ -656,6 +776,7 @@ impl Value {
         }
     }
 
+    /// Mutable access to the map, if this is a [`Value::Map`].
     pub fn map_mut(&mut self) -> Option<&mut Map> {
         match self {
             Self::Map(value) => Some(value),
@@ -663,10 +784,12 @@ impl Value {
         }
     }
 
+    /// `true` if this is a [`Value::Null`].
     pub fn is_null(&self) -> bool {
         matches!(self, Self::Null)
     }
 
+    /// This value's [`ValueType`].
     pub fn type_name(&self) -> ValueType {
         match self {
             Self::Bool(_) => ValueType::Bool,

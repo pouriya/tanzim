@@ -1,3 +1,4 @@
+#![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 use std::error::Error as StdError;
@@ -56,56 +57,81 @@ pub enum Error {
     /// The requested resource or entry does not exist and was not configured to be ignored.
     /// `item` names what was missing (e.g. `` `file "app.json"` ``).
     NotFound {
+        /// The loader's [`Load::name`].
         loader: String,
+        /// The source's resource string.
         resource: String,
+        /// What was missing (e.g. `` `file "app.json"` ``).
         item: String,
     },
     /// Access was denied (e.g. filesystem permissions, HTTP 401/403). `source` carries the
     /// underlying backend error.
     NoAccess {
+        /// The loader's [`Load::name`].
         loader: String,
+        /// The source's resource string.
         resource: String,
+        /// The underlying backend error.
         source: Box<dyn StdError + Send + Sync>,
     },
     /// The operation exceeded its deadline. `timeout_in_seconds` is the limit that was hit;
     /// `source` carries the underlying backend error.
     Timeout {
+        /// The loader's [`Load::name`].
         loader: String,
+        /// The source's resource string.
         resource: String,
+        /// The deadline, in seconds, that was exceeded.
         timeout_in_seconds: u64,
+        /// The underlying backend error.
         source: Box<dyn StdError + Send + Sync>,
     },
     /// A known option has the wrong type or value. `key` is the option name; `reason` explains the
     /// problem (commonly built from [`OptionValue::type_name`] on a type mismatch). Loaders only
     /// validate options they read — unknown keys are ignored.
     InvalidOption {
+        /// The loader's [`Load::name`].
         loader: String,
+        /// The offending option's name.
         key: String,
+        /// Explanation of the problem.
         reason: String,
     },
     /// The resource string is empty or malformed for this loader (e.g. a required path is
     /// missing). `reason` explains what was expected.
     InvalidResource {
+        /// The loader's [`Load::name`].
         loader: String,
+        /// The source's resource string.
         resource: String,
+        /// Explanation of what was expected.
         reason: String,
     },
     /// Two entries resolve to the same `name` with differing formats (`format_1` vs `format_2`),
     /// so the loader cannot pick one unambiguously.
     Duplicate {
+        /// The loader's [`Load::name`].
         loader: String,
+        /// The source's resource string.
         resource: String,
+        /// The entry name shared by both colliding entries.
         name: String,
+        /// The format of the first colliding entry.
         format_1: String,
+        /// The format of the second colliding entry.
         format_2: String,
     },
     /// Catch-all backend failure that doesn't fit the variants above. `description` completes the
     /// phrase "could not {description}" (e.g. `"read contents of file"`); `source` carries the
     /// underlying error.
     Load {
+        /// The loader's [`Load::name`].
         loader: String,
+        /// The source's resource string.
         resource: String,
+        /// Completes the phrase "could not {description}" (e.g. `"read contents of file"`).
         description: String,
+        /// The underlying backend error.
         source: Box<dyn StdError + Send + Sync>,
     },
     /// Bridge for opaque errors via `?`/`From`, when none of the structured variants apply.

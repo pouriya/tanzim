@@ -54,10 +54,12 @@ fn schema_location() -> Location {
 pub struct SchemaValue(pub Value);
 
 impl SchemaValue {
+    /// Borrow the inner [`Value`].
     pub fn value(&self) -> &Value {
         &self.0
     }
 
+    /// Consume `self`, returning the inner [`Value`].
     pub fn into_value(self) -> Value {
         self.0
     }
@@ -139,16 +141,29 @@ pub enum SchemaErrorKind {
     /// A validator node was not a map.
     NotMap,
     /// The `"type"` tag named a validator the registry does not know.
-    UnknownType { tag: String },
+    UnknownType {
+        /// The unrecognized `"type"` tag.
+        tag: String,
+    },
     /// A required field was absent.
-    MissingField { field: String },
+    MissingField {
+        /// The missing field's name.
+        field: String,
+    },
     /// A field had the wrong value type.
     WrongType {
+        /// The offending field's name.
         field: String,
+        /// The value type the field was expected to have.
         expected: &'static str,
     },
     /// A field had a structurally valid but semantically invalid value.
-    InvalidValue { field: String, message: String },
+    InvalidValue {
+        /// The offending field's name.
+        field: String,
+        /// Why the value was rejected.
+        message: String,
+    },
 }
 
 impl std::fmt::Display for SchemaErrorKind {
@@ -168,7 +183,9 @@ impl std::fmt::Display for SchemaErrorKind {
 /// A schema-construction failure, with a breadcrumb path and (when known) source location.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchemaError {
+    /// What went wrong.
     pub kind: SchemaErrorKind,
+    /// Path from the schema root to the offending node (root-first).
     pub path: Vec<Segment>,
     /// Boxed to keep the error small (`clippy::result_large_err`).
     pub location: Option<Box<Location>>,

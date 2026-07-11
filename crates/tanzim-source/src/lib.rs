@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 
 mod impls;
 mod parse;
@@ -91,11 +92,17 @@ pub enum OnError {
 /// Kind of value stored in [`OptionValue`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OptionValueType {
+    /// A boolean value.
     Bool,
+    /// A 64-bit signed integer.
     Integer,
+    /// A 64-bit floating-point number.
     Float,
+    /// A string value.
     String,
+    /// A nested option map.
     Map,
+    /// A list of values.
     List,
 }
 
@@ -113,33 +120,55 @@ impl Display for OptionValueType {
 }
 
 /// Dynamically typed loader option or nested option map.
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_source::{OptionValue, OptionValueType};
+///
+/// let value = OptionValue::Integer(3);
+/// assert_eq!(value.type_name(), OptionValueType::Integer);
+/// assert_eq!(value.as_integer(), Some(3));
+/// assert_eq!(value.as_bool(), None);
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum OptionValue {
+    /// A boolean value.
     Bool(bool),
+    /// A 64-bit signed integer.
     Integer(i64),
+    /// A 64-bit floating-point number.
     Float(f64),
+    /// A string value.
     String(String),
+    /// A list of values.
     List(Vec<OptionValue>),
+    /// A nested option map.
     Map(Options),
 }
 
 impl OptionValue {
+    /// Build an empty [`OptionValue::Map`].
     pub fn new_map() -> Self {
         Self::Map(Options::default())
     }
 
+    /// Build an empty [`OptionValue::List`].
     pub fn new_list() -> Self {
         Self::List(Vec::new())
     }
 
+    /// Build an empty [`OptionValue::String`].
     pub fn new_string() -> Self {
         Self::String(String::new())
     }
 
+    /// `true` if this is a [`OptionValue::Bool`].
     pub fn is_bool(&self) -> bool {
         matches!(self, Self::Bool(_))
     }
 
+    /// The boolean value, or `None` if this is not a [`OptionValue::Bool`].
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(value) => Some(*value),
@@ -147,6 +176,7 @@ impl OptionValue {
         }
     }
 
+    /// Convert into the boolean value, or `None` if this is not a [`OptionValue::Bool`].
     pub fn into_bool(self) -> Option<bool> {
         match self {
             Self::Bool(value) => Some(value),
@@ -154,6 +184,7 @@ impl OptionValue {
         }
     }
 
+    /// A mutable reference to the boolean value, or `None` if this is not a [`OptionValue::Bool`].
     pub fn bool_mut(&mut self) -> Option<&mut bool> {
         match self {
             Self::Bool(value) => Some(value),
@@ -161,10 +192,12 @@ impl OptionValue {
         }
     }
 
+    /// `true` if this is a [`OptionValue::Integer`].
     pub fn is_integer(&self) -> bool {
         matches!(self, Self::Integer(_))
     }
 
+    /// The integer value, or `None` if this is not a [`OptionValue::Integer`].
     pub fn as_integer(&self) -> Option<i64> {
         match self {
             Self::Integer(value) => Some(*value),
@@ -172,6 +205,7 @@ impl OptionValue {
         }
     }
 
+    /// Convert into the integer value, or `None` if this is not a [`OptionValue::Integer`].
     pub fn into_integer(self) -> Option<i64> {
         match self {
             Self::Integer(value) => Some(value),
@@ -179,6 +213,7 @@ impl OptionValue {
         }
     }
 
+    /// A mutable reference to the integer value, or `None` if this is not a [`OptionValue::Integer`].
     pub fn integer_mut(&mut self) -> Option<&mut i64> {
         match self {
             Self::Integer(value) => Some(value),
@@ -186,10 +221,12 @@ impl OptionValue {
         }
     }
 
+    /// `true` if this is a [`OptionValue::Float`].
     pub fn is_float(&self) -> bool {
         matches!(self, Self::Float(_))
     }
 
+    /// The float value, or `None` if this is not a [`OptionValue::Float`].
     pub fn as_float(&self) -> Option<f64> {
         match self {
             Self::Float(value) => Some(*value),
@@ -197,6 +234,7 @@ impl OptionValue {
         }
     }
 
+    /// Convert into the float value, or `None` if this is not a [`OptionValue::Float`].
     pub fn into_float(self) -> Option<f64> {
         match self {
             Self::Float(value) => Some(value),
@@ -204,6 +242,7 @@ impl OptionValue {
         }
     }
 
+    /// A mutable reference to the float value, or `None` if this is not a [`OptionValue::Float`].
     pub fn float_mut(&mut self) -> Option<&mut f64> {
         match self {
             Self::Float(value) => Some(value),
@@ -211,10 +250,12 @@ impl OptionValue {
         }
     }
 
+    /// `true` if this is a [`OptionValue::String`].
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String(_))
     }
 
+    /// The string value, or `None` if this is not a [`OptionValue::String`].
     pub fn as_string(&self) -> Option<&String> {
         match self {
             Self::String(value) => Some(value),
@@ -222,6 +263,7 @@ impl OptionValue {
         }
     }
 
+    /// Convert into the string value, or `None` if this is not a [`OptionValue::String`].
     pub fn into_string(self) -> Option<String> {
         match self {
             Self::String(value) => Some(value),
@@ -229,6 +271,7 @@ impl OptionValue {
         }
     }
 
+    /// A mutable reference to the string value, or `None` if this is not a [`OptionValue::String`].
     pub fn string_mut(&mut self) -> Option<&mut String> {
         match self {
             Self::String(value) => Some(value),
@@ -236,10 +279,12 @@ impl OptionValue {
         }
     }
 
+    /// `true` if this is a [`OptionValue::List`].
     pub fn is_list(&self) -> bool {
         matches!(self, Self::List(_))
     }
 
+    /// The list value, or `None` if this is not a [`OptionValue::List`].
     pub fn as_list(&self) -> Option<&Vec<OptionValue>> {
         match self {
             Self::List(value) => Some(value),
@@ -247,6 +292,7 @@ impl OptionValue {
         }
     }
 
+    /// Convert into the list value, or `None` if this is not a [`OptionValue::List`].
     pub fn into_list(self) -> Option<Vec<OptionValue>> {
         match self {
             Self::List(value) => Some(value),
@@ -254,6 +300,7 @@ impl OptionValue {
         }
     }
 
+    /// A mutable reference to the list value, or `None` if this is not a [`OptionValue::List`].
     pub fn list_mut(&mut self) -> Option<&mut Vec<OptionValue>> {
         match self {
             Self::List(value) => Some(value),
@@ -261,10 +308,12 @@ impl OptionValue {
         }
     }
 
+    /// `true` if this is a [`OptionValue::Map`].
     pub fn is_map(&self) -> bool {
         matches!(self, Self::Map(_))
     }
 
+    /// The map value, or `None` if this is not a [`OptionValue::Map`].
     pub fn as_map(&self) -> Option<&Options> {
         match self {
             Self::Map(value) => Some(value),
@@ -272,6 +321,7 @@ impl OptionValue {
         }
     }
 
+    /// Convert into the map value, or `None` if this is not a [`OptionValue::Map`].
     pub fn into_map(self) -> Option<Options> {
         match self {
             Self::Map(value) => Some(value),
@@ -279,6 +329,7 @@ impl OptionValue {
         }
     }
 
+    /// A mutable reference to the map value, or `None` if this is not a [`OptionValue::Map`].
     pub fn map_mut(&mut self) -> Option<&mut Options> {
         match self {
             Self::Map(value) => Some(value),
@@ -286,6 +337,7 @@ impl OptionValue {
         }
     }
 
+    /// The [`OptionValueType`] kind of this value.
     pub fn type_name(&self) -> OptionValueType {
         match self {
             Self::Bool(_) => OptionValueType::Bool,
@@ -327,22 +379,27 @@ pub struct Options {
 }
 
 impl Options {
+    /// Build an empty [`Options`] map.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Number of entries.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// `true` if there are no entries.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// `true` if `key` is present.
     pub fn contains_key(&self, key: &str) -> bool {
         self.entries.iter().any(|(entry_key, _)| entry_key == key)
     }
 
+    /// The value for `key`, or `None` if absent.
     pub fn get(&self, key: &str) -> Option<&OptionValue> {
         self.entries
             .iter()
@@ -350,6 +407,7 @@ impl Options {
             .map(|(_, value)| value)
     }
 
+    /// A mutable reference to the value for `key`, or `None` if absent.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut OptionValue> {
         let index = self
             .entries
@@ -358,6 +416,10 @@ impl Options {
         Some(&mut self.entries[index].1)
     }
 
+    /// Insert `key` = `value`, returning the previous value if `key` was already present.
+    ///
+    /// A duplicate key replaces the earlier entry, matching the "last wins" rule for parsed
+    /// source strings.
     pub fn insert<K: Into<String>, V: Into<OptionValue>>(
         &mut self,
         key: K,
@@ -370,6 +432,7 @@ impl Options {
         old
     }
 
+    /// Remove and return the value for `key`, or `None` if absent.
     pub fn remove(&mut self, key: &str) -> Option<OptionValue> {
         let index = self
             .entries
@@ -378,16 +441,19 @@ impl Options {
         Some(self.entries.remove(index).1)
     }
 
+    /// Iterate over `(key, value)` pairs in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &OptionValue)> {
         self.entries
             .iter()
             .map(|(key, value)| (key.as_str(), value))
     }
 
+    /// Iterate over keys in insertion order.
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.entries.iter().map(|(key, _)| key.as_str())
     }
 
+    /// Iterate over values in insertion order.
     pub fn values(&self) -> impl Iterator<Item = &OptionValue> {
         self.entries.iter().map(|(_, value)| value)
     }
@@ -412,8 +478,29 @@ impl Display for Options {
 
 /// One configuration source declaration.
 ///
-/// See the [crate-level documentation](crate) for the source string format, parsing rules, and
-/// examples.
+/// A [`Source`] holds a loader name, its options, and an optional resource address, as parsed
+/// from the `SOURCE[(OPTIONS)][:RESOURCE]` string format. See the
+/// [crate-level documentation](crate) for the full format, parsing rules, and examples.
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_source::Source;
+///
+/// let source = Source::parse("env(prefix=APP_)")?;
+/// assert_eq!(source.source(), "env");
+/// assert_eq!(
+///     source.options().get("prefix").unwrap().as_string().unwrap(),
+///     "APP_"
+/// );
+/// assert_eq!(source.resource(), "");
+/// assert_eq!(source.to_string(), "env(prefix=APP_)");
+///
+/// let file = Source::parse("file:app.toml")?;
+/// assert_eq!(file.source(), "file");
+/// assert_eq!(file.resource(), "app.toml");
+/// # Ok::<(), tanzim_source::ParseError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Source {
     pub(crate) source: String,
@@ -423,6 +510,10 @@ pub struct Source {
 }
 
 impl Source {
+    /// Parse a `SOURCE[(OPTIONS)][:RESOURCE]` string into a [`Source`].
+    ///
+    /// Equivalent to the free function [`parse`]. See the [crate-level documentation](crate) for
+    /// the format and rules.
     pub fn parse(input: &str) -> Result<Self, ParseError> {
         parse::parse(input)
     }
@@ -455,57 +546,70 @@ impl Source {
         }
     }
 
+    /// The loader name (e.g. `env`, `file`, `http`).
     pub fn source(&self) -> &str {
         self.source.as_str()
     }
 
+    /// A mutable reference to the loader name.
     pub fn source_mut(&mut self) -> &mut String {
         &mut self.source
     }
 
+    /// Set the loader name.
     pub fn set_source(&mut self, source: impl Into<String>) {
         self.source = source.into();
     }
 
+    /// Set the loader name, builder-style.
     pub fn with_source(mut self, source: impl Into<String>) -> Self {
         self.source = source.into();
         self
     }
 
+    /// The loader options.
     pub fn options(&self) -> &Options {
         &self.options
     }
 
+    /// A mutable reference to the loader options.
     pub fn options_mut(&mut self) -> &mut Options {
         &mut self.options
     }
 
+    /// Replace the loader options.
     pub fn set_options(&mut self, options: Options) {
         self.options = options;
     }
 
+    /// Replace the loader options, builder-style.
     pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
         self
     }
 
+    /// Set a single loader option.
     pub fn set_option<K: Into<String>, V: Into<OptionValue>>(&mut self, key: K, value: V) {
         self.options.insert(key, value);
     }
 
+    /// Set a single loader option, builder-style.
     pub fn with_option<K: Into<String>, V: Into<OptionValue>>(mut self, key: K, value: V) -> Self {
         self.options.insert(key, value);
         self
     }
 
+    /// The resource address (path, URL, …), or empty if none was given.
     pub fn resource(&self) -> &str {
         self.resource.as_str()
     }
 
+    /// A mutable reference to the resource address.
     pub fn resource_mut(&mut self) -> &mut String {
         &mut self.resource
     }
 
+    /// Set the resource address; a non-empty value also sets [`Source::resource_colon`].
     pub fn set_resource(&mut self, resource: impl Into<String>) {
         self.resource = resource.into();
         if !self.resource.is_empty() {
@@ -513,6 +617,8 @@ impl Source {
         }
     }
 
+    /// Set the resource address, builder-style; a non-empty value also sets
+    /// [`Source::resource_colon`].
     pub fn with_resource(mut self, resource: impl Into<String>) -> Self {
         self.resource = resource.into();
         if !self.resource.is_empty() {
@@ -521,14 +627,18 @@ impl Source {
         self
     }
 
+    /// `true` if the source string had a `:` separator before the resource, even when the
+    /// resource itself is empty (e.g. `file:`).
     pub fn resource_colon(&self) -> bool {
         self.resource_colon
     }
 
+    /// Set whether the `:` separator is present before the resource.
     pub fn set_resource_colon(&mut self, resource_colon: bool) {
         self.resource_colon = resource_colon;
     }
 
+    /// Set whether the `:` separator is present before the resource, builder-style.
     pub fn with_resource_colon(mut self, resource_colon: bool) -> Self {
         self.resource_colon = resource_colon;
         self
@@ -536,6 +646,20 @@ impl Source {
 }
 
 /// Builds a [`Source`].
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_source::SourceBuilder;
+///
+/// let source = SourceBuilder::new()
+///     .with_source("env")
+///     .with_option("prefix", "APP_")
+///     .build()?;
+///
+/// assert_eq!(source.to_string(), "env(prefix=APP_)");
+/// # Ok::<(), tanzim_source::Error>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SourceBuilder {
     source: Option<String>,
@@ -545,35 +669,42 @@ pub struct SourceBuilder {
 }
 
 impl SourceBuilder {
+    /// Build an empty [`SourceBuilder`].
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the loader name.
     pub fn with_source(mut self, source: impl Into<String>) -> Self {
         self.source = Some(source.into());
         self
     }
 
+    /// Set the resource address.
     pub fn with_resource(mut self, resource: impl Into<String>) -> Self {
         self.resource = resource.into();
         self
     }
 
+    /// Replace the loader options.
     pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
         self
     }
 
+    /// Set a single loader option.
     pub fn with_option<K: Into<String>, V: Into<OptionValue>>(mut self, key: K, value: V) -> Self {
         self.options.insert(key, value);
         self
     }
 
+    /// Set whether the `:` separator is present before the resource.
     pub fn with_resource_colon(mut self, resource_colon: bool) -> Self {
         self.resource_colon = resource_colon;
         self
     }
 
+    /// Build the [`Source`], failing if no (non-empty) source name was set.
     pub fn build(self) -> Result<Source, Error> {
         let source = self.source.ok_or(Error::MissingSource)?;
         if source.is_empty() {

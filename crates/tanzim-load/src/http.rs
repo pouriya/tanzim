@@ -36,7 +36,9 @@ use std::{collections::HashMap, time::Duration};
 
 pub use url::Url;
 
+/// Loader name reported by [`Http::name`](crate::Load::name) and used in error messages.
 pub const NAME: &str = "HTTP";
+/// Source string handled by [`Http`] (see [`Load::supported_source_list`]).
 pub const SOURCE: &str = "http";
 
 /// The transport closure driving an [`Http`] loader — you implement the actual request here.

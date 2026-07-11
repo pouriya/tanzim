@@ -4,12 +4,26 @@ use tanzim_value::{Value, ValueType};
 
 /// (`bytesize` feature) Accepts a human byte-size string (e.g. `"10MB"`, `"1GiB"`) and coerces it to an integer
 /// number of bytes.
+///
+/// ```
+/// # #[cfg(feature = "bytesize")]
+/// # {
+/// use tanzim_validate::{ByteSize, Validator};
+/// use tanzim_value::Value;
+///
+/// let validator = ByteSize::new().with_description("Rotate the log past this size.");
+/// let mut value = Value::String("10MB".into());
+/// validator.validate(&mut value).unwrap();
+/// assert_eq!(value.as_int(), Some(10_000_000));
+/// # }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct ByteSize {
     meta: Meta,
 }
 
 impl ByteSize {
+    /// A new, unconfigured `ByteSize` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

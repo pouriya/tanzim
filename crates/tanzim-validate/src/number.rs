@@ -47,20 +47,24 @@ impl Number {
         self
     }
 
+    /// A new, unconfigured `Number` validator.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Require the value to be at least `min`.
     pub fn min(mut self, min: f64) -> Self {
         self.min = Some(min);
         self
     }
 
+    /// Require the value to be at most `max`.
     pub fn max(mut self, max: f64) -> Self {
         self.max = Some(max);
         self
     }
 
+    /// Require the value to fall within the inclusive `[start, end]` range.
     pub fn range(mut self, start: f64, end: f64) -> Self {
         self.min = Some(start);
         self.max = Some(end);

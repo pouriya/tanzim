@@ -43,6 +43,7 @@ pub struct Host {
 }
 
 impl Host {
+    /// A new, unconfigured `Host` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),
@@ -91,6 +92,7 @@ impl Domain {
         self
     }
 
+    /// A new, unconfigured `Domain` validator.
     pub fn new() -> Self {
         Self::default()
     }
@@ -130,6 +132,7 @@ pub struct Email {
 }
 
 impl Email {
+    /// A new, unconfigured `Email` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),
@@ -193,6 +196,7 @@ impl Port {
         self
     }
 
+    /// A new `Port` validator (privileged ports allowed, `0` rejected by default).
     pub fn new() -> Self {
         Self::default()
     }
@@ -252,16 +256,19 @@ impl IpAddr {
         self
     }
 
+    /// A new `IpAddr` validator accepting both IPv4 and IPv6.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Restrict to IPv4 addresses only.
     pub fn v4_only(mut self) -> Self {
         self.v4_only = true;
         self.v6_only = false;
         self
     }
 
+    /// Restrict to IPv6 addresses only.
     pub fn v6_only(mut self) -> Self {
         self.v6_only = true;
         self.v4_only = false;
@@ -311,6 +318,7 @@ pub struct SocketAddr {
 }
 
 impl SocketAddr {
+    /// A new, unconfigured `SocketAddr` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

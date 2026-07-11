@@ -9,6 +9,7 @@ pub struct NonEmpty {
 }
 
 impl NonEmpty {
+    /// A new, unconfigured `NonEmpty` validator.
     pub fn new() -> Self {
         Self::default()
     }

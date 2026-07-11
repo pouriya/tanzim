@@ -13,6 +13,35 @@ struct Field {
 /// Each declared key is either required or optional, and may carry a validator for its
 /// value. By default keys not declared in the schema are rejected; call
 /// [`StaticMap::allow_unknown`] to permit them.
+///
+/// ```
+/// # #[cfg(all(feature = "static_map", feature = "non_empty", feature = "integer"))]
+/// # {
+/// use tanzim_validate::{Integer, NonEmpty, StaticMap, validate};
+/// use tanzim_value::{LocatedValue, Location, Value};
+///
+/// let schema = StaticMap::new()
+///     .required("name", NonEmpty::new())
+///     .optional("port", Integer::new().range(1, 65535));
+///
+/// let mut map = Value::new_map();
+/// map.map_mut().unwrap().insert(
+///     "name".into(),
+///     LocatedValue::new(Value::String("db".into()), Location::at("cfg", "", None, None, None)),
+/// );
+/// map.map_mut().unwrap().insert(
+///     "port".into(),
+///     LocatedValue::new(Value::String("5432".into()), Location::at("cfg", "", None, None, None)),
+/// );
+/// let mut node = LocatedValue::new(map, Location::at("cfg", "", None, None, None));
+///
+/// validate(&schema, &mut node).unwrap();
+/// assert_eq!(
+///     node.value_mut().map_mut().unwrap().get("port").unwrap().value().as_int(),
+///     Some(5432), // coerced from string
+/// );
+/// # }
+/// ```
 #[derive(Default)]
 pub struct StaticMap {
     meta: Meta,
@@ -27,6 +56,7 @@ impl StaticMap {
         self
     }
 
+    /// A new `StaticMap` validator with no declared keys, denying unknown keys by default.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

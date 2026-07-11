@@ -10,15 +10,23 @@ use std::fmt::{self, Display, Formatter};
 /// [`tanzim_source::Source`]).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
+    /// Configuration input was not valid UTF-8.
     InvalidUtf8 {
+        /// Where the invalid input came from.
         location: Box<Location>,
     },
+    /// A parsed value's type is not supported in this context.
     UnsupportedType {
+        /// Where the unsupported value came from.
         location: Box<Location>,
+        /// Name of the offending type.
         found: &'static str,
     },
+    /// A source failed to parse into a [`crate::Value`] tree.
     Parse {
+        /// Where the parse failure occurred, if known.
         location: Option<Box<Location>>,
+        /// Human-readable description of the failure.
         message: String,
     },
     /// A value could not be deserialized into the requested type (`serde` Cargo feature).
@@ -29,7 +37,9 @@ pub enum Error {
     /// without any post-hoc source lookup.
     #[cfg(feature = "serde")]
     Deserialize {
+        /// Human-readable description of the failure.
         message: String,
+        /// Where the failure occurred, if known.
         location: Option<Box<Location>>,
     },
 }

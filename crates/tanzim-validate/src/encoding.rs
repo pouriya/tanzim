@@ -21,6 +21,7 @@ pub struct Base64 {
 }
 
 impl Base64 {
+    /// A new, unconfigured `Base64` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),
@@ -61,6 +62,7 @@ pub struct Hex {
 }
 
 impl Hex {
+    /// A new, unconfigured `Hex` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

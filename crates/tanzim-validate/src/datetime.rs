@@ -20,6 +20,7 @@ pub struct DateTime {
 }
 
 impl DateTime {
+    /// A new, unconfigured `DateTime` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),
@@ -62,6 +63,7 @@ pub struct Date {
 }
 
 impl Date {
+    /// A new, unconfigured `Date` validator.
     pub fn new() -> Self {
         Self {
             meta: Meta::default(),

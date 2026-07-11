@@ -20,15 +20,18 @@ impl Str {
         self
     }
 
+    /// A new, unconfigured `Str` validator.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Require at least `min` characters.
     pub fn min_chars(mut self, min: usize) -> Self {
         self.min_chars = Some(min);
         self
     }
 
+    /// Require at most `max` characters.
     pub fn max_chars(mut self, max: usize) -> Self {
         self.max_chars = Some(max);
         self

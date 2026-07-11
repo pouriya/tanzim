@@ -36,20 +36,24 @@ impl Integer {
         self
     }
 
+    /// A new, unconfigured `Integer` validator.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Require the value to be at least `min`.
     pub fn min(mut self, min: isize) -> Self {
         self.min = Some(min);
         self
     }
 
+    /// Require the value to be at most `max`.
     pub fn max(mut self, max: isize) -> Self {
         self.max = Some(max);
         self
     }
 
+    /// Require the value to fall within the inclusive `[start, end]` range.
     pub fn range(mut self, start: isize, end: isize) -> Self {
         self.min = Some(start);
         self.max = Some(end);

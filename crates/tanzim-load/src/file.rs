@@ -39,7 +39,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Loader name reported by [`File::name`](crate::Load::name) and used in error messages.
 pub const NAME: &str = "File";
+/// Source string handled by [`File`] (see [`Load::supported_source_list`]).
 pub const SOURCE: &str = "file";
 const IGNORE_NOT_FOUND: &str = "not-found";
 const IGNORE_NO_ACCESS: &str = "no-access";

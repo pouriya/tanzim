@@ -22,15 +22,18 @@ impl DynamicMap {
         self
     }
 
+    /// A new, unconfigured `DynamicMap` validator.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Require at least `min` entries.
     pub fn min_len(mut self, min: usize) -> Self {
         self.min_len = Some(min);
         self
     }
 
+    /// Require at most `max` entries.
     pub fn max_len(mut self, max: usize) -> Self {
         self.max_len = Some(max);
         self

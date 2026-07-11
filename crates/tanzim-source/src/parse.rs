@@ -12,59 +12,130 @@ use std::fmt::{self, Display, Formatter};
 /// Format: `SOURCE [(OPTIONS)] [?] [:RESOURCE]` — see the crate README for rules.
 ///
 /// [`Display`] is one line by default; use `{error:#}` for the input snippet and caret.
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_source::{Source, ParseError};
+///
+/// let error: ParseError = Source::parse("").unwrap_err();
+/// assert_eq!(
+///     error.to_string(),
+///     "invalid configuration source at column 1: configuration source is required"
+/// );
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
     /// No source identifier (empty input or invalid start).
-    MissingSource { input: String, at: usize },
+    MissingSource {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// Input ended before a required token.
     UnexpectedEnd {
+        /// The full input string being parsed.
         input: String,
+        /// Byte offset into `input` where the error occurred.
         at: usize,
+        /// What was expected at this position.
         expected: &'static str,
     },
     /// Unexpected character at the current position.
     UnexpectedChar {
+        /// The full input string being parsed.
         input: String,
+        /// Byte offset into `input` where the error occurred.
         at: usize,
+        /// The character that was found instead.
         found: char,
+        /// What was expected at this position.
         expected: &'static str,
     },
     /// Option or map key is not a valid identifier.
     InvalidIdentifier {
+        /// The full input string being parsed.
         input: String,
+        /// Byte offset into `input` where the error occurred.
         at: usize,
+        /// The invalid identifier text that was found.
         found: String,
     },
     /// Option or map key is empty.
-    EmptyKey { input: String, at: usize },
+    EmptyKey {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// Option value is empty; use `""` for an empty string.
-    EmptyValue { input: String, at: usize },
+    EmptyValue {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// Invalid escape sequence inside a quoted string.
-    InvalidEscape { input: String, at: usize },
+    InvalidEscape {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// Quoted string has no closing `"`.
-    UnclosedString { input: String, at: usize },
+    UnclosedString {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// List has no closing `]`.
-    UnclosedList { input: String, at: usize },
+    UnclosedList {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// Map or options block has no closing `)`.
-    UnclosedMap { input: String, at: usize },
+    UnclosedMap {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// Comma with no following entry.
-    TrailingComma { input: String, at: usize },
+    TrailingComma {
+        /// The full input string being parsed.
+        input: String,
+        /// Byte offset into `input` where the error occurred.
+        at: usize,
+    },
     /// Token looks like a number but is not valid.
     InvalidNumber {
+        /// The full input string being parsed.
         input: String,
+        /// Byte offset into `input` where the error occurred.
         at: usize,
+        /// The invalid numeric token that was found.
         found: String,
     },
     /// Non-empty input after a complete configuration source.
     TrailingInput {
+        /// The full input string being parsed.
         input: String,
+        /// Byte offset into `input` where the error occurred.
         at: usize,
+        /// The unparsed remainder of the input.
         rest: String,
     },
     /// The reserved `on_error` option is malformed (bad shape, unknown stage, or bad value).
     InvalidOnError {
+        /// The full input string being parsed.
         input: String,
+        /// Byte offset into `input` where the error occurred.
         at: usize,
+        /// Description of what is wrong with the `on_error` option.
         message: String,
     },
 }
@@ -179,7 +250,43 @@ impl Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// Parse a configuration source string.
+/// Parse a `SOURCE[(OPTIONS)][:RESOURCE]` configuration source string.
+///
+/// Equivalent to [`Source::parse`]. See the [crate-level documentation](crate) for the format
+/// and rules.
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_source::parse;
+///
+/// let source = parse("env(prefix=APP_)")?;
+/// assert_eq!(source.source(), "env");
+/// assert_eq!(source.resource(), "");
+///
+/// let file = parse("file:app.toml")?;
+/// assert_eq!(file.source(), "file");
+/// assert_eq!(file.resource(), "app.toml");
+/// # Ok::<(), tanzim_source::ParseError>(())
+/// ```
+///
+/// A malformed source string returns a [`ParseError`]. Use `{error:#}` to render the input
+/// snippet with a caret pointing at the offending column:
+///
+/// ```rust
+/// use tanzim_source::parse;
+///
+/// let error = parse("file(bad").unwrap_err();
+/// println!("{error:#}");
+/// ```
+///
+/// which prints:
+///
+/// ```text
+/// invalid configuration source at column 9: configuration source: expected option value after `=`, found end of input
+///   file(bad
+///          ^
+/// ```
 pub fn parse(input: &str) -> Result<Source, ParseError> {
     Parser::new(input).parse()
 }

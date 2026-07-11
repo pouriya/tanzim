@@ -9,6 +9,7 @@ pub struct Percentage {
 }
 
 impl Percentage {
+    /// A new, unconfigured `Percentage` validator.
     pub fn new() -> Self {
         Self::default()
     }

@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 
 use cfg_if::cfg_if;
 use std::collections::HashMap;
@@ -10,6 +11,34 @@ pub mod plan;
 /// Merge result: entry name → (contributing payloads, merged value).
 ///
 /// Keys come from [`Payload::maybe_name`]: `Some("foo")` → `Some("foo")`, `None` → unnamed bucket (`None`).
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_load::Payload;
+/// use tanzim_merge::{LastWins, Merge};
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{LocatedValue, Location, Value};
+///
+/// let source = SourceBuilder::new().with_source("mock").build()?;
+/// let payload = Payload {
+///     source,
+///     maybe_name: Some("app".to_string()),
+///     maybe_format: None,
+///     content: Vec::new(),
+/// };
+/// let value = LocatedValue::new(
+///     Value::String("hello".to_string()),
+///     Location::at("mock", "test", None, None, None),
+/// );
+///
+/// // `Merged` is what every `Merge` implementation returns.
+/// let merged = LastWins.merge(&[(payload, value)])?;
+/// let (payloads, value) = &merged[&Some("app".to_string())];
+/// assert_eq!(payloads.len(), 1);
+/// assert_eq!(value.value().as_string().unwrap(), "hello");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub type Merged = HashMap<Option<String>, (Vec<Payload>, LocatedValue)>;
 
 /// Merges parsed payloads grouped by entry name.
@@ -18,6 +47,34 @@ pub type Merged = HashMap<Option<String>, (Vec<Payload>, LocatedValue)>;
 /// `None` → unnamed bucket (`None`). The value for each key is `(Vec<payload>, merged_value)`.
 ///
 /// Implement this trait to define a custom merge strategy.
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_load::Payload;
+/// use tanzim_merge::{LastWins, Merge};
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{LocatedValue, Location, Value};
+///
+/// let source = SourceBuilder::new().with_source("mock").build()?;
+/// let older = Payload {
+///     source: source.clone(),
+///     maybe_name: None,
+///     maybe_format: None,
+///     content: Vec::new(),
+/// };
+/// let newer = older.clone();
+///
+/// let parsed = vec![
+///     (older, LocatedValue::new(Value::from(1isize), Location::at("mock", "a", None, None, None))),
+///     (newer, LocatedValue::new(Value::from(2isize), Location::at("mock", "b", None, None, None))),
+/// ];
+///
+/// // `LastWins` is one built-in `Merge` implementation: the later payload wins.
+/// let merged = LastWins.merge(&parsed)?;
+/// assert_eq!(merged[&None].1.value().as_int(), Some(2));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub trait Merge {
     /// Merge `parsed_list` into a map keyed by entry name.
     ///
@@ -29,6 +86,7 @@ pub trait Merge {
 /// Merge error type.
 #[derive(Debug)]
 pub enum Error {
+    /// A wrapped, opaque error (e.g. from parsing a [`plan::src`] string).
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -59,6 +117,29 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
 /// Last-write-wins merger: each name keeps only its last-seen value.
 ///
 /// Payloads with `maybe_name == None` are grouped under the unnamed bucket (`None` key).
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_load::Payload;
+/// use tanzim_merge::{LastWins, Merge};
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{LocatedValue, Location, Value};
+///
+/// let source = SourceBuilder::new().with_source("mock").build()?;
+/// let payload = || Payload {
+///     source: source.clone(),
+///     maybe_name: Some("app".to_string()),
+///     maybe_format: None,
+///     content: Vec::new(),
+/// };
+/// let base = LocatedValue::new(Value::from("base"), Location::at("mock", "a", None, None, None));
+/// let overlay = LocatedValue::new(Value::from("overlay"), Location::at("mock", "b", None, None, None));
+///
+/// let merged = LastWins.merge(&[(payload(), base), (payload(), overlay)])?;
+/// assert_eq!(merged[&Some("app".to_string())].1.value().as_string().unwrap(), "overlay");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub struct LastWins;
 
 impl Merge for LastWins {
@@ -122,6 +203,40 @@ pub enum ArrayStrategy {
 /// recurses. Two lists are combined according to the configured [`ArrayStrategy`] (default
 /// [`Replace`](ArrayStrategy::Replace)). Otherwise the incoming (overlay) value and its location
 /// win. Payloads with `maybe_name == None` are grouped under the unnamed bucket (`None` key).
+///
+/// # Examples
+///
+/// ```rust
+/// use tanzim_load::Payload;
+/// use tanzim_merge::{DeepMerge, Merge};
+/// use tanzim_source::SourceBuilder;
+/// use tanzim_value::{LocatedValue, Location, Map, Value};
+///
+/// let source = SourceBuilder::new().with_source("mock").build()?;
+/// let payload = || Payload {
+///     source: source.clone(),
+///     maybe_name: None,
+///     maybe_format: None,
+///     content: Vec::new(),
+/// };
+/// let location = || Location::at("mock", "test", None, None, None);
+///
+/// let mut base_map = Map::new();
+/// base_map.insert("host".to_string(), LocatedValue::new(Value::from("localhost"), location()));
+/// base_map.insert("port".to_string(), LocatedValue::new(Value::from(80isize), location()));
+/// let base = LocatedValue::new(Value::Map(base_map), location());
+///
+/// let mut overlay_map = Map::new();
+/// overlay_map.insert("port".to_string(), LocatedValue::new(Value::from(443isize), location()));
+/// let overlay = LocatedValue::new(Value::Map(overlay_map), location());
+///
+/// // Both maps are unnamed, so they merge into the same (`None`) bucket, recursively.
+/// let merged = DeepMerge::new().merge(&[(payload(), base), (payload(), overlay)])?;
+/// let result = merged[&None].1.value().as_map().unwrap();
+/// assert_eq!(result.get("host").unwrap().value().as_string().unwrap(), "localhost");
+/// assert_eq!(result.get("port").unwrap().value().as_int(), Some(443));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct DeepMerge {
     array_strategy: ArrayStrategy,

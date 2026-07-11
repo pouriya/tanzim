@@ -17,6 +17,7 @@ impl Url {
         self
     }
 
+    /// A new, unconfigured `Url` validator.
     pub fn new() -> Self {
         Self::default()
     }

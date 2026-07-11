@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 
 mod error;
 
@@ -116,10 +117,13 @@ pub use uuid::Uuid;
 /// [`Validator::validate`]).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Meta {
+    /// The human-readable name, surfaced in error messages.
     pub name: String,
+    /// A human-readable description.
     pub description: Option<String>,
     /// Example values, each with an optional note explaining it.
     pub examples: Vec<(Value, Option<String>)>,
+    /// The default value used as an on-error fallback.
     pub default: Option<Value>,
     /// Target type for the post-validation output cast, if any.
     pub convert: Option<ValueType>,
@@ -143,6 +147,23 @@ impl Meta {
 /// this validator's [`Meta`] to any error (innermost wins), and applies the output conversion in
 /// `meta().convert` on success. Composite validators recurse by calling `validate` on their
 /// children, then attach the child's [`Location`] via [`Error::under_key`]/[`Error::under_index`].
+///
+/// Most callers reach for one of the [built-in validators](crate) via their fluent builders
+/// (e.g. [`Integer`]) rather than implementing this trait directly; the built-ins all follow the
+/// same `meta`/`meta_mut`/`check` shape shown below.
+///
+/// ```
+/// # #[cfg(feature = "integer")]
+/// # {
+/// use tanzim_validate::{Integer, Validator};
+/// use tanzim_value::Value;
+///
+/// let validator = Integer::new().range(0, 65535).with_name("Port");
+/// let mut value = Value::String("8080".into());
+/// validator.validate(&mut value).unwrap();
+/// assert_eq!(value.as_int(), Some(8080)); // coerced from string
+/// # }
+/// ```
 pub trait Validator {
     /// This validator's human-facing metadata.
     fn meta(&self) -> &Meta;

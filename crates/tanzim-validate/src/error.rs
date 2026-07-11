@@ -16,34 +16,81 @@ pub enum Segment {
 pub enum ErrorKind {
     /// Wrong variant and no coercion applies.
     Type {
+        /// The value type the validator required.
         expected: ValueType,
+        /// The value type actually found.
         found: ValueType,
     },
     /// Right variant family but the contents cannot be coerced to the target.
-    NotConvertible { target: ValueType, found: ValueType },
+    NotConvertible {
+        /// The value type conversion was attempted into.
+        target: ValueType,
+        /// The value type actually found.
+        found: ValueType,
+    },
     /// A semantic format check failed (host, email, uuid, …).
-    Format { expected: &'static str },
+    Format {
+        /// Name of the expected format (e.g. `"email"`, `"uuid"`).
+        expected: &'static str,
+    },
     /// Numeric value below the inclusive minimum.
-    BelowMin { value: String, min: String },
+    BelowMin {
+        /// The offending value, rendered as text.
+        value: String,
+        /// The inclusive minimum, rendered as text.
+        min: String,
+    },
     /// Numeric value above the inclusive maximum.
-    AboveMax { value: String, max: String },
+    AboveMax {
+        /// The offending value, rendered as text.
+        value: String,
+        /// The inclusive maximum, rendered as text.
+        max: String,
+    },
     /// String/list/map shorter than the minimum length.
-    TooShort { len: usize, min: usize },
+    TooShort {
+        /// The actual length.
+        len: usize,
+        /// The minimum required length.
+        min: usize,
+    },
     /// String/list/map longer than the maximum length.
-    TooLong { len: usize, max: usize },
+    TooLong {
+        /// The actual length.
+        len: usize,
+        /// The maximum allowed length.
+        max: usize,
+    },
     /// String did not match the required pattern.
-    PatternMismatch { pattern: String },
+    PatternMismatch {
+        /// The pattern the string was checked against.
+        pattern: String,
+    },
     /// A duplicate item was found in a list required to be unique.
-    Duplicate { index: usize },
+    Duplicate {
+        /// Index of the duplicate item.
+        index: usize,
+    },
     /// A required key was missing from a map.
-    MissingKey { key: String },
+    MissingKey {
+        /// The missing key.
+        key: String,
+    },
     /// A key not declared in the schema was present in a map.
-    UnknownKey { key: String },
+    UnknownKey {
+        /// The unrecognized key.
+        key: String,
+    },
     /// A value was not in the allow-list (`Enum`).
-    NotAllowed { value: String },
+    NotAllowed {
+        /// The offending value, rendered as text.
+        value: String,
+    },
     /// Neither alternative of an `Either` accepted the value.
     Either {
+        /// The error from the first alternative.
         first: Box<Error>,
+        /// The error from the second alternative.
         second: Box<Error>,
     },
 }
@@ -84,6 +131,7 @@ impl Display for ErrorKind {
 /// [`Display`] is one line by default; use `{error:#}` for the location's caret view.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Error {
+    /// What went wrong.
     pub kind: ErrorKind,
     /// Path from the validated root to the offending value (root-first).
     pub path: Vec<Segment>,

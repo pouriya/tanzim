@@ -9,6 +9,7 @@ pub struct Bool {
 }
 
 impl Bool {
+    /// A new, unconfigured `Bool` validator.
     pub fn new() -> Self {
         Self::default()
     }

@@ -9,6 +9,7 @@ pub struct RegexPattern {
 }
 
 impl RegexPattern {
+    /// A new, unconfigured `RegexPattern` validator.
     pub fn new() -> Self {
         Self::default()
     }

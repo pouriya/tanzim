@@ -43,7 +43,9 @@ pub enum MergePlan {
     Source(Source),
     /// Merge each child (in order) and fold the results with `merger`.
     Merge {
+        /// The strategy used to fold `children`'s evaluated results.
         merger: Box<dyn Merge + Send + Sync>,
+        /// The child nodes, evaluated in order.
         children: Vec<MergePlan>,
     },
 }

@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 
 pub use tanzim_source::Source;
 pub use tanzim_value::{Error, LocatedValue, Value};
