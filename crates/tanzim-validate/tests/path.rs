@@ -7,10 +7,15 @@ fn string(text: &str) -> Value {
 
 #[test]
 fn absolute_and_relative() {
+    let absolute = if cfg!(windows) {
+        r"C:\etc\app"
+    } else {
+        "/etc/app"
+    };
     assert!(
         Path::new()
             .absolute()
-            .validate(&mut string("/etc/app"))
+            .validate(&mut string(absolute))
             .is_ok()
     );
     assert!(Path::new().absolute().validate(&mut string("app")).is_err());
@@ -55,7 +60,12 @@ fn must_exist_uses_filesystem() {
 
 #[test]
 fn format_only_never_touches_fs() {
-    let mut value = string("/nope/not/here.toml");
+    let text = if cfg!(windows) {
+        r"C:\nope\not\here.toml"
+    } else {
+        "/nope/not/here.toml"
+    };
+    let mut value = string(text);
     assert!(
         Path::new()
             .absolute()

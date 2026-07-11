@@ -49,7 +49,11 @@ fn sandbox_lifecycle() {
         assert!(std::fs::metadata("logs").unwrap().is_dir());
 
         assert!(matches!(
-            env.create_file("/etc/passwd"),
+            env.create_file(if cfg!(windows) {
+                r"C:\etc\passwd"
+            } else {
+                "/etc/passwd"
+            }),
             Err(Error::NotRelative { .. })
         ));
         assert!(matches!(
