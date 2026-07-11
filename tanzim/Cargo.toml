@@ -1,6 +1,6 @@
 [package]
 name = "tanzim-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/pouriya/tanzim"
@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 tanzim = { path = "../crates/tanzim", default-features = false, features = ["full", "tracing"] }
+ureq = {version = "3.3.0", default-features = false, features = ["rustls"]}
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"

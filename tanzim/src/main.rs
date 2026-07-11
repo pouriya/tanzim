@@ -4,6 +4,7 @@
 //! with its own settings struct, referenced from the top-level [`Cli`] setting here.
 
 mod source;
+mod load;
 
 use clap::{Args, Parser, Subcommand};
 use tracing::level_filters::LevelFilter;
@@ -53,6 +54,8 @@ impl Verbosity {
 enum Command {
     /// Parse one or more tanzim-source strings.
     Source(source::SourceArgs),
+    /// Load one or more raw configuration payloads from source(s).
+    Load(load::LoadArgs),
 }
 
 fn main() -> std::process::ExitCode {
@@ -66,5 +69,6 @@ fn main() -> std::process::ExitCode {
 
     match cli.command {
         Command::Source(args) => source::run(args),
+        Command::Load(args) => load::run(args),
     }
 }
