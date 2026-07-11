@@ -12,9 +12,17 @@ declarative sources — files, environment variables, HTTP, and more — into yo
 value remembers where it came from, so a bad value points a caret at the exact source, line, and
 column. Built on the Rust 2024 edition (Rust ≥ 1.85).
 
-## Example
+## Simple example
+
+[`Config::default`] registers every feature-enabled loader and parser. Add a source string and
+call [`try_deserialize`] to get your type in one chain.
 
 ```rust
+// Suppose `app.toml` contains:
+//
+//   file = "/var/log/app.log"
+//   rotate_count = 5
+
 use serde::Deserialize;
 use tanzim::Config;
 
@@ -24,11 +32,94 @@ struct LogRotation {
     rotate_count: u32,
 }
 
-fn load() -> Result<LogRotation, tanzim::config::Error> {
-    // `Config::default()` registers every feature-enabled loader and parser;
-    // this reads `app.toml` deserializes it.
-    Config::default().with_source("file:app.toml").try_deserialize()
+let config: LogRotation = Config::default()
+    .with_source("file:app.toml")
+    .try_deserialize()
+    .unwrap();
+
+assert_eq!(config.file, "/var/log/app.log");
+assert_eq!(config.rotate_count, 5);
+
+// Had `rotate_count` been `"five"`, `try_deserialize` would fail.
+// Formatted with `{error:#}` (verified in `tests/doc.rs`):
+//
+//   failed to deserialize configuration: invalid type: string "five", expected u32
+//   at file:app.toml:2:16
+//     1 | file = "/var/log/app.log"
+//     2 | rotate_count = "five"
+//       |                ^^^^^^
+```
+
+## Advanced example
+
+Supply an explicit merge plan and a schema that both validates and coerces values before
+deserialization. Here `app.toml` (system defaults) and `user/app.toml` (user overrides) share the
+filename stem `app` and are **deep-merged** — keys only in the system file are kept; keys in both
+take the user's value. The env source (`APP_*`) is then applied last and wins any remaining
+conflicts. [`ByteSize`] turns the human-friendly `"20MB"` into a byte count, and its description
+and example surface in any error message.
+
+```rust
+// Suppose `app.toml` contains:
+//
+//   file = "/var/log/app.log"
+//   max_size = "100MB"
+//
+// Suppose `user/app.toml` contains (partial override — only changes max_size):
+//
+//   max_size = "10MB"
+//
+// And the environment has APP_FILE=/var/log/app.log APP_MAX_SIZE=20MB
+
+use serde::Deserialize;
+use tanzim::{
+    Config,
+    merger::plan::{deep, last_wins, src},
+    validator::{ByteSize, NonEmpty, StaticMap},
+};
+
+#[derive(Deserialize)]
+struct LogRotation {
+    file: String,
+    max_size: u64, // bytes, coerced by ByteSize
 }
+
+// deep-merge the two files, then let env win any remaining conflicts.
+let plan = last_wins(vec![
+    deep(vec![
+        src("file:app.toml").unwrap(),
+        src("file:user/app.toml").unwrap(),
+    ]),
+    src("env(prefix=APP_)").unwrap(),
+]);
+
+let schema = StaticMap::new()
+    .required("file", NonEmpty::new())
+    .required(
+        "max_size",
+        ByteSize::new()
+            .with_description("Rotate the log once it grows past this size.")
+            .with_example("10MB"),
+    );
+
+let config: LogRotation = Config::from_plan(plan)
+    .with_default_loaders()
+    .with_default_parsers()
+    .with_schema(schema)
+    .try_deserialize()
+    .unwrap();
+
+assert_eq!(config.max_size, 20_000_000); // env wins: "20MB" coerced to bytes
+assert_eq!(config.file, "/var/log/app.log");
+
+// Had `user/app.toml` said `max_size = "banana"`, validation would fail.
+// Formatted with `{error:#}` (verified in `tests/doc.rs`):
+//
+//   configuration failed validation: max_size: invalid byte size at file:user/app.toml:1:12
+//     Rotate the log once it grows past this size.
+//     example: "10MB"
+//     1 | max_size = "banana"
+//       |            ^^^^^^^^
 ```
 
 ## Why tanzim
@@ -42,21 +133,6 @@ fn load() -> Result<LogRotation, tanzim::config::Error> {
   errors.
 - **Composable** — each stage (load, parse, merge, validate) is a trait you can implement to extend
   the pipeline.
-
-## Validation errors
-
-Validators coerce human-friendly inputs (`ByteSize` turns `"10MB"` into a byte count) and reject
-bad ones with a caret — plus the validator's own description and example. Given a schema with a
-`ByteSize` field and `max_size = "banana"`, the alternate error form (`{error:#}`) renders:
-
-```text
-configuration failed validation: max_size: invalid byte size at file:app.toml:2:12
-  Rotate the log once it grows past this size.
-  example: "10MB"
-  1 | file = "/var/log/app.log"
-  2 | max_size = "banana"
-    |            ^^^^^^^^
-```
 
 ## Features
 

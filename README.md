@@ -3,6 +3,7 @@
 ![load from anywhere · parse anything · merge safely · validate intelligently](pipeline.svg)
 
 ## Why
+
 Real configuration never lives in one place or in one format. It arrives from environment variables, files, whole directories, and remote endpoints — written in env, YAML, TOML, or JSON — and it has to be combined with clear precedence and checked before anything trusts it. The usual answer is a pile of glue code stitched across several unrelated libraries, and somewhere in that pile a value quietly loses track of *where it came from*.
 
 `tanzim` treats the whole thing as **one pipeline** instead of a pile of glue. A value flows from its source through every stage while carrying its origin the entire way, so when something is wrong the error can point at the exact file, line, and column that caused it.
@@ -21,94 +22,114 @@ way they do. Each stage's own README covers the details of *how*.
 
 ## Using in Rust
 
-Describe your sources as strings and deserialize the merged configuration straight into your own type:
+### Simple example
 
-```rust,no_run
-use tanzim::merger::DeepMerge;
+[`Config::default`] registers every feature-enabled loader and parser. Add a source string and
+call [`try_deserialize`] to get your type in one chain.
 
-// Your own configuration type — deserialized directly from the merged tree.
-#[derive(serde::Deserialize)]
-struct Config {
-    listen: Listen,
-    remote: String,
-    log_level: Log,
-    output: String,
-}
-
-#[derive(serde::Deserialize)]
-struct Listen {
-    ip: std::net::IpAddr,
-    port: u16,
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Level { Trace, Debug, Info, Warn, Error }
-
-// `Config` collapses every source into ONE unified configuration. Reach for
-// `tanzim::pipeline::Pipeline` when your sources describe SEVERAL named configurations.
-let config: Config = tanzim::Config::default() // env · file loaders + env · yaml · toml · json parsers
-    .with_merger(DeepMerge::new())?      // optional — defaults to `LastWins` when unset
-    .with_source("env(prefix=APP_)")?
-    .with_source("/etc/app.toml")?
-    .try_deserialize()?;
-// Any failure yields an ergonomic, located error. Formatted with `{error:#}` it names what was
-// expected and points a caret at the offending value — e.g. if `listen.port` held a string:
+```rust
+// Suppose `app.toml` contains:
 //
-//   failed to deserialize configuration: invalid type: string "eighty", expected u16 at file:/etc/app.toml:2:8
-//     1 | [listen]
-//     2 | port = "eighty"
-//       |        ^^^^^^^^
+//   file = "/var/log/app.log"
+//   rotate_count = 5
+
+use serde::Deserialize;
+use tanzim::Config;
+
+#[derive(Deserialize)]
+struct LogRotation {
+    file: String,
+    rotate_count: u32,
+}
+
+let config: LogRotation = Config::default()
+    .with_source("file:app.toml")
+    .try_deserialize()
+    .unwrap();
+
+assert_eq!(config.file, "/var/log/app.log");
+assert_eq!(config.rotate_count, 5);
+
+// Had `rotate_count` been `"five"`, `try_deserialize` would fail.
+// Formatted with `{error:#}` (verified in `crates/tanzim/tests/doc.rs`):
+//
+//   failed to deserialize configuration: invalid type: string "five", expected u32
+//   at file:app.toml:2:16
+//     1 | file = "/var/log/app.log"
+//     2 | rotate_count = "five"
+//       |                ^^^^^^
 ```
 
-### Advanced: explicit merge plan + schema
+### Advanced example
 
-Reach for an explicit `MergePlan` when a single flat merge isn't enough, and a schema when you
-want the shape checked before it ever reaches your struct. `Either` accepts a value if either of
-two validators does — here, `logging.output` must be `stdout`/`stderr` *or* an absolute file path.
-Every validator carries human-facing `Meta`: a `name`, a `description`, and noted `examples`, all
-of which surface in a validation failure:
+Supply an explicit merge plan and a schema that both validates and coerces values before
+deserialization. Here `app.toml` (system defaults) and `user/app.toml` (user overrides) share the
+filename stem `app` and are **deep-merged** — keys only in the system file are kept; keys in both
+take the user's value. The env source (`APP_*`) is then applied last and wins any remaining
+conflicts. `ByteSize` turns the human-friendly `"20MB"` into a byte count, and its description
+and example surface in any error message.
 
-```rust,no_run
+```rust
+// Suppose `app.toml` contains:
+//
+//   file = "/var/log/app.log"
+//   max_size = "100MB"
+//
+// Suppose `user/app.toml` contains (partial override — only changes max_size):
+//
+//   max_size = "10MB"
+//
+// And the environment has APP_FILE=/var/log/app.log APP_MAX_SIZE=20MB
+
+use serde::Deserialize;
 use tanzim::{
+    Config,
     merger::plan::{deep, last_wins, src},
-    validator::{Either, Enum, Path, StaticMap, Value, validate},
+    validator::{ByteSize, NonEmpty, StaticMap},
 };
 
-// last_wins(deep(base, overrides), env): deep-merge the two files, then let the env
-// source win any remaining conflicts — instead of one flat merge across all three.
+#[derive(Deserialize)]
+struct LogRotation {
+    file: String,
+    max_size: u64, // bytes, coerced by ByteSize
+}
+
+// deep-merge the two files, then let env win any remaining conflicts.
 let plan = last_wins(vec![
-    deep(vec![src("file:base.toml")?, src("file:overrides.toml")?]),
-    src("env(prefix=APP_)")?,
+    deep(vec![
+        src("file:app.toml").unwrap(),
+        src("file:user/app.toml").unwrap(),
+    ]),
+    src("env(prefix=APP_)").unwrap(),
 ]);
 
-let output = Either::new(
-    Enum::new([Value::String("stdout".into()), Value::String("stderr".into())]),
-    Path::new().absolute(),
-)
-.with_name("Log output")
-.with_description("Where log lines are written: `stdout`, `stderr`, or an absolute file path")
-.with_example_noted(Value::String("stdout".into()), "write to standard output")
-.with_example_noted(
-    Value::String("/var/log/app.log".into()),
-    "write to an absolute file path",
-);
-let schema = StaticMap::new().required("logging", StaticMap::new().required("output", output));
+let schema = StaticMap::new()
+    .required("file", NonEmpty::new())
+    .required(
+        "max_size",
+        ByteSize::new()
+            .with_description("Rotate the log once it grows past this size.")
+            .with_example("10MB"),
+    );
 
-let mut entry = tanzim::Config::default().with_merge_plan(plan)?.run()?;
-validate(&schema, entry.value_mut())?;
-// A validation failure carries the offending value's location; `{error:#}` renders a
-// caret-underlined snippet plus the name/description/examples attached above — e.g. if
-// `logging.output` held the relative path `"app.log"`:
+let config: LogRotation = Config::from_plan(plan)
+    .with_default_loaders()
+    .with_default_parsers()
+    .with_schema(schema)
+    .try_deserialize()
+    .unwrap();
+
+assert_eq!(config.max_size, 20_000_000); // env wins: "20MB" coerced to bytes
+assert_eq!(config.file, "/var/log/app.log");
+
+// Had `user/app.toml` said `max_size = "banana"`, validation would fail.
+// Formatted with `{error:#}` (verified in `crates/tanzim/tests/doc.rs`):
 //
-//   Log output: logging.output: no alternative matched: (`"app.log"` is not an allowed
-//   value) or (invalid absolute path) at file:overrides.toml:2:10
-//     Where log lines are written: `stdout`, `stderr`, or an absolute file path
-//     example: "stdout" (write to standard output)
-//     example: "/var/log/app.log" (write to an absolute file path)
-//     1 | [logging]
-//     2 | output = "app.log"
-//       |          ^^^^^^^^^
+//   configuration failed validation: max_size: invalid byte size at file:user/app.toml:1:12
+//     Rotate the log once it grows past this size.
+//     example: "10MB"
+//     1 | max_size = "banana"
+//       |            ^^^^^^^^
 ```
 
 Full walkthrough, features, and per-stage recipes → [crates.io](https://crates.io/crates/tanzim) · [docs.rs](https://docs.rs/tanzim).
