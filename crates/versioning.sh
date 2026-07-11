@@ -1,5 +1,6 @@
 #!/bin/sh
 # This script verifies that all internal crate dependencies use the latest version.
+# Additionally, it verifies that every crate that depends on a bumped crate is also bumped.
 
 set -eu
 
@@ -28,8 +29,9 @@ show_help() {
 Usage: $(basename "$0") <command>
 
 Commands:
-  --check   Verify internal crate dependencies use exact latest versions
-  --help    Show this help message
+  --check        Verify internal crate dependencies use exact latest versions
+  --check-bump   Verify every crate that depends on a bumped crate is also bumped
+  --help         Show this help message
 EOF
 }
 
@@ -118,12 +120,111 @@ run_check() {
 	echo "All internal crate versions match latest."
 }
 
+run_check_bump() {
+	bumped=""
+	for toml in $(git diff --name-only HEAD~1 -- '*/Cargo.toml'); do
+		old_ver=$(git show HEAD~1:"$toml" 2>/dev/null | awk '
+			/^\[package\]/ { in_pkg = 1; next }
+			/^\[/ { in_pkg = 0 }
+			in_pkg && /^version = "/ {
+				line = $0
+				sub(/^version = "/, "", line)
+				sub(/".*$/, "", line)
+				print line
+				exit
+			}
+		')
+		new_ver=$(awk '
+			/^\[package\]/ { in_pkg = 1; next }
+			/^\[/ { in_pkg = 0 }
+			in_pkg && /^version = "/ {
+				line = $0
+				sub(/^version = "/, "", line)
+				sub(/".*$/, "", line)
+				print line
+				exit
+			}
+		' "$toml")
+		[ -z "$old_ver" ] && continue
+		[ "$old_ver" = "$new_ver" ] && continue
+		crate=$(awk '
+			/^\[package\]/ { in_pkg = 1; next }
+			/^\[/ { in_pkg = 0 }
+			in_pkg && /^name = "/ {
+				line = $0
+				sub(/^name = "/, "", line)
+				sub(/".*$/, "", line)
+				print line
+				exit
+			}
+		' "$toml")
+		[ -n "$crate" ] && bumped="$bumped $crate"
+	done
+
+	if [ -z "$bumped" ]; then
+		echo "No crates bumped; nothing to check."
+		return
+	fi
+
+	errors=0
+	for dep in $bumped; do
+		for crate in $CRATES; do
+			toml="$SCRIPT_DIR/$crate/Cargo.toml"
+			[ -f "$toml" ] || continue
+			awk -v dep="$dep" '
+				/^\[(dependencies|dev-dependencies)\]/ { in_deps = 1; next }
+				/^\[/ { in_deps = 0 }
+				in_deps {
+					eq = index($0, " =")
+					if (eq > 0 && substr($0, 1, eq - 1) == dep) { found = 1; exit }
+				}
+				END { exit !found }
+			' "$toml" || continue
+			old_ver=$(git show HEAD~1:"$toml" 2>/dev/null | awk '
+				/^\[package\]/ { in_pkg = 1; next }
+				/^\[/ { in_pkg = 0 }
+				in_pkg && /^version = "/ {
+					line = $0
+					sub(/^version = "/, "", line)
+					sub(/".*$/, "", line)
+					print line
+					exit
+				}
+			')
+			new_ver=$(awk '
+				/^\[package\]/ { in_pkg = 1; next }
+				/^\[/ { in_pkg = 0 }
+				in_pkg && /^version = "/ {
+					line = $0
+					sub(/^version = "/, "", line)
+					sub(/".*$/, "", line)
+					print line
+					exit
+				}
+			' "$toml")
+			if [ -n "$old_ver" ] && [ "$old_ver" = "$new_ver" ]; then
+				echo "error: $crate depends on bumped $dep but $crate version was not bumped" >&2
+				errors=1
+			fi
+		done
+	done
+
+	if [ "$errors" -ne 0 ]; then
+		exit 1
+	fi
+
+	echo "All dependents of bumped crates were bumped."
+}
+
 case "${1-}" in
 --help | -h)
 	show_help
 	;;
 --check)
 	run_check
+	;;
+--check-bump)
+	run_check_bump
 	;;
 "")
 	show_help

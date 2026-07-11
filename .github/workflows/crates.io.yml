@@ -14,8 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check version bump consistency
+        run: make check-version-bump
 
       - name: Verify
         run: make all

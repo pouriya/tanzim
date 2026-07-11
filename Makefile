@@ -1,7 +1,7 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all build test clippy check-style check-version docs open-docs examples cli cli-docker
+.PHONY: all build test clippy check-style check-version check-version-bump docs open-docs examples cli cli-docker
 
 all: build clippy test check-style check-version
 
@@ -43,6 +43,9 @@ check-style:
 
 check-version:
 	./crates/versioning.sh --check
+
+check-version-bump:
+	./crates/versioning.sh --check-bump
 
 docs:
 	cargo doc --workspace --all-features
