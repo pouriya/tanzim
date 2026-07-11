@@ -20,25 +20,44 @@ jobs:
       - name: Verify
         run: make all
 
-      # Requires Rust 1.90+ (workspace publishing). Crates already on crates.io
-      # at their current version are skipped (members version independently
-      # here, so a release usually only bumps a subset). Everything left is
-      # published in ONE invocation, so Cargo resolves the dependency order,
-      # verifies the crates together as if published, and waits for the index
-      # between uploads -- no manual ordering or sleeps.
+      # Publish in dependency order, one crate at a time, waiting 20s between
+      # uploads for the index to settle. Versions already on crates.io are
+      # skipped; if publish still fails with "already exists", log and continue.
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_SECRET_TOKEN }}
         run: |
           set -euo pipefail
-          metadata="$(cargo metadata --format-version 1 --no-deps)"
 
-          version_of() { jq -r --arg n "$1" '.packages[] | select(.name == $n) | .version' <<<"$metadata"; }
+          crates=(
+            tanzim-source
+            tanzim-testing
+            tanzim-value
+            tanzim-load
+            tanzim-parse
+            tanzim-merge
+            tanzim-validate
+            tanzim
+          )
 
-          # True if name@vers already exists on the crates.io sparse index.
+          version_of() {
+            awk '
+              /^\[package\]/ { in_pkg = 1; next }
+              /^\[/ { in_pkg = 0 }
+              in_pkg && /^version = "/ {
+                line = $0
+                sub(/^version = "/, "", line)
+                sub(/".*$/, "", line)
+                print line
+                exit
+              }
+            ' "$1"
+          }
+
           published() {
             local name vers path
-            name="$(tr '[:upper:]' '[:lower:]' <<<"$1")"; vers="$2"
+            name="$(tr '[:upper:]' '[:lower:]' <<<"$1")"
+            vers="$2"
             case ${#name} in
               1) path="1/$name" ;;
               2) path="2/$name" ;;
@@ -49,23 +68,47 @@ jobs:
               | jq -se --arg v "$vers" 'any(.[]; .vers == $v)' >/dev/null
           }
 
-          args=(--all-features)
-          publishing=()
-          while read -r name; do
-            vers="$(version_of "$name")"
-            if published "$name" "$vers"; then
-              echo "skip   $name@$vers (already published)"
-            else
-              echo "queue  $name@$vers"
-              publishing+=("$name")
-              args+=(--package "$name")
-            fi
-          done < <(jq -r '.packages[] | select(.publish != []) | .name' <<<"$metadata")
+          failures=0
+          published_any=0
 
-          if [ ${#publishing[@]} -eq 0 ]; then
-            echo "Nothing to publish."
-            exit 0
+          for crate in "${crates[@]}"; do
+            manifest="crates/$crate/Cargo.toml"
+            vers="$(version_of "$manifest")"
+
+            if published "$crate" "$vers"; then
+              echo "skip   $crate@$vers (already on crates.io)"
+              continue
+            fi
+
+            echo "publish $crate@$vers"
+            set +e
+            output="$(cargo publish --manifest-path "$manifest" --all-features 2>&1)"
+            status=$?
+            set -e
+            printf '%s\n' "$output"
+
+            if [ "$status" -eq 0 ]; then
+              published_any=1
+              echo "ok     $crate@$vers"
+              echo "waiting 20s for crates.io index"
+              sleep 20
+              continue
+            fi
+
+            if grep -Fq "already exists" <<<"$output"; then
+              echo "skip   $crate@$vers (already exists on crates.io)"
+              continue
+            fi
+
+            echo "error  $crate@$vers publish failed" >&2
+            failures=$((failures + 1))
+          done
+
+          if [ "$failures" -ne 0 ]; then
+            echo "error: $failures crate(s) failed to publish" >&2
+            exit 1
           fi
 
-          echo "Publishing: ${publishing[*]}"
-          cargo publish "${args[@]}"
+          if [ "$published_any" -eq 0 ]; then
+            echo "Nothing to publish."
+          fi

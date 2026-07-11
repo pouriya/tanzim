@@ -239,7 +239,7 @@ buckets = [
 
 #[test]
 fn unparses_baz_toml_comments() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/full/etc/baz.toml");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/etc/baz.toml");
     let text = std::fs::read_to_string(&path).unwrap();
     let source = file_source("baz.toml");
     let parsed = Toml::new().parse(&source, text.as_bytes(), &[]).unwrap();

@@ -1,6 +1,0 @@
-{
-  "sqlite": {
-    "recreate": true,
-    "file": "/path/to/app.db"
-  }
-}

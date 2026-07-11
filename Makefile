@@ -1,7 +1,7 @@
 LOG_FEATURE = ,tracing
 TARGET_OPTION =
 
-.PHONY: all build test clippy check-style check-version docs open-docs examples example-full cli cli-docker
+.PHONY: all build test clippy check-style check-version docs open-docs examples cli cli-docker
 
 all: build clippy test check-style check-version
 
@@ -52,29 +52,17 @@ open-docs:
 
 # Build every workspace example in release mode and copy each resulting binary
 # into bin/ under a sanitised snake-case name (hyphens become underscores; the
-# words "example" and "tanzim" are stripped out). This covers the root
-# examples/<name>/main.rs as well as every crates/*/examples/*.rs.
+# words "example" and "tanzim" are stripped out). This covers every
+# crates/*/examples/*.rs.
 examples:
 	mkdir -p bin
 	cargo build $(TARGET_OPTION) --release --workspace --all-features --examples
-	@for src in examples/*/ crates/*/examples/*.rs; do \
+	@for src in crates/*/examples/*.rs; do \
 		[ -e "$$src" ] || continue; \
-		if [ -d "$$src" ]; then name=$$(basename $$src); \
-		else name=$$(basename $$src .rs); fi; \
+		name=$$(basename $$src .rs); \
 		out=$$(echo $$name | tr 'A-Z-' 'a-z_' \
 			| sed -e 's/example//g' -e 's/tanzim//g' \
 			      -e 's/__*/_/g' -e 's/^_//' -e 's/_$$//'); \
 		echo ">>> $$name -> bin/$$out"; \
 		cp target/release/examples/$$name bin/$$out; \
 	done
-
-# Demo run of the "full" example against sample sources under examples/full/etc.
-example-full:
-	env \
-	'APP_NAME.FOO.SERVER.ADDRESS=127.0.0.1' \
-	'APP_NAME.BAR.SQLITE.FILE=/path/to/app.db' \
-	'APP_NAME.BAZ.LOGGING.LEVEL=debug' \
-	'APP_NAME.QUX.HTTPS.INSECURE=false' \
-	RUST_BACKTRACE=1 cargo run $(TARGET_OPTION) --release -p tanzim --no-default-features \
-		--features="full$(LOG_FEATURE)" --example full -- \
-		--trace 'env(prefix=APP_NAME,separator=".")' 'file:examples/full/etc'

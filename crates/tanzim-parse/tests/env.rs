@@ -134,7 +134,7 @@ fn unparses_prefix_and_suffix_comments() {
 
 #[test]
 fn parses_and_unparses_foo_env_comments() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/full/etc/foo.env");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/etc/foo.env");
     let text = std::fs::read_to_string(&path).unwrap();
     let source = SourceBuilder::new()
         .with_source("env")

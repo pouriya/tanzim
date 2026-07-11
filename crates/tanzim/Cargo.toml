@@ -15,7 +15,7 @@ include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 [dependencies]
 tanzim-load = { path = "../tanzim-load", version = "0.14.0", default-features = false }
 tanzim-parse = { path = "../tanzim-parse", version = "0.18.0", default-features = false }
-tanzim-merge = { path = "../tanzim-merge", version = "0.17.0", default-features = false }
+tanzim-merge = { path = "../tanzim-merge", version = "0.18.0", default-features = false }
 tanzim-source = { path = "../tanzim-source", version = "0.8.0" }
 tanzim-value = { path = "../tanzim-value", version = "0.10.0", features = ["serde"] }
 tanzim-validate = { path = "../tanzim-validate", version = "0.11.0", default-features = false }
@@ -116,11 +116,6 @@ required-features = ["full"]
 name = "pipeline"
 path = "tests/pipeline.rs"
 required-features = ["full", "validate-schema"]
-
-[[example]]
-name = "full"
-path = "../../examples/full/main.rs"
-required-features = ["full", "tracing"]
 
 [package.metadata.docs.rs]
 all-features = true
