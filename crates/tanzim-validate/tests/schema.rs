@@ -317,7 +317,9 @@ fn feature_gated_schema_tags_build_successfully() {
     build_value(&parse(r#"{"type": "semver"}"#)).unwrap();
     build_value(&parse(r#"{"type": "base64"}"#)).unwrap();
     build_value(&parse(r#"{"type": "hex"}"#)).unwrap();
-    build_value(&parse(r#"{"type": "duration", "millis": true}"#)).unwrap();
+    build_value(&parse(r#"{"type": "duration"}"#)).unwrap();
+    build_value(&parse(r#"{"type": "duration", "convert": "int"}"#)).unwrap();
+    build_value(&parse(r#"{"type": "duration", "convert": "string"}"#)).unwrap();
     build_value(&parse(r#"{"type": "bytesize"}"#)).unwrap();
     build_value(&parse(r#"{"type": "datetime"}"#)).unwrap();
     build_value(&parse(r#"{"type": "date"}"#)).unwrap();

@@ -771,8 +771,17 @@ impl Registry {
         #[cfg(feature = "duration")]
         registry.register("duration", |node| {
             let mut validator = crate::Duration::new();
-            if node.flag("millis")? {
-                validator = validator.millis();
+            if let Some(convert) = node.opt_str("convert")? {
+                match convert {
+                    "int" => validator = validator.to_int(),
+                    "string" => validator = validator.to_string(),
+                    other => {
+                        return Err(node.error(SchemaErrorKind::InvalidValue {
+                            field: "convert".to_string(),
+                            message: format!("unknown convert `{other}` (expected int or string)"),
+                        }));
+                    }
+                }
             }
             Ok(Box::new(validator))
         });

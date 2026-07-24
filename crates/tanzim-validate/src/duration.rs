@@ -1,13 +1,33 @@
 use crate::error::{Error, ErrorKind};
 use crate::{Meta, Validator};
-use tanzim_value::{Value, ValueType};
+use tanzim_value::{LocatedValue, Location, Map, Value, ValueType};
 
-/// (`duration` feature) Accepts a human duration string (e.g. `"30s"`, `"5m"`, `"1h30m"`) and coerces it to an
-/// integer number of seconds (or milliseconds with [`Duration::millis`]).
+/// (`duration` feature) Accepts an integer (whole seconds), a float (seconds + fraction),
+/// or a human duration string (e.g. `"30s"`, `"5m"`, `"1h30m"`).
+///
+/// Default output is serde's native [`std::time::Duration`] shape: a map with `secs` and
+/// `nanos`. Opt into other forms with the usual meta converters:
+///
+/// - [`Duration::to_int`] — whole seconds; errors if there is a sub-second component
+/// - [`Duration::to_string`] — formats with `humantime` (e.g. `"1h 30m"`), not a bare
+///   integer string
+///
+/// ```
+/// # #[cfg(feature = "duration")]
+/// # {
+/// use tanzim_validate::{Duration, Validator};
+/// use tanzim_value::Value;
+///
+/// let mut value = Value::String("1h30m".into());
+/// Duration::new().validate(&mut value).unwrap();
+/// let map = value.as_map().unwrap();
+/// assert_eq!(map.get("secs").unwrap().value().as_int(), Some(5400));
+/// assert_eq!(map.get("nanos").unwrap().value().as_int(), Some(0));
+/// # }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct Duration {
     meta: Meta,
-    millis: bool,
 }
 
 impl Duration {
@@ -17,15 +37,9 @@ impl Duration {
         self
     }
 
-    /// A new `Duration` validator that coerces to seconds.
+    /// A new, unconfigured `Duration` validator.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Coerce to milliseconds instead of seconds.
-    pub fn millis(mut self) -> Self {
-        self.millis = true;
-        self
     }
 }
 
@@ -41,41 +55,98 @@ impl Validator for Duration {
     }
 
     fn check(&self, value: &mut Value) -> Result<(), Error> {
-        let text = match value {
-            Value::String(text) => text,
-            other => {
-                return Err(Error::new(ErrorKind::Type {
-                    expected: ValueType::String,
-                    found: other.type_name(),
-                }));
+        let input_type = value.type_name();
+        let parsed = match value {
+            Value::Int(secs) => {
+                let secs = match u64::try_from(*secs) {
+                    Ok(secs) => secs,
+                    Err(_) => {
+                        return Err(Error::new(ErrorKind::Format {
+                            expected: "duration",
+                        }));
+                    }
+                };
+                std::time::Duration::from_secs(secs)
             }
-        };
-
-        let parsed = match humantime::parse_duration(text) {
-            Ok(parsed) => parsed,
-            Err(_) => {
+            Value::Float(secs) => match std::time::Duration::try_from_secs_f64(*secs) {
+                Ok(parsed) => parsed,
+                Err(_) => {
+                    return Err(Error::new(ErrorKind::Format {
+                        expected: "duration",
+                    }));
+                }
+            },
+            Value::String(text) => match humantime::parse_duration(text) {
+                Ok(parsed) => parsed,
+                Err(_) => {
+                    return Err(Error::new(ErrorKind::Format {
+                        expected: "duration",
+                    }));
+                }
+            },
+            _ => {
                 return Err(Error::new(ErrorKind::Format {
                     expected: "duration",
                 }));
             }
         };
 
-        let amount = if self.millis {
-            parsed.as_millis()
-        } else {
-            parsed.as_secs() as u128
-        };
-        let coerced = match isize::try_from(amount) {
-            Ok(coerced) => coerced,
-            Err(_) => {
-                return Err(Error::new(ErrorKind::NotConvertible {
-                    target: ValueType::Int,
-                    found: ValueType::String,
-                }));
+        match self.meta().convert {
+            Some(ValueType::Int) => {
+                if parsed.subsec_nanos() != 0 {
+                    return Err(Error::new(ErrorKind::NotConvertible {
+                        target: ValueType::Int,
+                        found: input_type,
+                    }));
+                }
+                let secs = match isize::try_from(parsed.as_secs()) {
+                    Ok(secs) => secs,
+                    Err(_) => {
+                        return Err(Error::new(ErrorKind::NotConvertible {
+                            target: ValueType::Int,
+                            found: input_type,
+                        }));
+                    }
+                };
+                *value = Value::Int(secs);
             }
-        };
-
-        *value = Value::Int(coerced);
+            Some(ValueType::String) => {
+                // Emit humantime form here so the generic post-check cast does not stringify
+                // a bare integer (e.g. "5400") instead of "1h30m".
+                *value = Value::String(humantime::format_duration(parsed).to_string());
+            }
+            _ => {
+                let secs = match isize::try_from(parsed.as_secs()) {
+                    Ok(secs) => secs,
+                    Err(_) => {
+                        return Err(Error::new(ErrorKind::NotConvertible {
+                            target: ValueType::Int,
+                            found: input_type,
+                        }));
+                    }
+                };
+                let nanos = match isize::try_from(parsed.subsec_nanos()) {
+                    Ok(nanos) => nanos,
+                    Err(_) => {
+                        return Err(Error::new(ErrorKind::NotConvertible {
+                            target: ValueType::Int,
+                            found: input_type,
+                        }));
+                    }
+                };
+                let location = Location::at("duration", "", None, None, None);
+                let mut map = Map::new();
+                map.insert(
+                    "secs".to_string(),
+                    LocatedValue::new(Value::Int(secs), location.clone()),
+                );
+                map.insert(
+                    "nanos".to_string(),
+                    LocatedValue::new(Value::Int(nanos), location),
+                );
+                *value = Value::Map(map);
+            }
+        }
         Ok(())
     }
 }
