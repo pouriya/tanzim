@@ -146,8 +146,8 @@ assert_eq!(config.file, "/var/log/app.log");
 | `validate-full` | every validator + schema |
 | `logging` / `tracing` | optional log integration across all crates |
 
-Defaults: `load-env`, `load-file`, `load-http-closure`, `parse-env`, `validate-default`,
-`validate-schema`.
+Defaults: `load-env`, `load-file`, `load-http-closure`, `parse-env`, `parse-json`,
+`parse-yaml`, `parse-toml`, `validate-default`, `validate-schema`.
 
 ## Documentation
 
