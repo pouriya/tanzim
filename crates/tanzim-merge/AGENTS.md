@@ -10,7 +10,7 @@ Third stage of the pipeline: groups parsed payloads by entry name and combines t
 - `DeepMerge` — built-in: maps with the same name are merged recursively. Same-name lists follow a configurable `ArrayStrategy` (default `Replace`; also `Concat`/`Prepend`/`Union`/`Index`/`Keyed`), set via `DeepMerge::new().with_array_strategy(..)`. The overlay value/location wins at every other leaf.
 - `ArrayStrategy` — enum selecting how two same-key lists combine in `DeepMerge`.
 - `Error` — merge error, wraps `Box<dyn Error + Send + Sync>`.
-- `plan::MergePlan` — a composable merge tree (`plan` module): a `Source` leaf or a `Merge { merger: Box<dyn Merge>, children }`. Build with `plan::src` / `deep` / `last_wins` / `merge_with`; fold with `plan::evaluate` against `SourceGroup`s (configured source → its attributed `(Payload, LocatedValue)` pairs). The `tanzim` pipeline stores one of these as its single source of truth — the simple per-source builders append to a root `Merge` node.
+- `plan::MergePlan` — a composable merge tree (`plan` module): a `Source` leaf, a `Value` leaf (pre-built `LocatedValue` that skips load/parse), or a `Merge { merger: Box<dyn Merge>, children }`. Build with `plan::src` / `value` / `named_value` / `deep` / `last_wins` / `merge_with`; fold with `plan::evaluate` against `SourceGroup`s (configured source → its attributed `(Payload, LocatedValue)` pairs; value leaves ignore groups).
 
 ## Grouping key
 
@@ -21,7 +21,7 @@ Third stage of the pipeline: groups parsed payloads by entry name and combines t
 ## src/ layout
 
 - `lib.rs` — the `Merge` trait, `LastWins`, `DeepMerge` + `ArrayStrategy`, `deep_merge_value`/`merge_lists` helpers, `Error`
-- `plan.rs` — the merge tree: `MergePlan`, the `src`/`deep`/`last_wins`/`merge_with` constructors, `SourceGroup`, and `evaluate`
+- `plan.rs` — the merge tree: `MergePlan`, the `src`/`value`/`named_value`/`deep`/`last_wins`/`merge_with` constructors, `SourceGroup`, and `evaluate`
 
 Add new merge strategies in `lib.rs`; tree/composition logic lives in `plan.rs`.
 

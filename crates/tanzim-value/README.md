@@ -8,7 +8,7 @@ Foundational value types for the tanzim pipeline.
 - [`Value`] — `Bool`, `Int`, `Float`, `String`, `List`, `Map`, `Null`
 - [`LocatedValue`] — `Value` + [`Location`] (full originating [`tanzim_source::Source`], optional 1-based line/column)
 - [`Map`] — ordered `Vec`-backed map; last inserted key wins on lookup
-- [`Error`] — parse-time and (with the `serde` feature) deserialize errors; use `{error:#}` for a source snippet with caret underline
+- [`Error`] — parse-time and (with the `serde` feature) deserialize / serialize errors; use `{error:#}` for a source snippet with caret underline
 
 ## Location
 
@@ -39,11 +39,13 @@ assert!(map.contains_key("port"));
 assert_eq!(map.len(), 2);
 ```
 
-## Deserializing into your own types (`serde` feature)
+## Serde (`serde` feature)
 
-With the optional `serde` feature, [`Value`] and [`LocatedValue`] implement [`serde::Deserializer`](::serde::Deserializer),
-so a config tree turns straight into your own structs. A [`LocatedValue`] runs the same [`Value`]
-deserializer but, on failure, stamps the offending node's [`Location`] onto the error:
+### Deserializing into your own types
+
+[`Value`] and [`LocatedValue`] implement [`serde::Deserializer`](::serde::Deserializer), so a config
+tree turns straight into your own structs. A [`LocatedValue`] runs the same [`Value`] deserializer
+but, on failure, stamps the offending node's [`Location`] onto the error:
 
 ```rust
 # // Deserialization lives behind the `serde` feature.
@@ -79,11 +81,53 @@ assert_eq!(server.port, 8080);
 # }
 ```
 
+### Serializing from your own types
+
+The reverse direction — [`Value::try_from_serialize`] / [`LocatedValue::try_from_serialize`] — builds
+a value tree from any `T: Serialize`. Use the located form when provenance matters: every node is
+stamped with the supplied [`Location`] (e.g. `"defaults"` for programmatic defaults).
+
+```rust
+# #[cfg(feature = "serde")]
+# {
+use serde::Serialize;
+use tanzim_value::{LocatedValue, Location};
+
+#[derive(Serialize)]
+struct Server {
+    host: String,
+    port: u16,
+}
+
+let tree = LocatedValue::try_from_serialize(
+    &Server {
+        host: "localhost".into(),
+        port: 8080,
+    },
+    Location::at("defaults", "", None, None, None),
+)
+.unwrap();
+
+assert_eq!(tree.location().source_name(), "defaults");
+assert_eq!(
+    tree.value().as_map().unwrap().get("port").unwrap().value().as_int(),
+    Some(8080),
+);
+assert_eq!(
+    tree.value().as_map().unwrap().get("port").unwrap().location().source_name(),
+    "defaults",
+);
+# }
+```
+
+Map keys must serialize as strings; `None` / unit become [`Value::Null`]. Failures surface as
+[`Error::Serialize`].
+
 ## Features
 
 | Feature | Enables |
 |---------|---------|
-| `serde` | [`serde::Deserializer`](::serde::Deserializer) for [`Value`]/[`LocatedValue`] + `try_deserialize::<T>()`, and [`serde::de::Error`](::serde::de::Error) for [`Error`] |
+| `serde` | [`Deserializer`](::serde::Deserializer) / [`Serializer`](::serde::ser::Serializer) for [`Value`]/[`LocatedValue`], `try_deserialize` / `try_from_serialize`, and serde error impls for [`Error`] |
 
 Off by default.
 

@@ -22,11 +22,12 @@ per-concern module.
 ## `config.rs` — the single-configuration pipeline
 
 - Typestate builder: `ConfigBuilder<State>` where `State` is `Sources` or `Plan` (sealed
-  `BuilderState`). `Config::builder()` → `ConfigBuilder<Sources>` (simple-fold: exposes `with_source`
-  / `add_source` / `with_source_merged` / `with_merger`); `Config::from_plan(plan)` →
-  `ConfigBuilder<Plan>` (carries a `merger::plan::MergePlan` tree, no source builders). Mixing modes
-  is a **compile error** — there is no runtime `PlanConflict`. `with_merger` is infallible; only the
-  source builders return `Result` (string parse). There is no `new()`.
+  `BuilderState`). `Config::builder()` → `ConfigBuilder<Sources>` (simple-fold: exposes
+  `with_defaults` / `with_value` / `with_source` / `add_source` / `with_source_merged` /
+  `with_merger`); `Config::from_plan(plan)` → `ConfigBuilder<Plan>` (carries a
+  `merger::plan::MergePlan` tree, no source builders). Mixing modes is a **compile error** — there
+  is no runtime `PlanConflict`. Builders are infallible (bad source strings / serialize failures are
+  deferred to `run`). There is no `new()`.
 - `build()` produces the runnable `Config`; the builder's `run()` / `try_deserialize()` are sugar for
   `build().run()` / `build().try_deserialize()`. `Config` — load → parse → merge → unify → validate;
   `run()` returns one unified `Entry`, `try_deserialize::<T>()` returns one `T`. Error type is

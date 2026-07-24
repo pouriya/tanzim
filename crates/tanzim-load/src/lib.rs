@@ -276,10 +276,11 @@ impl From<Box<dyn StdError + Send + Sync>> for Error {
 ///
 /// # Registering
 ///
-/// Pass an instance to `tanzim::Config::with_loader`. The pipeline dispatches each source to the
-/// first loader whose [`supported_source_list`](Load::supported_source_list) contains the source
-/// string, so it may advertise several (e.g. `["http", "https"]`). For a one-off loader you don't
-/// want to define a type for, use [`closure::Closure`] instead of implementing this trait.
+/// Register the loader with whatever stage walks sources and calls [`Load::load`]. That stage
+/// typically dispatches each source to the first loader whose
+/// [`supported_source_list`](Load::supported_source_list) contains the source string, so a loader
+/// may advertise several (e.g. `["http", "https"]`). For a one-off loader you don't want to define
+/// a type for, use [`closure::Closure`] instead of implementing this trait.
 ///
 /// # Example — collecting specific environment variables
 ///

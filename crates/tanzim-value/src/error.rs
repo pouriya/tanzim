@@ -42,6 +42,12 @@ pub enum Error {
         /// Where the failure occurred, if known.
         location: Option<Box<Location>>,
     },
+    /// A Rust value could not be serialized into a [`crate::Value`] tree (`serde` Cargo feature).
+    #[cfg(feature = "serde")]
+    Serialize {
+        /// Human-readable description of the failure.
+        message: String,
+    },
 }
 
 impl Error {
@@ -101,6 +107,10 @@ impl Display for Error {
             #[cfg(feature = "serde")]
             Self::Deserialize { message, .. } => {
                 write!(f, "failed to deserialize configuration: {message}")?
+            }
+            #[cfg(feature = "serde")]
+            Self::Serialize { message } => {
+                write!(f, "failed to serialize configuration value: {message}")?
             }
         }
 

@@ -18,9 +18,9 @@ produced into a typed, source-located value tree. The contract:
 - Report failures with the matching [`Error`] variant (`InvalidUtf8`, `Parse`, `UnsupportedNull`,
   `UnsupportedType`).
 
-Register a parser with `tanzim::Config::with_parser`. For a quick, stateless adapter, use
-`closure::Closure` instead of a full `impl Parse`. See the [`Parse`] rustdoc and the
-example below for worked details.
+Register a parser with the parse stage that turns payloads into value trees. For a quick,
+stateless adapter, use `closure::Closure` instead of a full `impl Parse`. See the [`Parse`]
+rustdoc and the example below for worked details.
 
 ## Built-in parsers
 

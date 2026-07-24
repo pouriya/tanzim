@@ -52,10 +52,10 @@ pub mod yaml;
 ///
 /// # Registering
 ///
-/// Pass an instance to `tanzim::Config::with_parser`. The pipeline picks a parser by the payload's
-/// format hint when present, otherwise it probes each parser with
-/// [`is_format_supported`](Parse::is_format_supported). For a one-off parser you don't want
-/// to define a type for, use [`closure::Closure`] instead of implementing this trait.
+/// Register the parser with whatever stage turns payloads into value trees. That stage typically
+/// picks a parser by the payload's format hint when present, otherwise it probes each parser with
+/// [`is_format_supported`](Parse::is_format_supported). For a one-off parser you don't want to
+/// define a type for, use [`closure::Closure`] instead of implementing this trait.
 ///
 /// # Example — custom CSV parser
 ///

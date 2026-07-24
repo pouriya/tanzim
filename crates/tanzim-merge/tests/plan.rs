@@ -1,5 +1,7 @@
 use tanzim_load::Payload;
-use tanzim_merge::plan::{MergePlan, SourceGroup, deep, evaluate, last_wins, src};
+use tanzim_merge::plan::{
+    MergePlan, SourceGroup, deep, evaluate, last_wins, named_value, src, value,
+};
 use tanzim_source::{Source, SourceBuilder};
 use tanzim_value::{LocatedValue, Location, Map, Value};
 
@@ -149,4 +151,36 @@ fn deep_of_lastwins_and_source_composes() {
 #[test]
 fn src_helper_rejects_invalid_source() {
     assert!(src("bad(").is_err());
+}
+
+#[test]
+fn value_leaf_skips_source_groups() {
+    let a = make_source("a");
+    let groups = vec![group(&a, string_value("from-a"))];
+    let plan = value(string_value("built-in"));
+    let merged = evaluate(&plan, &groups).unwrap();
+    let (_, value) = merged.get(&None).unwrap();
+    assert_eq!(value.value().as_string().unwrap(), "built-in");
+}
+
+#[test]
+fn value_leaf_loses_to_later_source_under_last_wins() {
+    let a = make_source("a");
+    let groups = vec![group(&a, string_value("from-file"))];
+    let plan = last_wins(vec![
+        value(string_value("built-in")),
+        MergePlan::Source(a.clone()),
+    ]);
+    let merged = evaluate(&plan, &groups).unwrap();
+    let (_, value) = merged.get(&None).unwrap();
+    assert_eq!(value.value().as_string().unwrap(), "from-file");
+}
+
+#[test]
+fn named_value_leaf_lands_in_named_bucket() {
+    let plan = named_value("app", string_value("defaults"));
+    let merged = evaluate(&plan, &[]).unwrap();
+    assert!(!merged.contains_key(&None));
+    let (_, value) = merged.get(&Some("app".into())).unwrap();
+    assert_eq!(value.value().as_string().unwrap(), "defaults");
 }

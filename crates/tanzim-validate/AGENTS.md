@@ -42,7 +42,7 @@ Build a validator from a self-describing data document instead of Rust code.
 - `SchemaError` / `SchemaErrorKind` — schema-construction failures (distinct from `Error`).
 
 Because the registry consumes a `Value`, a tree from `tanzim-parse` can be fed directly
-(no serde call) — which is how the `tanzim` facade wires it in.
+(no serde call).
 
 ## src/ layout
 

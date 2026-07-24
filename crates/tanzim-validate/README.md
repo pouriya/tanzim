@@ -108,8 +108,7 @@ let validator = build_value(doc.value()).unwrap();
 ```
 
 Because the builder works on a `tanzim_value::Value`, the same path also accepts a tree
-produced by `tanzim-parse` directly (no serde call needed) — which is how the `tanzim`
-facade will wire it in.
+produced by `tanzim-parse` directly (no serde call needed).
 
 Dispatch goes through a [`Registry`]; `Registry::with_builtins()` knows every built-in tag
 (feature-gated ones included when their feature is on), and `Registry::register` adds custom

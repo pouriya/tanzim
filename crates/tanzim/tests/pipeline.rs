@@ -112,7 +112,14 @@ fn build_single() -> ConfigBuilder<Sources> {
 
 #[test]
 fn single_reports_missing_loaders_and_parsers_at_run_time() {
+    // No source leaves → load/parse are no-ops; loaders are not required.
+    let no_sources = Config::builder()
+        .with_parser(txt_parser())
+        .with_merger(LastWins);
+    assert!(no_sources.run().is_ok());
+
     let no_loaders = Config::builder()
+        .with_source("mock:one")
         .with_parser(txt_parser())
         .with_merger(LastWins);
     assert!(matches!(no_loaders.run(), Err(SingleError::NoLoaders)));
@@ -155,7 +162,9 @@ fn single_empty_registers_nothing() {
     assert!(pipeline.loaders().is_empty());
     assert!(pipeline.parsers().is_empty());
     assert!(pipeline.merger().is_none());
-    assert!(matches!(pipeline.run(), Err(SingleError::NoLoaders)));
+    // No source leaves → load/parse are no-ops; an empty plan runs without loaders.
+    let entry = pipeline.run().unwrap();
+    assert!(entry.value().value().as_map().unwrap().is_empty());
 }
 
 #[test]
@@ -284,6 +293,94 @@ fn single_run_executes_full_pipeline() {
 }
 
 #[test]
+fn with_defaults_alone_deserializes() {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    struct Settings {
+        host: String,
+        port: u16,
+    }
+
+    let settings: Settings = Config::builder()
+        .with_defaults(Settings {
+            host: "localhost".into(),
+            port: 8080,
+        })
+        .try_deserialize()
+        .unwrap();
+    assert_eq!(
+        settings,
+        Settings {
+            host: "localhost".into(),
+            port: 8080,
+        }
+    );
+}
+
+#[test]
+fn with_defaults_provenance_is_defaults() {
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct Settings {
+        host: String,
+    }
+
+    let entry = Config::builder()
+        .with_defaults(Settings {
+            host: "localhost".into(),
+        })
+        .run()
+        .unwrap();
+    assert_eq!(entry.value().location().source_name(), "defaults");
+    let host = entry.value().value().as_map().unwrap().get("host").unwrap();
+    assert_eq!(host.location().source_name(), "defaults");
+    assert_eq!(host.value().as_string().unwrap(), "localhost");
+}
+
+#[test]
+fn with_defaults_then_source_overlay_deep_merges() {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    struct Settings {
+        host: String,
+        port: u16,
+    }
+
+    let settings: Settings = Config::builder()
+        .with_defaults(Settings {
+            host: "localhost".into(),
+            port: 8080,
+        })
+        .with_source("mock:overlay")
+        .with_loader(mock_loader(br#"{"port":9090}"#, None))
+        .with_parser(tanzim::parser::json::Json::new())
+        .with_merger(DeepMerge::new())
+        .try_deserialize()
+        .unwrap();
+    assert_eq!(
+        settings,
+        Settings {
+            host: "localhost".into(),
+            port: 9090,
+        }
+    );
+}
+
+#[test]
+fn with_value_is_escape_hatch_for_defaults() {
+    let value = LocatedValue::new(
+        Value::String("built-in".into()),
+        Location::at("defaults", "", None, None, None),
+    );
+    let entry = Config::builder().with_value(value).run().unwrap();
+    assert_eq!(entry.value().value().as_string().unwrap(), "built-in");
+    assert_eq!(entry.value().location().source_name(), "defaults");
+}
+
+#[test]
 fn single_validate_without_schema_is_noop() {
     let pipeline = build_single().build();
     let mut value = LocatedValue::new(
@@ -348,7 +445,14 @@ fn build_multi() -> PipelineBuilder<Sources> {
 
 #[test]
 fn multi_reports_missing_components_at_run_time() {
+    // No source leaves → load/parse are no-ops; loaders are not required.
+    let no_sources = Pipeline::builder()
+        .with_parser(txt_parser())
+        .with_merger(DeepMerge::new());
+    assert!(no_sources.run().unwrap().is_empty());
+
     let no_loaders = Pipeline::builder()
+        .with_source("mock:one")
         .with_parser(txt_parser())
         .with_merger(DeepMerge::new());
     assert!(matches!(no_loaders.run(), Err(MultiError::NoLoaders)));
@@ -378,10 +482,8 @@ fn multi_default_and_empty() {
             .unwrap()
             .is_empty()
     );
-    assert!(matches!(
-        Pipeline::builder().run(),
-        Err(MultiError::NoLoaders)
-    ));
+    // Empty plan (no source leaves) runs without loaders.
+    assert!(Pipeline::builder().run().unwrap().is_empty());
 }
 
 #[test]

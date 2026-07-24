@@ -19,9 +19,9 @@ bytes* — parsing happens in a later stage. The contract:
   matches the failure (`InvalidResource`, `InvalidOption`, `NotFound`, `NoAccess`, `Timeout`,
   `Duplicate`, `Load`).
 
-Register a loader with `tanzim::Config::with_loader`; it's dispatched by the source strings its
-`supported_source_list()` returns. For a quick, stateless adapter, use `closure::Closure` instead
-of a full `impl Load`. See the [`Load`] rustdoc for worked details.
+Register a loader with the load stage that walks sources and calls [`Load::load`]; it's dispatched
+by the source strings its `supported_source_list()` returns. For a quick, stateless adapter, use
+`closure::Closure` instead of a full `impl Load`. See the [`Load`] rustdoc for worked details.
 
 ## Built-in loaders
 

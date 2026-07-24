@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tanzim_value::{LocatedValue, Location, Map, Value};
 
 fn location() -> Location {
@@ -113,6 +113,76 @@ fn deserializes_borrowed_str_zero_copy() {
 
     let borrowed: Borrowed = tree.try_deserialize().unwrap();
     assert_eq!(borrowed.name, "app");
+}
+
+#[test]
+fn serializes_struct_into_located_tree() {
+    #[derive(Serialize)]
+    struct Settings {
+        host: String,
+        port: u16,
+        enabled: bool,
+        tags: Vec<String>,
+        nickname: Option<String>,
+    }
+
+    let location = Location::at("defaults", "", None, None, None);
+    let tree = LocatedValue::try_from_serialize(
+        &Settings {
+            host: "localhost".into(),
+            port: 8080,
+            enabled: true,
+            tags: vec!["a".into(), "b".into()],
+            nickname: None,
+        },
+        location.clone(),
+    )
+    .unwrap();
+
+    assert_eq!(tree.location().source_name(), "defaults");
+    let map = tree.value().as_map().unwrap();
+    assert_eq!(
+        map.get("host").unwrap().value().as_string().unwrap(),
+        "localhost"
+    );
+    assert_eq!(map.get("port").unwrap().value().as_int().unwrap(), 8080);
+    assert!(map.get("enabled").unwrap().value().as_bool().unwrap());
+    assert_eq!(map.get("tags").unwrap().value().as_list().unwrap().len(), 2);
+    assert!(map.get("nickname").unwrap().value().is_null());
+    assert_eq!(
+        map.get("host").unwrap().location().source_name(),
+        "defaults"
+    );
+}
+
+#[test]
+fn serialize_rejects_non_string_map_keys() {
+    use std::collections::HashMap;
+
+    let mut map = HashMap::new();
+    map.insert(1u32, "x");
+    let error = Value::try_from_serialize(&map).unwrap_err();
+    assert!(matches!(
+        error,
+        tanzim_value::Error::Serialize { message } if message.contains("map keys must be strings")
+    ));
+}
+
+#[test]
+fn round_trips_serialize_then_deserialize() {
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    struct Settings {
+        name: String,
+        port: u16,
+    }
+
+    let original = Settings {
+        name: "app".into(),
+        port: 9,
+    };
+    let tree = LocatedValue::try_from_serialize(&original, location()).unwrap();
+    let back: Settings = tree.try_deserialize().unwrap();
+    assert_eq!(back, original);
 }
 
 #[test]

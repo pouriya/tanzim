@@ -56,6 +56,13 @@ fn source_display(cs: &Source) -> String {
     s
 }
 
+/// A builder failure deferred until [`Config::run`] so source/defaults builders stay infallible.
+#[derive(Debug, Clone)]
+enum DeferredError {
+    Source(source::ParseError),
+    Serialize(tanzim_value::Error),
+}
+
 /// Errors produced by the single-configuration pipeline.
 #[derive(Debug)]
 pub enum Error {
@@ -65,6 +72,8 @@ pub enum Error {
     NoParsers,
     /// A source string failed to parse.
     Source(source::ParseError),
+    /// Serializing programmatic defaults / a value layer into the configuration tree failed.
+    Serialize(tanzim_value::Error),
     /// Loading a source failed.
     Load(loader::Error),
     /// Parsing a loaded payload failed.
@@ -102,6 +111,7 @@ impl std::fmt::Display for Error {
             // Transparent: forward Display (and its alternate form, so `{error:#}` reaches the
             // wrapped error's source snippet / caret) to the wrapped error.
             Self::Source(error) => std::fmt::Display::fmt(error, f),
+            Self::Serialize(error) => std::fmt::Display::fmt(error, f),
             Self::Load(error) => std::fmt::Display::fmt(error, f),
             Self::Parse(error) => std::fmt::Display::fmt(error, f),
             Self::Merge(error) => std::fmt::Display::fmt(error, f),
@@ -124,7 +134,7 @@ impl std::error::Error for Error {
         match self {
             Self::Source(error) => Some(error),
             Self::Load(error) => Some(error),
-            Self::Parse(error) | Self::Deserialize(error) => Some(error),
+            Self::Serialize(error) | Self::Parse(error) | Self::Deserialize(error) => Some(error),
             Self::Merge(error) => Some(error),
             #[cfg(feature = "validate-schema")]
             Self::Validate { inner } => Some(inner),
@@ -152,9 +162,10 @@ impl From<std::convert::Infallible> for Error {
 /// The `State` typestate gates which builder methods exist:
 ///
 /// - [`ConfigBuilder<Sources>`](ConfigBuilder) — from [`Config::builder`]. Simple-fold mode: add
-///   sources with [`with_source`](Self::with_source) / [`add_source`](Self::add_source), bind a
-///   per-source merger with [`with_source_merged`](Self::with_source_merged), and pick the global
-///   merger with [`with_merger`](Self::with_merger) (defaults to [`LastWins`](merger::LastWins)).
+///   layers with [`with_defaults`](Self::with_defaults) / [`with_source`](Self::with_source) /
+///   [`add_source`](Self::add_source), bind a per-source merger with
+///   [`with_source_merged`](Self::with_source_merged), and pick the global merger with
+///   [`with_merger`](Self::with_merger) (defaults to [`LastWins`](merger::LastWins)).
 /// - [`ConfigBuilder<Plan>`](ConfigBuilder) — from [`Config::from_plan`]. Carries an explicit
 ///   [`MergePlan`] tree and exposes none of the source builders.
 ///
@@ -168,9 +179,9 @@ pub struct ConfigBuilder<State: BuilderState> {
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
     schema: Option<Box<dyn validator::Validator + Send + Sync>>,
-    /// The first source string that failed to parse, stashed so the source builders can stay
-    /// infallible. Surfaced (as [`Error::Source`]) when the pipeline runs.
-    deferred_error: Option<source::ParseError>,
+    /// The first builder failure (bad source string or defaults serialize), stashed so builders stay
+    /// infallible. Surfaced when the pipeline runs.
+    deferred_error: Option<DeferredError>,
     _state: PhantomData<State>,
 }
 
@@ -403,6 +414,63 @@ impl<State: BuilderState> ConfigBuilder<State> {
 }
 
 impl ConfigBuilder<Sources> {
+    /// Append programmatic defaults (builder-style).
+    ///
+    /// Serializes `defaults` into a value tree stamped with [`Location::at`](crate::value::Location::at)
+    /// `"defaults"`, then appends it as a merge layer. Call this before file/env sources for the
+    /// usual "defaults, then file, then env" stack. Infallible: a serialize failure is deferred and
+    /// surfaced as [`Error::Serialize`] when the pipeline runs.
+    ///
+    /// ```rust
+    /// use serde::{Deserialize, Serialize};
+    /// use tanzim::Config;
+    ///
+    /// #[derive(Serialize, Deserialize, Default)]
+    /// struct Settings {
+    ///     host: String,
+    ///     port: u16,
+    /// }
+    ///
+    /// let settings: Settings = Config::builder()
+    ///     .with_defaults(Settings {
+    ///         host: "localhost".into(),
+    ///         port: 8080,
+    ///     })
+    ///     .try_deserialize()
+    ///     .unwrap();
+    ///
+    /// assert_eq!(settings.host, "localhost");
+    /// assert_eq!(settings.port, 8080);
+    /// ```
+    pub fn with_defaults<T: serde::Serialize>(mut self, defaults: T) -> Self {
+        self.add_defaults(defaults);
+        self
+    }
+
+    /// Append programmatic defaults (in-place). See [`with_defaults`](Self::with_defaults).
+    pub fn add_defaults<T: serde::Serialize>(&mut self, defaults: T) -> &mut Self {
+        let location = crate::value::Location::at("defaults", "", None, None, None);
+        match crate::value::LocatedValue::try_from_serialize(&defaults, location) {
+            Ok(value) => merger::push_child(&mut self.plan, merger::plan::value(value)),
+            Err(error) => self.record_deferred(DeferredError::Serialize(error)),
+        }
+        self
+    }
+
+    /// Append a pre-built value layer (builder-style). Lower-level escape hatch for
+    /// [`with_defaults`](Self::with_defaults) when the caller already has a
+    /// [`LocatedValue`](crate::value::LocatedValue).
+    pub fn with_value(mut self, value: crate::value::LocatedValue) -> Self {
+        self.add_value(value);
+        self
+    }
+
+    /// Append a pre-built value layer (in-place). See [`with_value`](Self::with_value).
+    pub fn add_value(&mut self, value: crate::value::LocatedValue) -> &mut Self {
+        merger::push_child(&mut self.plan, merger::plan::value(value));
+        self
+    }
+
     /// Append a configuration source (builder-style). `source` may be a [`Source`] or any string form
     /// (e.g. `"file:app.toml"`), parsed now. This method is infallible: an invalid source string is
     /// stashed and surfaced later as [`Error::Source`] when the pipeline runs, so calls keep chaining.
@@ -423,7 +491,11 @@ impl ConfigBuilder<Sources> {
     {
         match source.try_into() {
             Ok(source) => merger::push_child(&mut self.plan, MergePlan::Source(source)),
-            Err(error) => self.record_deferred(error.into()),
+            Err(error) => {
+                if let Error::Source(parse_error) = Error::from(error) {
+                    self.record_deferred(DeferredError::Source(parse_error));
+                }
+            }
         }
         self
     }
@@ -448,18 +520,20 @@ impl ConfigBuilder<Sources> {
                     children: vec![MergePlan::Source(source)],
                 },
             ),
-            Err(error) => self.record_deferred(error.into()),
+            Err(error) => {
+                if let Error::Source(parse_error) = Error::from(error) {
+                    self.record_deferred(DeferredError::Source(parse_error));
+                }
+            }
         }
         self
     }
 
-    /// Stash the first source-parse failure, keeping the source builders infallible. Later failures
-    /// are dropped — the first one wins and is returned by [`run`](Config::run).
-    fn record_deferred(&mut self, error: Error) {
-        if self.deferred_error.is_none()
-            && let Error::Source(parse_error) = error
-        {
-            self.deferred_error = Some(parse_error);
+    /// Stash the first builder failure, keeping builders infallible. Later failures are dropped —
+    /// the first one wins and is returned by [`run`](Config::run).
+    fn record_deferred(&mut self, error: DeferredError) {
+        if self.deferred_error.is_none() {
+            self.deferred_error = Some(error);
         }
     }
 
@@ -515,9 +589,9 @@ pub struct Config {
     parsers: Vec<Box<dyn parser::Parse + Send + Sync>>,
     #[cfg(feature = "validate-schema")]
     schema: Option<Box<dyn validator::Validator + Send + Sync>>,
-    /// A source string that failed to parse while assembling the builder, deferred to here so the
-    /// source builders could stay infallible. Returned by [`run`](Config::run) before any work.
-    deferred_error: Option<source::ParseError>,
+    /// A builder failure deferred so source/defaults builders stay infallible. Returned by
+    /// [`run`](Config::run) before any work.
+    deferred_error: Option<DeferredError>,
 }
 
 impl Config {
@@ -560,7 +634,10 @@ impl Config {
     /// Run load → parse → merge → unify → validate in sequence.
     pub fn run(&self) -> Result<Entry, Error> {
         if let Some(error) = &self.deferred_error {
-            return Err(Error::Source(error.clone()));
+            return Err(match error {
+                DeferredError::Source(error) => Error::Source(error.clone()),
+                DeferredError::Serialize(error) => Error::Serialize(error.clone()),
+            });
         }
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -601,13 +678,20 @@ pub struct ConfigStages<'a> {
 
 impl ConfigStages<'_> {
     /// Run the load stage: read every configured source into raw payloads.
+    ///
+    /// When the plan has no [`Source`](MergePlan::Source) leaves (value-only / empty plans), this
+    /// returns an empty list without requiring registered loaders.
     pub fn load(&self) -> Result<Vec<loader::Payload>, Error> {
         let config = self.config;
+        let sources = merger::leaves(&config.plan);
+        if sources.is_empty() {
+            return Ok(Vec::new());
+        }
         if config.loaders.is_empty() {
             return Err(Error::NoLoaders);
         }
         let mut result = Vec::new();
-        for config_source in merger::leaves(&config.plan) {
+        for config_source in sources {
             let source_name = config_source.source();
             cfg_if! {
                 if #[cfg(feature = "tracing")] {
@@ -678,8 +762,14 @@ impl ConfigStages<'_> {
     }
 
     /// Run the parse stage: turn every loaded payload into a value tree.
+    ///
+    /// When `loaded` is empty (no source payloads), this returns an empty list without requiring
+    /// registered parsers — value leaves in the merge plan still participate at merge time.
     pub fn parse(&self, loaded: &[loader::Payload]) -> Result<Vec<Parsed>, Error> {
         let config = self.config;
+        if loaded.is_empty() {
+            return Ok(Vec::new());
+        }
         if config.parsers.is_empty() {
             return Err(Error::NoParsers);
         }
