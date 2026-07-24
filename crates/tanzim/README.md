@@ -138,7 +138,8 @@ assert_eq!(config.file, "/var/log/app.log");
 
 | Feature | Enables |
 |---------|---------|
-| `load-env` / `load-file` / `load-http-closure` | env / filesystem / HTTP (closure-based) loaders |
+| `load-env` / `load-file` | env / filesystem loaders |
+| `load-http-closure` | HTTP loader (opt-in; you supply the fetch closure — see below) |
 | `parse-env` / `parse-json` / `parse-yaml` / `parse-toml` | format parsers |
 | `validate-default` | the standard, dependency-free validators |
 | `validate-schema` | schema machinery (`with_schema`, the validation stage) |
@@ -146,8 +147,13 @@ assert_eq!(config.file, "/var/log/app.log");
 | `validate-full` | every validator + schema |
 | `logging` / `tracing` | optional log integration across all crates |
 
-Defaults: `load-env`, `load-file`, `load-http-closure`, `parse-env`, `parse-json`,
-`parse-yaml`, `parse-toml`, `validate-default`, `validate-schema`.
+Defaults: `load-env`, `load-file`, `parse-env`, `parse-json`, `parse-yaml`, `parse-toml`,
+`validate-default`, `validate-schema`.
+
+`load-http-closure` is **not** a default: this crate ships no HTTP client, so enabling the feature
+only exposes `loader::http::Http` and the `source::http` builder. Register a working loader with
+`with_loader` after constructing `Http::new(your_fetch_closure)`. An `http:…` source without that
+registration fails as a missing loader.
 
 ## Documentation
 

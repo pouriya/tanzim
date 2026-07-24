@@ -70,12 +70,13 @@ assert!(content.contains("DATABASE.HOST=\"localhost\""));
 |---------|---------|
 | `env` | `env` loader (reads environment variables) |
 | `file` | `file` loader (reads from filesystem) |
-| `http-closure` | `http` loader (user-provided fetch closure) |
+| `http-closure` | `http` loader (user-provided fetch closure; no built-in client) |
 | `logging` | emit log messages via the `log` crate |
 | `tracing` | emit trace spans via the `tracing` crate |
 | `full` | `env` + `file` + `http-closure` |
 
 Default features: `env`, `file`, `http-closure`. Logging/tracing are opt-in.
+`http-closure` only compiles the loader — you still construct `Http::new(fetch)` yourself.
 
 ## Relations
 

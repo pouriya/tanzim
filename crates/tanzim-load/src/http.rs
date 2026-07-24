@@ -4,6 +4,9 @@
 //! any HTTP client library. You supply the actual transport (via [`Http::new`]); the loader
 //! validates options, invokes your closure, and normalizes the returned entries.
 //!
+//! Enabling the feature alone does not fetch anything — there is no built-in client. Construct an
+//! [`Http`] with your closure and pass that loader into whatever runs the load stage.
+//!
 //! **Source:** `http` (the resource is the URL and is required; an empty or unparseable resource
 //! is rejected with [`Error::InvalidResource`])
 //!

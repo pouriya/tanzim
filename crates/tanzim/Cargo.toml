@@ -28,7 +28,6 @@ tracing = { version = "0.1.40", optional = true }
 default = [
     "load-env",
     "load-file",
-    "load-http-closure",
     "parse-env",
     "parse-json",
     "parse-yaml",

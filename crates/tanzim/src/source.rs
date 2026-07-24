@@ -1,9 +1,9 @@
 //! Configuration sources: the `SOURCE[(OPTIONS)][:RESOURCE]` source-string format parsed into a
 //! validated [`Source`], plus typed builders for the built-in loaders.
 //!
-//! Re-exports [`tanzim_source`]. On top of the string form, the [`env`](fn@env), [`file`](fn@file),
-//! and [`http`](fn@http) free functions return typed builders that mirror each loader's options and
-//! convert into a [`Source`], so they slot straight into
+//! Re-exports [`tanzim_source`]. On top of the string form, the [`env`](fn@env) and [`file`](fn@file)
+//! free functions (and `http` when `load-http-closure` is enabled) return typed builders that mirror
+//! each loader's options and convert into a [`Source`], so they slot straight into
 //! [`Config::with_source`](crate::Config)/[`Pipeline::with_source`](crate::pipeline::Pipeline):
 //!
 //! ```
@@ -14,9 +14,10 @@
 //!     .with_source(file("app.toml").skip_not_found());
 //! ```
 //!
-//! Each builder is available only when its loader feature (`load-env`, `load-file`,
-//! `load-http-closure`) is enabled. Only the options you set are emitted; the loaders supply their
-//! own defaults for the rest.
+//! Each builder is available only when its loader feature is enabled (`load-env` / `load-file` are
+//! defaults; `load-http-closure` is opt-in and still requires registering an `Http` loader with a
+//! fetch closure). Only the options you set are emitted; the loaders supply their own defaults for
+//! the rest.
 
 pub use tanzim_source::*;
 
@@ -267,6 +268,12 @@ pub fn file(path: impl Into<String>) -> FileSource {
 ///
 /// Create one with [`http`](fn@http), then convert into a [`Source`] (directly or via
 /// [`Config::with_source`](crate::Config)).
+///
+/// Building the source alone is not enough: the `load-http-closure` feature is opt-in (not a
+/// default), and [`Http`](crate::loader::http::Http) is never auto-registered because it needs a
+/// user-supplied fetch closure. After enabling the feature, construct the loader with
+/// [`Http::new`](crate::loader::http::Http::new) and attach it via
+/// [`with_loader`](crate::Config::builder).
 #[cfg(feature = "load-http-closure")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HttpSource {
@@ -363,6 +370,10 @@ impl From<HttpSource> for Source {
 }
 
 /// Start building an `http` source that fetches `url`.
+///
+/// Requires the `load-http-closure` feature. The source declares *what* to fetch; you still must
+/// register an [`Http`](crate::loader::http::Http) loader (with your own fetch closure) on the
+/// pipeline — see [`HttpSource`].
 ///
 /// ```
 /// use tanzim::source::{http, Source, Url};
