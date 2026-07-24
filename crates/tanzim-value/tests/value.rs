@@ -36,6 +36,52 @@ fn last_key_wins() {
 }
 
 #[test]
+fn get_path_walks_nested_maps() {
+    let location = Location::at("file", "cfg.toml", Some(2), Some(5), None);
+    let mut server = Map::new();
+    server.insert(
+        "port".to_string(),
+        LocatedValue::new(Value::Int(8080), location.clone()),
+    );
+    let mut root_map = Map::new();
+    root_map.insert(
+        "server".to_string(),
+        LocatedValue::new(Value::Map(server), location.clone()),
+    );
+    root_map.insert("host".to_string(), located_string("localhost"));
+
+    assert_eq!(
+        root_map.get_path("server.port").unwrap().value().as_int(),
+        Some(8080)
+    );
+    assert_eq!(
+        root_map
+            .get_path("host")
+            .unwrap()
+            .value()
+            .as_string()
+            .unwrap(),
+        "localhost"
+    );
+    assert!(root_map.get_path("server.host").is_none());
+    assert!(root_map.get_path("missing").is_none());
+    // Non-map mid-path.
+    assert!(root_map.get_path("host.port").is_none());
+
+    let root = LocatedValue::new(Value::Map(root_map), location);
+    assert_eq!(
+        root.get_path("server.port").unwrap().location().to_string(),
+        "file:cfg.toml:2:5"
+    );
+    assert!(root.get_path("").unwrap().value().is_map());
+    assert!(
+        LocatedValue::new(Value::Int(1), Location::at("x", "", None, None, None))
+            .get_path("a")
+            .is_none()
+    );
+}
+
+#[test]
 fn default_display_is_compact() {
     let value = LocatedValue::new(
         Value::String("hello".to_string()),

@@ -264,6 +264,22 @@ impl Map {
         None
     }
 
+    /// Walk a dotted key path (`"server.port"`), returning the leaf [`LocatedValue`].
+    ///
+    /// Each segment must resolve to a map key; a missing key or a non-map mid-path yields `None`.
+    /// A single segment is equivalent to [`Map::get`].
+    pub fn get_path(&self, path: &str) -> Option<&LocatedValue> {
+        let mut current: Option<&LocatedValue> = None;
+        for segment in path.split('.') {
+            let map = match current {
+                None => self,
+                Some(located) => located.value().as_map()?,
+            };
+            current = Some(map.get(segment)?);
+        }
+        current
+    }
+
     /// Mutable access to the value for `key`, or `None` if absent.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut LocatedValue> {
         let mut found = None;
@@ -490,6 +506,38 @@ impl LocatedValue {
     /// The wrapped [`Value`].
     pub fn value(&self) -> &Value {
         &self.value
+    }
+
+    /// Walk a dotted key path (`"server.port"`) through nested maps, returning the leaf value.
+    ///
+    /// An empty `path` returns `self`. Otherwise this value must be a map; each segment is looked
+    /// up with [`Map::get`]. A missing key or a non-map mid-path yields `None`. The leaf keeps its
+    /// own [`Location`] (use [`LocatedValue::location`] for provenance).
+    ///
+    /// ```rust
+    /// use tanzim_value::{LocatedValue, Location, Map, Value};
+    ///
+    /// let location = Location::at("file", "cfg.toml", Some(1), Some(1), None);
+    /// let mut server = Map::new();
+    /// server.insert(
+    ///     "port".to_string(),
+    ///     LocatedValue::new(Value::Int(8080), location.clone()),
+    /// );
+    /// let root = LocatedValue::new(Value::Map({
+    ///     let mut map = Map::new();
+    ///     map.insert("server".to_string(), LocatedValue::new(Value::Map(server), location));
+    ///     map
+    /// }), Location::at("file", "cfg.toml", None, None, None));
+    ///
+    /// assert_eq!(root.get_path("server.port").unwrap().value().as_int(), Some(8080));
+    /// assert!(root.get_path("server.host").is_none());
+    /// assert!(root.get_path("").unwrap().value().is_map());
+    /// ```
+    pub fn get_path(&self, path: &str) -> Option<&LocatedValue> {
+        if path.is_empty() {
+            return Some(self);
+        }
+        self.value.as_map()?.get_path(path)
     }
 
     /// Mutable access to the wrapped [`Value`].
