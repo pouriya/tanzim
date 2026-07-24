@@ -15,12 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # Full history + tags: the release gate diffs against the previous
+          # `crate*` tag to confirm every changed crate was bumped.
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Check version bump consistency
-        run: make check-version-bump
+      - name: Release gate (version check)
+        run: make check-version
 
       - name: Verify
         run: make all

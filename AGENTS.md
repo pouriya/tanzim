@@ -16,7 +16,9 @@ Configuration pipeline: **load → parse → merge → validate**.
 
 ## Versioning & publishing
 
-All crates are `0.x` (minor bump = breaking). Internal `tanzim-*` deps must use exact `version = "X.Y.Z"` — no ranges. Bumping a crate requires bumping every dependent transitively. Run `make version-check` after any bump to verify.
+All crates are `0.x` (minor bump = breaking). Internal `tanzim-*` deps use exact `version = "X.Y.Z"` — no ranges. Versions are bumped once before a release tag (`crate*`), not per commit.
+
+`make check-version` (`crates/versioning.sh`) is the **release gate**: against the last `crate*` tag it checks (1) every internal dep pins the crate's current version and (2) every crate whose `src/`, `Cargo.toml`, or `README.md` changed was bumped — which cascades up to `tanzim`. Not part of `make all`.
 
 ## Pipeline
 
