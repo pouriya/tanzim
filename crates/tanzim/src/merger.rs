@@ -130,6 +130,7 @@ impl EntryName {
         Self::Named(name.into())
     }
 
+    #[cfg(feature = "validate-schema")]
     pub(crate) fn from_option(name: Option<String>) -> Self {
         match name {
             None => Self::Root,

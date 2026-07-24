@@ -16,7 +16,9 @@
 use crate::config::{BuilderState, Plan, Sources};
 use crate::loader;
 use crate::merger::plan::MergePlan;
-use crate::merger::{self, Entries, EntryName, EntryNameRef};
+use crate::merger::{self, Entries};
+#[cfg(feature = "validate-schema")]
+use crate::merger::{EntryName, EntryNameRef};
 use crate::parser::{self, Parsed};
 use crate::source::{self, Source};
 use cfg_if::cfg_if;

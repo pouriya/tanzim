@@ -44,6 +44,10 @@ No `#[cfg(test)]` blocks in `src/` — ever. All tests live in `tests/`. Naming:
 - `Payload::maybe_format` is `Option<String>`: `None` means format is auto-detected by parsers via `is_format_supported`.
 - Sources with `ignore_errors = true` swallow load and parse failures silently.
 
+## Docs: no non-dependency crates
+
+**Do not name or document another `tanzim-*` crate in rustdoc / README / AGENTS unless it is a Cargo dependency of this crate.** Behaviour of consumers or siblings belongs in *their* docs — not yours.
+
 ## Code style conventions
 
 These apply to all crates, not just the pipeline:

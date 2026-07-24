@@ -201,8 +201,9 @@ pub enum ArrayStrategy {
 ///
 /// For each key in a map: if both the accumulated and incoming values are maps, the merge
 /// recurses. Two lists are combined according to the configured [`ArrayStrategy`] (default
-/// [`Replace`](ArrayStrategy::Replace)). Otherwise the incoming (overlay) value and its location
-/// win. Payloads with `maybe_name == None` are grouped under the unnamed bucket (`None` key).
+/// [`Replace`](ArrayStrategy::Replace)). An overlay [`Value::Null`] at a map key removes that
+/// key (unset). Otherwise the incoming (overlay) value and its location win. Payloads with
+/// `maybe_name == None` are grouped under the unnamed bucket (`None` key).
 ///
 /// # Examples
 ///
@@ -270,6 +271,10 @@ fn deep_merge_value(
             let mut result_map = Map::new();
             for (key, base_val) in base_map.entries() {
                 if let Some(overlay_val) = overlay_map.get(key) {
+                    // Overlay null unsets the key rather than storing `Value::Null`.
+                    if overlay_val.value().is_null() {
+                        continue;
+                    }
                     result_map.insert(
                         key.clone(),
                         deep_merge_value(base_val.clone(), overlay_val.clone(), strategy),
@@ -279,9 +284,13 @@ fn deep_merge_value(
                 }
             }
             for (key, overlay_val) in overlay_map.entries() {
-                if !result_map.contains_key(key) {
-                    result_map.insert(key.clone(), overlay_val.clone());
+                if base_map.contains_key(key) {
+                    continue;
                 }
+                if overlay_val.value().is_null() {
+                    continue;
+                }
+                result_map.insert(key.clone(), overlay_val.clone());
             }
             LocatedValue::new(Value::Map(result_map), overlay.location().clone())
         }

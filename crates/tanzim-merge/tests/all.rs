@@ -45,6 +45,21 @@ fn list_value(items: Vec<LocatedValue>) -> LocatedValue {
     )
 }
 
+fn null_value() -> LocatedValue {
+    LocatedValue::new(Value::Null, Location::at("mock", "test", None, None, None))
+}
+
+fn located_map(entries: Vec<(&str, LocatedValue)>) -> LocatedValue {
+    let mut map = Map::new();
+    for (key, value) in entries {
+        map.insert(key.to_string(), value);
+    }
+    LocatedValue::new(
+        Value::Map(map),
+        Location::at("mock", "test", None, None, None),
+    )
+}
+
 /// Deep-merge two named-`app` list values under `strategy` and return the merged list's items.
 fn merge_lists_via(
     base: LocatedValue,
@@ -183,6 +198,106 @@ fn deep_merge_scalar_overlay_replaces_map() {
     let merged = DeepMerge::new().merge(&parsed).unwrap();
     let (_, value) = merged.get(&Some("app".into())).unwrap();
     assert_eq!(value.value().as_string().unwrap(), "override");
+}
+
+#[test]
+fn deep_merge_null_overlay_deletes_map_key() {
+    let parsed = vec![
+        (
+            payload(Some("app")),
+            map_value(&[("host", "localhost"), ("port", "8080")]),
+        ),
+        (
+            payload(Some("app")),
+            located_map(vec![("port", null_value())]),
+        ),
+    ];
+    let merged = DeepMerge::new().merge(&parsed).unwrap();
+    let map = merged
+        .get(&Some("app".into()))
+        .unwrap()
+        .1
+        .value()
+        .as_map()
+        .unwrap();
+    assert_eq!(
+        map.get("host").unwrap().value().as_string().unwrap(),
+        "localhost"
+    );
+    assert!(!map.contains_key("port"));
+}
+
+#[test]
+fn deep_merge_null_overlay_only_does_not_insert_key() {
+    let parsed = vec![
+        (payload(Some("app")), map_value(&[("host", "localhost")])),
+        (
+            payload(Some("app")),
+            located_map(vec![("debug", null_value())]),
+        ),
+    ];
+    let merged = DeepMerge::new().merge(&parsed).unwrap();
+    let map = merged
+        .get(&Some("app".into()))
+        .unwrap()
+        .1
+        .value()
+        .as_map()
+        .unwrap();
+    assert!(map.contains_key("host"));
+    assert!(!map.contains_key("debug"));
+}
+
+#[test]
+fn deep_merge_null_overlay_deletes_nested_map_key() {
+    let base = located_map(vec![(
+        "server",
+        map_value(&[("host", "localhost"), ("port", "8080")]),
+    )]);
+    let overlay = located_map(vec![("server", located_map(vec![("port", null_value())]))]);
+    let parsed = vec![
+        (payload(Some("app")), base),
+        (payload(Some("app")), overlay),
+    ];
+    let merged = DeepMerge::new().merge(&parsed).unwrap();
+    let server = merged
+        .get(&Some("app".into()))
+        .unwrap()
+        .1
+        .value()
+        .as_map()
+        .unwrap()
+        .get("server")
+        .unwrap()
+        .value()
+        .as_map()
+        .unwrap();
+    assert_eq!(
+        server.get("host").unwrap().value().as_string().unwrap(),
+        "localhost"
+    );
+    assert!(!server.contains_key("port"));
+}
+
+#[test]
+fn last_wins_keeps_null_as_value() {
+    // LastWins replaces the whole document; null-as-delete is DeepMerge-only.
+    let parsed = vec![
+        (payload(Some("app")), map_value(&[("port", "8080")])),
+        (
+            payload(Some("app")),
+            located_map(vec![("port", null_value())]),
+        ),
+    ];
+    let merged = LastWins.merge(&parsed).unwrap();
+    let map = merged
+        .get(&Some("app".into()))
+        .unwrap()
+        .1
+        .value()
+        .as_map()
+        .unwrap();
+    assert!(map.get("port").unwrap().value().is_null());
 }
 
 #[test]

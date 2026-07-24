@@ -21,7 +21,7 @@ value.
 | Type | Behaviour |
 |------|-----------|
 | `LastWins` | Last value for each name fully replaces any previous value |
-| `DeepMerge` | Maps are merged recursively; lists follow a configurable `ArrayStrategy` (default `Replace`; also `Concat`, `Prepend`, `Union`, `Index`, `Keyed`); the overlay value wins at each other leaf |
+| `DeepMerge` | Maps are merged recursively; lists follow a configurable `ArrayStrategy` (default `Replace`; also `Concat`, `Prepend`, `Union`, `Index`, `Keyed`); overlay `null` at a map key deletes that key; otherwise the overlay value wins at each other leaf |
 
 Build a `DeepMerge` with `DeepMerge::new()` and pick a list strategy via
 `.with_array_strategy(ArrayStrategy::Concat)`.

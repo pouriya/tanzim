@@ -359,7 +359,7 @@ pub enum Value {
     List(Vec<LocatedValue>),
     /// A map of keys to located values.
     Map(Map),
-    /// The absence of a value.
+    /// The absence of a value (JSON/YAML `null`).
     Null,
 }
 

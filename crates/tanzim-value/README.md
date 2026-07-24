@@ -133,6 +133,4 @@ Off by default.
 
 ## Relations
 
-- Used by all other tanzim crates.
-- [`tanzim-parse`](https://crates.io/crates/tanzim-parse) produces `LocatedValue` trees from raw bytes.
-- [`tanzim-merge`](https://crates.io/crates/tanzim-merge) consumes `LocatedValue` trees to produce merged maps.
+- Depends on [`tanzim-source`](https://crates.io/crates/tanzim-source) for [`Location`]'s originating [`Source`](tanzim_source::Source).
