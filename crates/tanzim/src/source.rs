@@ -1,10 +1,10 @@
 //! Configuration sources: the `SOURCE[(OPTIONS)][:RESOURCE]` source-string format parsed into a
 //! validated [`Source`], plus typed builders for the built-in loaders.
 //!
-//! Re-exports [`tanzim_source`]. On top of the string form, the [`env`], [`file`], and [`http`]
-//! free functions return typed builders that mirror each loader's options and convert into a
-//! [`Source`], so they slot straight into
-//! [`Config::with_source`](crate::Config)/[`Pipeline::with_source`](crate::Pipeline):
+//! Re-exports [`tanzim_source`]. On top of the string form, the [`env`](fn@env), [`file`](fn@file),
+//! and [`http`](fn@http) free functions return typed builders that mirror each loader's options and
+//! convert into a [`Source`], so they slot straight into
+//! [`Config::with_source`](crate::Config)/[`Pipeline::with_source`](crate::pipeline::Pipeline):
 //!
 //! ```
 //! use tanzim::{Config, source::{env, file}};
@@ -20,7 +20,7 @@
 
 pub use tanzim_source::*;
 
-/// The parsed URL type accepted by [`http`] (re-exported from the HTTP loader).
+/// The parsed URL type accepted by [`http`](fn@http) (re-exported from the HTTP loader).
 #[cfg(feature = "load-http-closure")]
 pub use tanzim_load::http::Url;
 
@@ -73,7 +73,7 @@ impl SkipStages {
 
 /// Builder for an `env` [`Source`], mirroring the options of the environment-variable loader.
 ///
-/// Create one with [`env`], then convert into a [`Source`] (directly or via
+/// Create one with [`env`](fn@env), then convert into a [`Source`] (directly or via
 /// [`Config::with_source`](crate::Config)).
 #[cfg(feature = "load-env")]
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
@@ -169,7 +169,7 @@ pub fn env() -> EnvSource {
 
 /// Builder for a `file` [`Source`], mirroring the options of the filesystem loader.
 ///
-/// Create one with [`file`], then convert into a [`Source`] (directly or via
+/// Create one with [`file`](fn@file), then convert into a [`Source`] (directly or via
 /// [`Config::with_source`](crate::Config)).
 #[cfg(feature = "load-file")]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -265,7 +265,7 @@ pub fn file(path: impl Into<String>) -> FileSource {
 
 /// Builder for an `http` [`Source`], mirroring the options of the HTTP loader.
 ///
-/// Create one with [`http`], then convert into a [`Source`] (directly or via
+/// Create one with [`http`](fn@http), then convert into a [`Source`] (directly or via
 /// [`Config::with_source`](crate::Config)).
 #[cfg(feature = "load-http-closure")]
 #[derive(Clone, Debug, PartialEq, Eq)]

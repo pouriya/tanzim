@@ -1,10 +1,11 @@
 //! The multi-configuration pipeline: load, parse, merge, validate.
 //!
-//! [`Pipeline`] keeps a [`Merged`] map of named entries (`None` = the unnamed bucket). Assemble it
-//! with a [`PipelineBuilder`]: [`Pipeline::builder`] starts a simple-fold builder (add sources,
-//! optionally pick a merger), while [`Pipeline::from_plan`] starts from an explicit [`MergePlan`]
-//! tree. Call [`build`](PipelineBuilder::build) for the runnable [`Pipeline`], or the
-//! [`run`](PipelineBuilder::run) / [`try_deserialize`](PipelineBuilder::try_deserialize) shortcuts.
+//! [`Pipeline`] keeps an [`Entries`] map of named configurations (plus an optional root /
+//! unnamed bucket). Assemble it with a [`PipelineBuilder`]: [`Pipeline::builder`] starts a
+//! simple-fold builder (add sources, optionally pick a merger), while [`Pipeline::from_plan`]
+//! starts from an explicit [`MergePlan`] tree. Call [`build`](PipelineBuilder::build) for the
+//! runnable [`Pipeline`], or the [`run`](PipelineBuilder::run) /
+//! [`try_deserialize`](PipelineBuilder::try_deserialize) shortcuts.
 //!
 //! The builder is a **typestate** — [`PipelineBuilder<Sources>`](PipelineBuilder) exposes
 //! [`with_source`](PipelineBuilder::with_source) / [`with_merger`](PipelineBuilder::with_merger),
@@ -15,7 +16,7 @@
 use crate::config::{BuilderState, Plan, Sources};
 use crate::loader;
 use crate::merger::plan::MergePlan;
-use crate::merger::{self, Merged};
+use crate::merger::{self, Entries, EntryName, EntryNameRef};
 use crate::parser::{self, Parsed};
 use crate::source::{self, Source};
 use cfg_if::cfg_if;
@@ -25,11 +26,114 @@ use tanzim_source::{OnError, Stage};
 #[cfg(feature = "validate-schema")]
 use crate::validator;
 
-/// Validation schemas keyed by merged entry name (`None` = the unnamed bucket). Each value is a
+/// Validation schemas keyed by merged entry name. Each value is a
 /// [`Validator`](validator::Validator) — build one fluently or via [`validator::build_value`].
+///
+/// Prefer [`insert_root`](Self::insert_root) / [`insert_named`](Self::insert_named) over thinking
+/// about `Option<String>` keys.
 #[cfg(feature = "validate-schema")]
-pub type Schemas =
-    std::collections::HashMap<Option<String>, Box<dyn validator::Validator + Send + Sync>>;
+pub struct Schemas {
+    entries: std::collections::HashMap<Option<String>, Box<dyn validator::Validator + Send + Sync>>,
+}
+
+#[cfg(feature = "validate-schema")]
+impl Default for Schemas {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "validate-schema")]
+impl Schemas {
+    /// An empty schema map.
+    pub fn new() -> Self {
+        Self {
+            entries: std::collections::HashMap::new(),
+        }
+    }
+
+    /// The number of registered schemas.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether there are no registered schemas.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Register (or replace) the schema for the root entry.
+    pub fn insert_root(
+        &mut self,
+        schema: impl Into<Box<dyn validator::Validator + Send + Sync>>,
+    ) -> Option<Box<dyn validator::Validator + Send + Sync>> {
+        self.entries.insert(None, schema.into())
+    }
+
+    /// Register (or replace) the schema for a named entry.
+    pub fn insert_named(
+        &mut self,
+        name: impl Into<String>,
+        schema: impl Into<Box<dyn validator::Validator + Send + Sync>>,
+    ) -> Option<Box<dyn validator::Validator + Send + Sync>> {
+        self.entries.insert(Some(name.into()), schema.into())
+    }
+
+    /// Register (or replace) the schema for `name`.
+    pub fn insert(
+        &mut self,
+        name: EntryName,
+        schema: impl Into<Box<dyn validator::Validator + Send + Sync>>,
+    ) -> Option<Box<dyn validator::Validator + Send + Sync>> {
+        self.entries.insert(name.into_option(), schema.into())
+    }
+
+    /// Iterate over schemas by entry name.
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (EntryNameRef<'_>, &(dyn validator::Validator + Send + Sync))> {
+        self.entries.iter().map(|(name, schema)| {
+            let key = match name {
+                None => EntryNameRef::Root,
+                Some(name) => EntryNameRef::Named(name.as_str()),
+            };
+            (key, schema.as_ref())
+        })
+    }
+}
+
+#[cfg(feature = "validate-schema")]
+impl IntoIterator for Schemas {
+    type Item = (EntryName, Box<dyn validator::Validator + Send + Sync>);
+    type IntoIter = SchemasIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        SchemasIntoIter {
+            inner: self.entries.into_iter(),
+        }
+    }
+}
+
+/// Owning iterator over [`Schemas`].
+#[cfg(feature = "validate-schema")]
+pub struct SchemasIntoIter {
+    inner: std::collections::hash_map::IntoIter<
+        Option<String>,
+        Box<dyn validator::Validator + Send + Sync>,
+    >,
+}
+
+#[cfg(feature = "validate-schema")]
+impl Iterator for SchemasIntoIter {
+    type Item = (EntryName, Box<dyn validator::Validator + Send + Sync>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some((name, schema)) => Some((EntryName::from_option(name), schema)),
+            None => None,
+        }
+    }
+}
 
 fn source_display(cs: &Source) -> String {
     let mut s = cs.source().to_string();
@@ -82,8 +186,8 @@ pub enum Error {
     /// A merged entry failed schema validation.
     #[cfg(feature = "validate-schema")]
     Validate {
-        /// The name of the entry that failed validation (`None` = the unnamed bucket).
-        name: Option<String>,
+        /// The name of the entry that failed validation.
+        name: EntryName,
         /// The underlying validation error.
         inner: validator::Error,
     },
@@ -108,7 +212,7 @@ impl std::fmt::Display for Error {
             }
             #[cfg(feature = "validate-schema")]
             Self::Validate { name, inner } => {
-                write!(f, "configuration `{name:?}` failed validation: ")?;
+                write!(f, "configuration `{name}` failed validation: ")?;
                 std::fmt::Display::fmt(inner, f)
             }
         }
@@ -332,16 +436,28 @@ impl<State: BuilderState> PipelineBuilder<State> {
         self.with_default_parsers()
     }
 
-    /// Register a validator for one named entry (`None` = the unnamed bucket). Pass any
+    /// Register a validator for the root (unnamed) entry. Pass any
     /// [`Validator`](validator::Validator) — build one fluently, or from a declarative schema
     /// document with [`validator::build_value`].
     #[cfg(feature = "validate-schema")]
-    pub fn with_schema(
+    pub fn with_root_schema(
         mut self,
-        name: Option<String>,
         schema: impl Into<Box<dyn validator::Validator + Send + Sync>>,
     ) -> Self {
-        self.schemas.insert(name, schema.into());
+        self.schemas.insert_root(schema);
+        self
+    }
+
+    /// Register a validator for a named entry. Pass any
+    /// [`Validator`](validator::Validator) — build one fluently, or from a declarative schema
+    /// document with [`validator::build_value`].
+    #[cfg(feature = "validate-schema")]
+    pub fn with_named_schema(
+        mut self,
+        name: impl Into<String>,
+        schema: impl Into<Box<dyn validator::Validator + Send + Sync>>,
+    ) -> Self {
+        self.schemas.insert_named(name, schema);
         self
     }
 
@@ -368,14 +484,12 @@ impl<State: BuilderState> PipelineBuilder<State> {
     }
 
     /// Shortcut for [`build`](Self::build) then [`Pipeline::run`].
-    pub fn run(self) -> Result<Merged, Error> {
+    pub fn run(self) -> Result<Entries, Error> {
         self.build().run()
     }
 
     /// Shortcut for [`build`](Self::build) then [`Pipeline::try_deserialize`].
-    pub fn try_deserialize<T: serde::de::DeserializeOwned>(
-        self,
-    ) -> Result<std::collections::HashMap<Option<String>, T>, Error> {
+    pub fn try_deserialize<T: serde::de::DeserializeOwned>(self) -> Result<Entries<T>, Error> {
         self.build().try_deserialize()
     }
 }
@@ -508,8 +622,8 @@ impl PipelineBuilder<Sources> {
 /// ```rust
 /// # #[cfg(all(feature = "load-env", feature = "parse-env"))]
 /// # tanzim_testing::environment::run(|env| {
-/// use std::collections::HashMap;
 /// use serde::Deserialize;
+/// use tanzim::merger::Entries;
 /// use tanzim::pipeline::Pipeline;
 /// # env.set_env("APP_WEB__PORT", "8080")?;
 /// # env.set_env("APP_DB__PORT", "5432")?;
@@ -519,13 +633,13 @@ impl PipelineBuilder<Sources> {
 ///     port: String, // the env parser keeps every value as a string
 /// }
 ///
-/// let services: HashMap<Option<String>, Service> = Pipeline::default()
+/// let services: Entries<Service> = Pipeline::default()
 ///     .with_source("env(prefix=APP_,separator=__)")
 ///     .try_deserialize()
 ///     .unwrap();
 ///
-/// assert_eq!(services[&Some("web".to_string())].port, "8080");
-/// assert_eq!(services[&Some("db".to_string())].port, "5432");
+/// assert_eq!(services.named("web").unwrap().port, "8080");
+/// assert_eq!(services.named("db").unwrap().port, "5432");
 /// # Ok(())
 /// # })
 /// # .unwrap();
@@ -580,7 +694,7 @@ impl Pipeline {
     }
 
     /// Run load → parse → merge → validate in sequence.
-    pub fn run(&self) -> Result<Merged, Error> {
+    pub fn run(&self) -> Result<Entries, Error> {
         if let Some(error) = &self.deferred_error {
             return Err(match error {
                 DeferredError::Source(error) => Error::Source(error.clone()),
@@ -602,13 +716,11 @@ impl Pipeline {
         Ok(merged)
     }
 
-    /// Run the pipeline and deserialize each named entry's configuration into `T`, keyed by
-    /// entry name (the first failure aborts).
-    pub fn try_deserialize<T: serde::de::DeserializeOwned>(
-        &self,
-    ) -> Result<std::collections::HashMap<Option<String>, T>, Error> {
+    /// Run the pipeline and deserialize each entry's configuration into `T` (the first failure
+    /// aborts).
+    pub fn try_deserialize<T: serde::de::DeserializeOwned>(&self) -> Result<Entries<T>, Error> {
         let merged = self.run()?;
-        let mut out = std::collections::HashMap::with_capacity(merged.len());
+        let mut out = Entries::new();
         for (name, entry) in merged.iter() {
             let deserialized = match entry.value().try_deserialize::<T>() {
                 Ok(value) => value,
@@ -616,7 +728,7 @@ impl Pipeline {
                     return Err(Error::Deserialize(error));
                 }
             };
-            out.insert(name.clone(), deserialized);
+            out.insert(name.to_owned(), deserialized);
         }
         Ok(out)
     }
@@ -821,7 +933,7 @@ impl PipelineStages<'_> {
     /// order) with the global merger, defaulting to [`LastWins`](merger::LastWins), each per-source
     /// merger pre-merging its own payloads first; a [`from_plan`](Pipeline::from_plan) tree evaluates
     /// directly.
-    pub fn merge(&self, parsed: &[Parsed]) -> Result<Merged, Error> {
+    pub fn merge(&self, parsed: &[Parsed]) -> Result<Entries, Error> {
         let pipeline = self.pipeline;
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -833,7 +945,7 @@ impl PipelineStages<'_> {
         let groups = merger::group_by_source(&merger::leaves(&pipeline.plan), parsed);
         match merger::plan::evaluate(&pipeline.plan, &groups) {
             Ok(raw) => {
-                let merged = Merged::from_raw(raw);
+                let merged = Entries::from_raw(raw);
                 cfg_if! {
                     if #[cfg(feature = "tracing")] {
                         tracing::info!(msg = "Configuration merge stage complete", group_count = merged.len());
@@ -848,20 +960,21 @@ impl PipelineStages<'_> {
     }
 
     /// Validate (and coerce) the merged configuration against the registered schemas.
-    pub fn validate(&self, _merged: &mut Merged) -> Result<(), Error> {
+    pub fn validate(&self, _merged: &mut Entries) -> Result<(), Error> {
         #[cfg(feature = "validate-schema")]
         {
             let schemas = &self.pipeline.schemas;
             if schemas.is_empty() {
                 return Ok(());
             }
-            for (name, schema) in schemas {
-                match _merged.get_mut(name) {
-                    Some(entry) => match validator::validate(schema.as_ref(), entry.value_mut()) {
+            for (name, schema) in schemas.iter() {
+                let owned_name = name.to_owned();
+                match _merged.get_mut(&owned_name) {
+                    Some(entry) => match validator::validate(schema, entry.value_mut()) {
                         Ok(()) => {}
                         Err(inner) => {
                             return Err(Error::Validate {
-                                name: name.clone(),
+                                name: owned_name,
                                 inner,
                             });
                         }
@@ -869,9 +982,9 @@ impl PipelineStages<'_> {
                     None => {
                         cfg_if! {
                             if #[cfg(feature = "tracing")] {
-                                tracing::warn!(msg = "Schema has no matching merged entry", name = ?name);
+                                tracing::warn!(msg = "Schema has no matching merged entry", name = %name);
                             } else if #[cfg(feature = "logging")] {
-                                log::warn!("msg=\"Schema has no matching merged entry\" name={name:?}");
+                                log::warn!("msg=\"Schema has no matching merged entry\" name={name}");
                             }
                         }
                     }

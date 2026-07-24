@@ -44,11 +44,11 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         let merged = config.run().expect("run pipeline");
 
         assert!(
-            merged.contains_key(&Some("foo".to_string())),
+            merged.contains_named("foo"),
             "expected 'foo' entry in merged config"
         );
 
-        if let Some(entry) = merged.get(&Some("foo".to_string())) {
+        if let Some(entry) = merged.named("foo") {
             assert!(!entry.payloads().is_empty());
             assert!(
                 entry.value().value().as_map().is_some(),
@@ -57,12 +57,8 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         for (name, entry) in merged.iter() {
-            let display = match name {
-                None => "(unnamed)",
-                Some(n) => n.as_str(),
-            };
             println!(
-                "{display} (from {} source(s)): {}",
+                "{name} (from {} source(s)): {}",
                 entry.payloads().len(),
                 entry.value().value()
             );

@@ -10,10 +10,10 @@ per-concern module.
 
 - `loader.rs` — `pub use tanzim_load::*;`
 - `parser.rs` — `pub use tanzim_parse::*;` + `Parsed` (a `Payload` paired with its parsed `LocatedValue`)
-- `merger.rs` — `pub use tanzim_merge::*;` + `Merged` (facade output map, shadows the raw
-  `tanzim_merge::Merged` alias — reach the raw one as `tanzim_merge::Merged`), plus the pipeline's
-  internal `pub(crate)` merge-tree helpers (`leaves`, `root_merger`, `push_child`, `set_root_merger`)
-  and `group_by_source`
+- `merger.rs` — `pub use tanzim_merge::*;` (includes the raw `Merged` alias for merge implementors)
+  + `Entries` / `EntryName` / `EntryNameRef` (consumer map; `root()` / `named()` hide
+  `Option<String>` keys), plus the pipeline's internal `pub(crate)` merge-tree helpers
+  (`leaves`, `root_merger`, `push_child`, `set_root_merger`) and `group_by_source`
 - `validator.rs` — `pub use tanzim_validate::*;`
 - `value.rs` — `pub use tanzim_value::*;`
 - `source.rs` — `pub use tanzim_source::*;`
@@ -45,10 +45,11 @@ per-concern module.
 
 - `PipelineBuilder<State>` mirrors `ConfigBuilder<State>` (shares the `Sources`/`Plan` markers from
   `config`). Construct with `Pipeline::builder()` / `Pipeline::from_plan(plan)`. `Pipeline` — load →
-  parse → merge → validate (no `unify`); `run()` returns `Merged` (`HashMap<Option<String>, Entry>`),
-  `try_deserialize::<T>()` returns a name-keyed map. Stages behind `Pipeline::stages() -> PipelineStages<'_>`.
+  parse → merge → validate (no `unify`); `run()` returns `Entries` (`Entries<Entry>`),
+  `try_deserialize::<T>()` returns `Entries<T>`. Stages behind `Pipeline::stages() -> PipelineStages<'_>`.
   Error type is `pipeline::Error`.
-- `with_schema(Option<String>, schema)` registers per-entry validation schemas (`Schemas` map).
+- `with_root_schema` / `with_named_schema` / `with_schemas(Schemas)` register per-entry validation
+  schemas (`Schemas` is a struct with the same root/named insert helpers).
 - Same default loader/parser helpers as `Config`.
 
 ## Testing

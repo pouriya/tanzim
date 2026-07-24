@@ -4,6 +4,9 @@ Configuration pipeline: **load → parse → merge → validate**.
 
 ## Crates
 
+Stage crates implement one pipeline step and can be used alone. The `tanzim` crate is the
+**facade** — it re-exports the stages and wires them into application-facing pipelines.
+
 | Crate | Purpose |
 |-------|---------|
 | `tanzim-value` | Core value types (`Value`, `LocatedValue`, `Map`, `Location`, `Error`) |
@@ -12,7 +15,7 @@ Configuration pipeline: **load → parse → merge → validate**.
 | `tanzim-parse` | Parsing bytes into `LocatedValue` trees (`Parse` trait) |
 | `tanzim-merge` | Merging parsed values by entry name (`Merge`, `LastWins`, `DeepMerge`, `Merged`) |
 | `tanzim-validate` | Validating/coercing values (`Validator` trait, concrete validators, `schema` feature for building validators from data) |
-| `tanzim` | Facade: `pipeline::single::Single` / `pipeline::multi::Multi` that wire the full pipeline |
+| `tanzim` | **Facade** (application entry point): `Config` (single config) / `Pipeline` (multi-entry) — load → parse → merge → validate |
 
 ## Versioning & publishing
 
@@ -29,7 +32,7 @@ Source strings
   → Merge::merge(parsed_list)  → HashMap<name, (Vec<Payload>, LocatedValue)>   (the `Merged` alias)
 ```
 
-`pipeline::single::Single::run()` and `pipeline::multi::Multi::run()` execute all stages. Each stage can also be called individually via `load()`, `parse()`, `merge()` (and `unify()` for single). Construct either pipeline with `default()` (all feature-enabled loaders + parsers; global merger defaults to `LastWins`) or `empty()` (nothing registered) — there is no `new()`. `with_source`/`add_source` accept a string or a `Source` and return `Result` (parse errors → `Error::Source`); `with_source_merged` binds a per-source merger; `with_merge_plan` supplies an explicit `merger::plan::MergePlan` tree instead of the simple builders (mixing the two is `Error::PlanConflict`). `parse()` returns `Vec<Parsed>`, `merge()` returns `Merged` (a map of named `Entry` values); single `run()` returns one unified `Entry`, multi `run()` returns `Merged`. `Parsed`/`Entry`/`Merged` are structs with `payload()`/`payloads()`/`value()` accessors (no public fields).
+`Config::run()` and `Pipeline::run()` execute all stages. Each stage can also be called individually via `load()`, `parse()`, `merge()` (and `unify()` for Config). Construct either pipeline with `builder()` / `default()` (feature-enabled loaders + parsers; global merger defaults to `LastWins`) or an empty builder — there is no `new()`. `with_source`/`add_source` accept a string or a `Source`; `with_source_merged` binds a per-source merger; `from_plan` supplies an explicit `merger::plan::MergePlan` tree (typestate keeps this separate from the simple builders). `parse()` returns `Vec<Parsed>`, `merge()` returns `Entries` (a map of named `Entry` values; use `root()` / `named()`); Config `run()` returns one unified `Entry`, Pipeline `run()` returns `Entries`, Pipeline `try_deserialize::<T>()` returns `Entries<T>`. `Parsed`/`Entry`/`Entries` are structs with accessors (no public fields). The merge crate's `Merged` alias remains the raw `HashMap` returned by `Merge` implementors.
 
 ## Testing
 

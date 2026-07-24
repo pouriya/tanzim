@@ -135,8 +135,9 @@
 //!
 //! When your sources describe **several named configurations** at once (one file per service, or an
 //! env `separator` that splits `APP_web__port` into entry `web`, key `port`), reach for
-//! [`pipeline::Pipeline`] instead: same stages, but it keeps a map of named entries
-//! (`None` = the unnamed bucket) and [`try_deserialize`](pipeline::Pipeline::try_deserialize)s each.
+//! [`pipeline::Pipeline`] instead: same stages, but it keeps an [`Entries`](merger::Entries) map
+//! and [`try_deserialize`](pipeline::Pipeline::try_deserialize)s each entry (reach them with
+//! [`named`](merger::Entries::named) / [`root`](merger::Entries::root)).
 //!
 //! # Validation
 //!

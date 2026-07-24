@@ -130,7 +130,7 @@ fn builders_drive_pipeline_end_to_end() -> Result<(), Box<dyn std::error::Error>
             .expect("run pipeline");
 
         assert!(
-            merged.contains_key(&Some("foo".to_string())),
+            merged.contains_named("foo"),
             "expected 'foo' entry in merged config"
         );
         Ok(())

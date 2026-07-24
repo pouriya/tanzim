@@ -489,16 +489,54 @@ fn multi_default_and_empty() {
 #[test]
 fn multi_run_returns_named_entries() {
     let merged = build_multi().run().unwrap();
-    assert!(merged.contains_key(&Some("app".into())));
+    assert!(merged.contains_named("app"));
+}
+
+#[test]
+fn multi_run_exposes_root_entry() {
+    let merged = Pipeline::builder()
+        .with_source("mock:one")
+        .with_loader(mock_loader(b"hello", None))
+        .with_parser(txt_parser())
+        .with_merger(LastWins)
+        .run()
+        .unwrap();
+    assert!(merged.contains_root());
+    assert_eq!(
+        merged.root().unwrap().value().value().as_string().unwrap(),
+        "hello"
+    );
+}
+
+#[test]
+fn multi_validate_error_displays_root_entry_name() {
+    let pipeline = Pipeline::builder()
+        .with_source("mock:one")
+        .with_loader(mock_loader(b"hello", None))
+        .with_parser(txt_parser())
+        .with_merger(LastWins)
+        .with_root_schema(schema_from_json(r#"{"type": "integer"}"#))
+        .build();
+    let stages = pipeline.stages();
+    let loaded = stages.load().unwrap();
+    let parsed = stages.parse(&loaded).unwrap();
+    let mut merged = stages.merge(&parsed).unwrap();
+    match stages.validate(&mut merged) {
+        Ok(()) => panic!("expected validation error"),
+        Err(error) => {
+            let message = error.to_string();
+            assert!(
+                message.contains("configuration `<root>` failed validation"),
+                "unexpected message: {message}"
+            );
+        }
+    }
 }
 
 #[test]
 fn multi_validate_warns_when_schema_has_no_matching_entry() {
     let pipeline = build_multi()
-        .with_schema(
-            Some("missing".into()),
-            schema_from_json(r#"{"type": "string"}"#),
-        )
+        .with_named_schema("missing", schema_from_json(r#"{"type": "string"}"#))
         .build();
     let stages = pipeline.stages();
     let loaded = stages.load().unwrap();
@@ -510,10 +548,7 @@ fn multi_validate_warns_when_schema_has_no_matching_entry() {
 #[test]
 fn multi_validate_rejects_bad_configuration() {
     let pipeline = build_multi()
-        .with_schema(
-            Some("app".into()),
-            schema_from_json(r#"{"type": "integer"}"#),
-        )
+        .with_named_schema("app", schema_from_json(r#"{"type": "integer"}"#))
         .build();
     let stages = pipeline.stages();
     let loaded = stages.load().unwrap();
@@ -528,10 +563,7 @@ fn multi_validate_rejects_bad_configuration() {
 #[test]
 fn multi_with_schemas_registers_multiple_entries() {
     let mut schemas = tanzim::pipeline::Schemas::new();
-    schemas.insert(
-        Some("app".into()),
-        schema_from_json(r#"{"type": "string"}"#),
-    );
+    schemas.insert_named("app", schema_from_json(r#"{"type": "string"}"#));
     let pipeline = build_multi().with_schemas(schemas);
     assert_eq!(pipeline.schemas().len(), 1);
 }
@@ -760,10 +792,7 @@ fn multi_load_and_parse_error_paths() {
 #[test]
 fn multi_validate_succeeds_for_matching_schema() {
     let pipeline = build_multi()
-        .with_schema(
-            Some("app".into()),
-            schema_from_json(r#"{"type": "string"}"#),
-        )
+        .with_named_schema("app", schema_from_json(r#"{"type": "string"}"#))
         .build();
     let mut merged = pipeline.run().unwrap();
     pipeline.stages().validate(&mut merged).unwrap();
@@ -782,10 +811,9 @@ fn multi_pipeline_accessors_and_mutators() {
     pipeline.parsers_mut().push(Box::new(txt_parser()));
     assert_eq!(pipeline.sources().count(), 2);
     let _ = pipeline.merger();
-    pipeline.schemas_mut().insert(
-        Some("extra".into()),
-        schema_from_json(r#"{"type": "string"}"#),
-    );
+    pipeline
+        .schemas_mut()
+        .insert_named("extra", schema_from_json(r#"{"type": "string"}"#));
     assert_eq!(pipeline.schemas().len(), 1);
 }
 
@@ -881,7 +909,7 @@ fn multi_from_plan_keeps_named_entries() {
     .with_parser(txt_parser());
     assert_eq!(pipeline.sources().count(), 2);
     let merged = pipeline.run().unwrap();
-    assert!(merged.contains_key(&Some("app".into())));
+    assert!(merged.contains_named("app"));
 }
 
 #[test]
@@ -1170,10 +1198,9 @@ fn multi_try_deserialize_returns_map_per_entry() {
         .with_loader(mock_loader(b"hello", Some("app")))
         .with_parser(map_parser())
         .with_merger(LastWins);
-    let deserialized: std::collections::HashMap<Option<String>, App> =
-        pipeline.try_deserialize().unwrap();
+    let deserialized: tanzim::merger::Entries<App> = pipeline.try_deserialize().unwrap();
     assert_eq!(
-        deserialized.get(&Some("app".to_string())),
+        deserialized.named("app"),
         Some(&App {
             name: "hello".into(),
             port: 8080

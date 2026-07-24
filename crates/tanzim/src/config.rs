@@ -15,7 +15,7 @@
 use crate::entry::Entry;
 use crate::loader;
 use crate::merger::plan::MergePlan;
-use crate::merger::{self, Merged};
+use crate::merger::{self, Entries, EntryNameRef};
 use crate::parser::{self, Parsed};
 use crate::source::{self, Source};
 use cfg_if::cfg_if;
@@ -864,7 +864,7 @@ impl ConfigStages<'_> {
     /// order) with the global merger, defaulting to [`LastWins`](merger::LastWins), each per-source
     /// merger pre-merging its own payloads first; a [`from_plan`](Config::from_plan) tree evaluates
     /// directly.
-    pub fn merge(&self, parsed: &[Parsed]) -> Result<Merged, Error> {
+    pub fn merge(&self, parsed: &[Parsed]) -> Result<Entries, Error> {
         let config = self.config;
         cfg_if! {
             if #[cfg(feature = "tracing")] {
@@ -876,7 +876,7 @@ impl ConfigStages<'_> {
         let groups = merger::group_by_source(&merger::leaves(&config.plan), parsed);
         match merger::plan::evaluate(&config.plan, &groups) {
             Ok(raw) => {
-                let merged = Merged::from_raw(raw);
+                let merged = Entries::from_raw(raw);
                 cfg_if! {
                     if #[cfg(feature = "tracing")] {
                         tracing::info!(msg = "Configuration merge stage complete", group_count = merged.len());
@@ -892,34 +892,35 @@ impl ConfigStages<'_> {
 
     /// Collapse all merge groups into one [`Entry`].
     ///
-    /// Collects named groups (sorted alphabetically by name), then the unnamed group (key
-    /// `None`), in that order. For each group, synthesises one `(Payload, LocatedValue)` pair
-    /// — using the group's first payload with `maybe_name` set to `None` — so the configured
-    /// merger sees all pairs as belonging to the same unnamed group and collapses them into a
-    /// single entry. This reuses the user's merger for cross-group unification without adding
-    /// a new abstraction.
+    /// Collects named groups (sorted alphabetically by name), then the root (unnamed) group, in
+    /// that order. For each group, synthesises one `(Payload, LocatedValue)` pair — using the
+    /// group's first payload with `maybe_name` set to `None` — so the configured merger sees all
+    /// pairs as belonging to the same unnamed group and collapses them into a single entry. This
+    /// reuses the user's merger for cross-group unification without adding a new abstraction.
     ///
     /// **Provenance note:** the returned [`Entry`]'s payloads contain one synthetic carrier per
     /// group (derived from each group's first payload), not the full list of contributing
     /// payloads from within-group merging. Callers who need complete provenance should call
-    /// [`merge`](Self::merge) directly and inspect the [`Merged`] map.
+    /// [`merge`](Self::merge) directly and inspect the [`Entries`] map.
     ///
     /// **`LastWins` note:** with [`LastWins`](merger::LastWins) as the configured merger, the
     /// cross-group pass keeps only the last group's value. Groups are ordered named-alphabetical
-    /// then unnamed, so the unnamed bucket wins when present.
-    pub fn unify(&self, merged: &Merged) -> Result<Entry, Error> {
+    /// then root, so the root bucket wins when present.
+    pub fn unify(&self, merged: &Entries) -> Result<Entry, Error> {
         let config = self.config;
         let fallback = merger::LastWins;
         let merger: &dyn merger::Merge = config.merger().unwrap_or(&fallback);
         let mut named_keys: Vec<String> = Vec::new();
-        for name in merged.keys().flatten() {
-            named_keys.push(name.clone());
+        for name in merged.keys() {
+            if let EntryNameRef::Named(name) = name {
+                named_keys.push(name.to_string());
+            }
         }
         named_keys.sort();
 
         let mut flat: Vec<(loader::Payload, parser::LocatedValue)> = Vec::new();
         for name in &named_keys {
-            if let Some(entry) = merged.get(&Some(name.clone()))
+            if let Some(entry) = merged.named(name)
                 && let Some(payload) = entry.payloads().first()
             {
                 let mut synthetic = payload.clone();
@@ -927,7 +928,7 @@ impl ConfigStages<'_> {
                 flat.push((synthetic, entry.value().clone()));
             }
         }
-        if let Some(entry) = merged.get(&None)
+        if let Some(entry) = merged.root()
             && let Some(payload) = entry.payloads().first()
         {
             let mut synthetic = payload.clone();

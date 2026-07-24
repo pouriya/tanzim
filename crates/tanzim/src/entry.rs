@@ -2,8 +2,8 @@
 //!
 //! [`Entry`] is what falls out of the merge stage for a single entry name: the payloads that
 //! contributed to it and the combined [`LocatedValue`](crate::parser::LocatedValue). [`Config`]
-//! collapses everything into one `Entry`; [`Pipeline`] keeps a [`Merged`](crate::merger::Merged)
-//! map of them keyed by entry name.
+//! collapses everything into one `Entry`; [`Pipeline`] keeps an [`Entries`](crate::merger::Entries)
+//! map of them keyed by [`EntryName`](crate::merger::EntryName).
 //!
 //! [`Config`]: crate::Config
 //! [`Pipeline`]: crate::pipeline::Pipeline

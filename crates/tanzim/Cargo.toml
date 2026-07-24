@@ -4,12 +4,12 @@ version = "0.27.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Configuration pipeline facade (load, parse, merge)"
+description = "Configuration pipeline: load, parse, merge, validate — with located values and errors"
 readme = "README.md"
 homepage = "https://crates.io/crates/tanzim"
 documentation = "https://docs.rs/tanzim"
 categories = ["config"]
-keywords = ["configuration", "config", "cfg", "settings", "env"]
+keywords = ["configuration", "config", "settings", "validation", "schema"]
 include = ["src/**/*.rs", "Cargo.toml", "README.md", "../../LICENSE"]
 
 [dependencies]
