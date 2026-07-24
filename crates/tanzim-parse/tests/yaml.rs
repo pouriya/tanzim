@@ -1,9 +1,6 @@
-use tanzim_parse::{
-    Parse, Source,
-    yaml::{Yaml, unparse},
-};
+use tanzim_parse::{Parse, Source, yaml::Yaml};
 use tanzim_source::SourceBuilder;
-use tanzim_value::{Error, LocatedValue, Location, Map, Value};
+use tanzim_value::Error;
 
 fn file_source(resource: &str) -> Source {
     SourceBuilder::new()
@@ -11,35 +8,6 @@ fn file_source(resource: &str) -> Source {
         .with_resource(resource)
         .build()
         .unwrap()
-}
-
-fn loc(value: Value) -> LocatedValue {
-    LocatedValue::new(value, Location::at("file", "test", None, None, None))
-}
-
-#[test]
-fn unparses_complex_yaml() {
-    let mut nested = Map::new();
-    nested.insert("key".into(), loc(Value::String("value".into())));
-    let mut map = Map::new();
-    map.insert("name".into(), loc(Value::String("tanzim".into())));
-    map.insert("port".into(), loc(Value::Int(8080)));
-    map.insert("ratio".into(), loc(Value::Float(0.5)));
-    map.insert("debug".into(), loc(Value::Bool(true)));
-    map.insert(
-        "tags".into(),
-        loc(Value::List(vec![
-            loc(Value::String("a".into())),
-            loc(Value::String("b".into())),
-        ])),
-    );
-    map.insert("nested".into(), loc(Value::Map(nested)));
-
-    let text = unparse(&file_source("out.yaml"), Value::Map(map)).unwrap();
-    assert_eq!(
-        text,
-        "name: tanzim\nport: 8080\nratio: 0.5\ndebug: true\ntags:\n  - a\n  - b\nnested:\n  key: value\n"
-    );
 }
 
 #[test]

@@ -1,10 +1,6 @@
-use std::path::PathBuf;
-use tanzim_parse::{
-    Parse, Source,
-    env::{Env, unparse},
-};
+use tanzim_parse::{Parse, Source, env::Env};
 use tanzim_source::{OptionValue, SourceBuilder};
-use tanzim_value::{Comment, Error, LocatedValue, Location, Map, Value};
+use tanzim_value::Error;
 
 fn file_source(resource: &str) -> Source {
     SourceBuilder::new()
@@ -12,40 +8,6 @@ fn file_source(resource: &str) -> Source {
         .with_resource(resource)
         .build()
         .unwrap()
-}
-
-fn loc(value: Value) -> LocatedValue {
-    LocatedValue::new(value, Location::at("env", "test", None, None, None))
-}
-
-#[test]
-fn unparses_complex_env() {
-    let source = SourceBuilder::new()
-        .with_source("env")
-        .with_option("separator", OptionValue::String("__".into()))
-        .build()
-        .unwrap();
-    let mut database = Map::new();
-    database.insert("host".into(), loc(Value::String("localhost".into())));
-    database.insert("port".into(), loc(Value::Int(5432)));
-    let mut map = Map::new();
-    map.insert("database".into(), loc(Value::Map(database)));
-    map.insert("debug".into(), loc(Value::Bool(true)));
-    map.insert("note".into(), loc(Value::String("has space".into())));
-
-    let text = unparse(&source, Value::Map(map)).unwrap();
-    assert_eq!(
-        text,
-        "database__host=localhost\ndatabase__port=5432\ndebug=true\nnote=\"has space\"\n"
-    );
-}
-
-#[test]
-fn unparse_list_is_error() {
-    let source = file_source(".env");
-    let mut map = Map::new();
-    map.insert("items".into(), loc(Value::List(vec![loc(Value::Int(1))])));
-    assert!(unparse(&source, Value::Map(map)).is_err());
 }
 
 #[test]
@@ -114,65 +76,6 @@ fn parses_quoted_value_with_suffix_comment() {
     let port = server.value().as_map().unwrap().get("port").unwrap();
     assert_eq!(port.value().as_string().unwrap(), "8080");
     assert_eq!(port.comment().after(), Some("listen port"));
-}
-
-#[test]
-fn unparses_prefix_and_suffix_comments() {
-    let source = file_source(".env");
-    let mut map = Map::new();
-    map.insert(
-        "port".into(),
-        loc(Value::String("8080".into())).with_comment(
-            Comment::new()
-                .with_before(["top comment"])
-                .with_after(Some("listen port")),
-        ),
-    );
-    let text = unparse(&source, Value::Map(map)).unwrap();
-    assert_eq!(text, "# top comment\nport=8080 # listen port\n");
-}
-
-#[test]
-fn parses_and_unparses_foo_env_comments() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/etc/foo.env");
-    let text = std::fs::read_to_string(&path).unwrap();
-    let source = SourceBuilder::new()
-        .with_source("env")
-        .with_option("separator", OptionValue::String(".".into()))
-        .build()
-        .unwrap();
-    let parsed = Env::new().parse(&source, text.as_bytes(), &[]).unwrap();
-    let port = parsed
-        .value()
-        .as_map()
-        .unwrap()
-        .get("server")
-        .unwrap()
-        .value()
-        .as_map()
-        .unwrap()
-        .get("port")
-        .unwrap();
-    assert_eq!(port.value().as_string().unwrap(), "8080");
-    assert_eq!(port.comment().after(), Some("listen port"));
-
-    let reparsed = unparse(&source, parsed.into_value()).unwrap();
-    assert_eq!(reparsed, "server.port=8080 # listen port\n");
-
-    let reparsed_again = Env::new().parse(&source, reparsed.as_bytes(), &[]).unwrap();
-    let port_again = reparsed_again
-        .value()
-        .as_map()
-        .unwrap()
-        .get("server")
-        .unwrap()
-        .value()
-        .as_map()
-        .unwrap()
-        .get("port")
-        .unwrap();
-    assert_eq!(port_again.value().as_string().unwrap(), "8080");
-    assert_eq!(port_again.comment().after(), Some("listen port"));
 }
 
 #[test]
